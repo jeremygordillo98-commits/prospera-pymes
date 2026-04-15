@@ -27,6 +27,7 @@ const Sidebar = React.lazy(() => import('./components/Sidebar').then(m => ({ def
 const SRIAutomation = React.lazy(() => import('./views/SRIAutomation').then(m => ({ default: m.SRIAutomation })));
 const LibroDiario = React.lazy(() => import('./views/LibroDiario').then(m => ({ default: m.LibroDiario })));
 const Tesoreria = React.lazy(() => import('./views/Tesoreria').then(m => ({ default: m.Tesoreria })));
+const UpdatePassword = React.lazy(() => import('./views/UpdatePassword').then(m => ({ default: m.UpdatePassword })));
 
 interface Empresa {
   id: string;
@@ -36,6 +37,12 @@ interface Empresa {
 
 const App = () => {
   const [session, setSession] = useState<Session | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+  // Leer desde sessionStorage (set en index.html ANTES que Supabase limpie el hash)
+  // O verificar si la ruta es literalmente /update-password
+  const [isResettingPassword, setIsResettingPassword] = useState(() => {
+    return window.location.pathname === '/update-password' || sessionStorage.getItem('pw_recovery_pending') === 'true';
+  });
   const [activeView, setActiveView] = useState('dashboard');
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   
@@ -51,12 +58,19 @@ const App = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      setLoadingAuth(false);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // Fallback: si onAuthStateChange llega antes que sessionStorage (edge case)
+      if (event === 'PASSWORD_RECOVERY') {
+        sessionStorage.setItem('pw_recovery_pending', 'true');
+        setIsResettingPassword(true);
+      }
       setSession(session);
+      setLoadingAuth(false);
     });
 
     return () => subscription.unsubscribe();
@@ -194,6 +208,32 @@ const App = () => {
         );
     }
   };
+
+  // Si se detectó un link de recuperación de contraseña, mostrar el formulario de nueva clave
+  if (isResettingPassword) {
+    return (
+      <Suspense fallback={<div className="flex-center" style={{ height: '100vh', background: '#0f172a' }}><Loader2 className="animate-spin text-primary" size={48} /></div>}>
+        <UpdatePassword
+          onSuccess={() => {
+            sessionStorage.removeItem('pw_recovery_pending');
+            setIsResettingPassword(false);
+            // Limpiar la URL para quitar el /update-password y volver a la raíz
+            window.history.replaceState(null, '', '/');
+            supabase.auth.signOut();
+          }}
+        />
+      </Suspense>
+    );
+  }
+
+  // Mientras se resuelve la sesión, no mostrar nada (evita flash de Login)
+  if (loadingAuth) {
+    return (
+      <div className="flex-center" style={{ height: '100vh', background: '#0f172a' }}>
+        <Loader2 className="animate-spin text-primary" size={48} />
+      </div>
+    );
+  }
 
   if (!session) {
     return (

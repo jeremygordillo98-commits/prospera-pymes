@@ -16,6 +16,18 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- IMPORTANTE: Este script debe ejecutarse ANTES que cualquier módulo JS.
+         Supabase limpia el hash de la URL durante su inicialización, por eso
+         capturamos el tipo de recuperación aquí y lo guardamos en sessionStorage. -->
+    <script>
+      (function() {
+        var hash = window.location.hash || '';
+        var search = window.location.search || '';
+        if (hash.includes('type=recovery') || search.includes('type=recovery')) {
+          sessionStorage.setItem('pw_recovery_pending', 'true');
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,32 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, Users, PlusCircle, Loader2, PieChart, ArrowUpRight, ArrowDownRight, LayoutDashboard, Wallet, CreditCard } from 'lucide-react';
 import { supabase } from '../services/supabase';
+import { useQuery } from '@tanstack/react-query';
 
 interface DashboardViewProps {
     empresaId: string;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ empresaId }) => {
-    const [stats, setStats] = useState({
-        balance: 0,
-        cxc: 0,
-        cxp: 0,
-        cxcCount: 0,
-        cxpCount: 0,
-        loading: true
-    });
-    const [transacciones, setTransacciones] = useState<any[]>([]);
 
-    useEffect(() => {
-        const fetchDashboardData = async () => {
-            if (!empresaId) return;
-            setStats(prev => ({ ...prev, loading: true }));
+    const { data, isLoading } = useQuery({
+        queryKey: ['dashboard', empresaId],
+        queryFn: async () => {
+            if (!empresaId) return { txs: [], stats: { balance: 0, cxc: 0, cxp: 0, cxcCount: 0, cxpCount: 0 } };
 
             const { data: txs } = await supabase
                 .from('transacciones')
                 .select(`
-                    id, fecha, concepto, 
+                    id, fecha, concepto,
                     entidades(razon_social),
                     movimientos(debe, haber)
                 `)
@@ -34,22 +26,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ empresaId }) => {
                 .order('fecha', { ascending: false })
                 .limit(5);
 
-            if (txs) {
-                setTransacciones(txs);
-            }
+            const hasTxs = txs && txs.length > 0;
+            return {
+                txs: txs || [],
+                stats: {
+                    balance: hasTxs ? 45230.15 : 0,
+                    cxc: hasTxs ? 12840.00 : 0,
+                    cxp: hasTxs ? 5120.40 : 0,
+                    cxcCount: txs?.length || 0,
+                    cxpCount: 0,
+                }
+            };
+        },
+        staleTime: 1000 * 60 * 5, // 5 minutos de caché
+    });
 
-            setStats({
-                balance: txs && txs.length > 0 ? 45230.15 : 0,
-                cxc: txs && txs.length > 0 ? 12840.00 : 0,
-                cxp: txs && txs.length > 0 ? 5120.40 : 0,
-                cxcCount: txs?.length || 0,
-                cxpCount: 0,
-                loading: false
-            });
-        };
-
-        fetchDashboardData();
-    }, [empresaId]);
+    const transacciones = data?.txs || [];
+    const stats = data?.stats || { balance: 0, cxc: 0, cxp: 0, cxcCount: 0, cxpCount: 0 };
+    const loading = isLoading;
 
     const containerVariants = {
         hidden: { opacity: 0 },
@@ -91,7 +85,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ empresaId }) => {
                 </div>
             </header>
 
-            {stats.loading ? (
+            {loading ? (
                 <div style={{ padding: '100px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
                     <Loader2 className="animate-spin" size={48} style={{ color: 'var(--primary)' }} />
                     <p className="text-sec animate-pulse">Sincronizando con Supabase...</p>
@@ -195,7 +189,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ empresaId }) => {
                                                     <div>
                                                         <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{tx.concepto}</div>
                                                         <div className="text-sec" style={{ fontSize: '0.8rem', marginTop: '2px' }}>
-                                                            {new Date(tx.fecha).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} • {tx.entidades?.razon_social || 'Varias entidades'}
+                                                            {new Date(tx.fecha).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} • {(Array.isArray(tx.entidades) ? tx.entidades[0] : tx.entidades)?.razon_social || 'Varias entidades'}
                                                         </div>
                                                     </div>
                                                 </div>
