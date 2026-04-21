@@ -17,6 +17,7 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
   const [activeTab, setActiveTab] = useState<'balance' | 'resultado' | 'general' | 'mayor'>('balance');
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -56,6 +57,12 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
     return { ingresos, gastos, utilidad: ingresos - gastos, activos, pasivos, patrimonio };
   }, [ledger]);
 
+  const filteredLedger = useMemo(() => {
+    if (!searchTerm) return ledger;
+    const term = searchTerm.toLowerCase();
+    return ledger.filter(item => item.nombre.toLowerCase().includes(term) || item.codigo_cuenta.toLowerCase().includes(term));
+  }, [ledger, searchTerm]);
+
   if (loading) return <div className="flex-center" style={{ padding: '120px 0' }}><Loader2 className="animate-spin" size={36} style={{ color: 'var(--primary)' }} /></div>;
 
   return (
@@ -68,7 +75,14 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
           <h1 className="h1" style={{ fontSize: '2.2rem' }}>Centro Analítico</h1>
           <p className="text-sec">Balance de comprobación, estado de resultados, balance general y mayor.</p>
         </div>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input 
+            type="text" 
+            placeholder="Buscar cuenta o código..." 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ padding: '8px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', outline: 'none', width: '220px', marginRight: '8px' }}
+          />
           <button style={tabStyle(activeTab === 'balance')} onClick={() => setActiveTab('balance')}>Balance de comprobación</button>
           <button style={tabStyle(activeTab === 'resultado')} onClick={() => setActiveTab('resultado')}>Estado de resultados</button>
           <button style={tabStyle(activeTab === 'general')} onClick={() => setActiveTab('general')}>Balance general</button>
@@ -102,7 +116,7 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
             <table className="data-table" style={{ minWidth: 760 }}>
               <thead><tr><th>Código</th><th>Cuenta</th><th>Tipo</th><th>Debe</th><th>Haber</th><th>Saldo</th></tr></thead>
               <tbody>
-                {ledger.map((item) => (
+                {filteredLedger.map((item) => (
                   <tr key={item.id}>
                     <td style={{ padding: 12, fontWeight: 800, color: 'var(--primary)' }}>{item.codigo_cuenta}</td>
                     <td style={{ padding: 12 }}>{item.nombre}</td>
@@ -130,12 +144,12 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
         <section className="glass-card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 20 }}>
           <div>
             <h3 style={{ marginTop: 0 }}>Ingresos</h3>
-            {ledger.filter((item) => item.tipo === 'Ingreso').map((item) => <div key={item.id} className="flex-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--border-color)' }}><span>{item.nombre}</span><strong>${item.saldo.toFixed(2)}</strong></div>)}
+            {filteredLedger.filter((item) => item.tipo === 'Ingreso').map((item) => <div key={item.id} className="flex-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--border-color)' }}><span>{item.nombre}</span><strong>${item.saldo.toFixed(2)}</strong></div>)}
             <div className="flex-between" style={{ paddingTop: 12, fontWeight: 900 }}><span>Total ingresos</span><span>${totals.ingresos.toFixed(2)}</span></div>
           </div>
           <div>
             <h3 style={{ marginTop: 0 }}>Gastos</h3>
-            {ledger.filter((item) => item.tipo === 'Gasto').map((item) => <div key={item.id} className="flex-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--border-color)' }}><span>{item.nombre}</span><strong>${item.saldo.toFixed(2)}</strong></div>)}
+            {filteredLedger.filter((item) => item.tipo === 'Gasto').map((item) => <div key={item.id} className="flex-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--border-color)' }}><span>{item.nombre}</span><strong>${item.saldo.toFixed(2)}</strong></div>)}
             <div className="flex-between" style={{ paddingTop: 12, fontWeight: 900 }}><span>Total gastos</span><span>${totals.gastos.toFixed(2)}</span></div>
           </div>
           <div style={{ gridColumn: '1 / -1', padding: 20, borderRadius: 20, background: 'var(--primary-light)', color: 'var(--primary)', fontSize: '1.2rem', fontWeight: 900 }}>
@@ -148,12 +162,12 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
         <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 20 }}>
           <div className="glass-card">
             <h3 style={{ marginTop: 0 }}>Activos</h3>
-            {ledger.filter((item) => item.tipo === 'Activo').map((item) => <div key={item.id} className="flex-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--border-color)' }}><span>{item.nombre}</span><strong>${item.saldo.toFixed(2)}</strong></div>)}
+            {filteredLedger.filter((item) => item.tipo === 'Activo').map((item) => <div key={item.id} className="flex-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--border-color)' }}><span>{item.nombre}</span><strong>${item.saldo.toFixed(2)}</strong></div>)}
             <div className="flex-between" style={{ paddingTop: 12, fontWeight: 900 }}><span>Total activos</span><span>${totals.activos.toFixed(2)}</span></div>
           </div>
           <div className="glass-card">
             <h3 style={{ marginTop: 0 }}>Pasivos y patrimonio</h3>
-            {ledger.filter((item) => ['Pasivo', 'Patrimonio'].includes(item.tipo)).map((item) => <div key={item.id} className="flex-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--border-color)' }}><span>{item.nombre}</span><strong>${item.saldo.toFixed(2)}</strong></div>)}
+            {filteredLedger.filter((item) => ['Pasivo', 'Patrimonio'].includes(item.tipo)).map((item) => <div key={item.id} className="flex-between" style={{ padding: '10px 0', borderBottom: '1px solid var(--border-color)' }}><span>{item.nombre}</span><strong>${item.saldo.toFixed(2)}</strong></div>)}
             <div className="flex-between" style={{ paddingTop: 12, fontWeight: 900 }}><span>Total pasivos</span><span>${totals.pasivos.toFixed(2)}</span></div>
             <div className="flex-between" style={{ paddingTop: 6, fontWeight: 900 }}><span>Total patrimonio</span><span>${totals.patrimonio.toFixed(2)}</span></div>
             <div className="flex-between" style={{ paddingTop: 6, fontWeight: 900, color: 'var(--primary)' }}><span>Pasivo + patrimonio</span><span>${(totals.pasivos + totals.patrimonio).toFixed(2)}</span></div>
@@ -165,7 +179,7 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
         <section className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: 20, borderBottom: '1px solid var(--border-color)' }}><h3 style={{ margin: 0 }}>Mayor general</h3></div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 16, padding: 20 }}>
-            {ledger.map((item) => (
+            {filteredLedger.map((item) => (
               <motion.div key={item.id} className="glass-card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ padding: 18 }}>
                 <div style={{ color: 'var(--primary)', fontWeight: 800 }}>{item.codigo_cuenta}</div>
                 <div style={{ fontWeight: 800, marginTop: 4 }}>{item.nombre}</div>

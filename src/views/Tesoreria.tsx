@@ -21,7 +21,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
   const [movForm, setMovForm] = useState({
     fecha: new Date().toISOString().slice(0, 10),
     tipo_movimiento: mode === 'pagos' ? 'Pago' : 'Cobro',
-    concepto: '', monto: '', id_cuenta_financiera: '', id_entidad: '', id_documento: '', referencia: '', estado: 'Aplicado'
+    concepto: '', monto: '', id_cuenta_financiera: '', id_cuenta_banco_contable: '', id_entidad: '', id_documento: '', referencia: '', estado: 'Aplicado'
   });
   const [docForm, setDocForm] = useState({
     tipo_documento: mode === 'pagos' ? 'Cuenta por pagar' : 'Cuenta por cobrar',
@@ -31,11 +31,12 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
   const { data, isLoading: loading } = useQuery({
     queryKey: ['tesoreria', empresaId],
     queryFn: async () => {
-      const [cuentasRes, docsRes, movRes, entRes] = await Promise.all([
+      const [cuentasRes, docsRes, movRes, entRes, pcRes] = await Promise.all([
         supabase.from('cuentas_financieras').select('*').eq('id_empresa', empresaId).order('nombre'),
         supabase.from('tesoreria_documentos').select('id,fecha_emision,fecha_vencimiento,tipo_documento,referencia,concepto,saldo_pendiente,total,estado,entidades(id,razon_social)').eq('id_empresa', empresaId).order('fecha_emision', { ascending: false }),
         supabase.from('tesoreria_movimientos').select('id,fecha,tipo_movimiento,concepto,monto,estado,referencia,cuenta_financiera:cuentas_financieras(nombre),entidades(id,razon_social),documento:tesoreria_documentos(referencia,concepto)').eq('id_empresa', empresaId).order('fecha', { ascending: false }).limit(30),
-        supabase.from('entidades').select('id,razon_social,tipo_entidad').eq('id_empresa', empresaId).order('razon_social')
+        supabase.from('entidades').select('id,razon_social,tipo_entidad').eq('id_empresa', empresaId).order('razon_social'),
+        supabase.from('plan_cuentas').select('id, codigo_cuenta, nombre').eq('id_empresa', empresaId).order('codigo_cuenta')
       ]);
 
       return {
@@ -47,7 +48,8 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
           entidades: Array.isArray(item.entidades) ? item.entidades[0] : item.entidades,
           documento: Array.isArray(item.documento) ? item.documento[0] : item.documento,
         })),
-        entities: entRes.data || []
+        entities: entRes.data || [],
+        cuentasContables: pcRes?.data || []
       };
     },
     staleTime: 1000 * 60 * 5, // Cache for 5 mins
@@ -57,11 +59,18 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
   const documentos = data?.documentos || [];
   const movimientos = data?.movimientos || [];
   const entities = data?.entities || [];
+  const cuentasContables = data?.cuentasContables || [];
+  // Filtrar de las cuentas contables solo las que son de activo corriente (Bancos/Caja)
+  const cuentasContablesBancos = cuentasContables.filter((c: any) => c.codigo_cuenta?.startsWith('1.1.1') || c.nombre?.toLowerCase().includes('banco') || c.nombre?.toLowerCase().includes('caja'));
 
 
 
   const summary = useMemo(() => {
-    const disponible = cuentas.reduce((acc, c) => acc + Number(c.saldo_inicial || 0), 0);
+    const saldoInicialCuentas = cuentas.reduce((acc, c) => acc + Number(c.saldo_inicial || 0), 0);
+    const cobradoTotal = movimientos.filter(m => m.tipo_movimiento === 'Cobro' && m.estado !== 'Anulado').reduce((acc, m) => acc + Number(m.monto || 0), 0);
+    const pagadoTotal = movimientos.filter(m => m.tipo_movimiento === 'Pago' && m.estado !== 'Anulado').reduce((acc, m) => acc + Number(m.monto || 0), 0);
+    const disponible = saldoInicialCuentas + cobradoTotal - pagadoTotal;
+
     const porCobrar = documentos.filter((d) => d.tipo_documento === 'Cuenta por cobrar').reduce((acc, d) => acc + Number(d.saldo_pendiente || 0), 0);
     const porPagar = documentos.filter((d) => d.tipo_documento === 'Cuenta por pagar').reduce((acc, d) => acc + Number(d.saldo_pendiente || 0), 0);
     const thisMonth = new Date().toISOString().slice(0, 7);
@@ -157,8 +166,47 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
         }
       }
 
-      setMovForm({ fecha: new Date().toISOString().slice(0, 10), tipo_movimiento: mode === 'pagos' ? 'Pago' : 'Cobro', concepto: '', monto: '', id_cuenta_financiera: '', id_entidad: '', id_documento: '', referencia: '', estado: 'Aplicado' });
-      setMessage('Movimiento de tesorería registrado.');
+      // AUTOMATIZACIÓN DE ASIENTO CONTABLE
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: qCuentas } = await supabase.from('plan_cuentas').select('id, codigo_cuenta, nombre').eq('id_empresa', empresaId);
+        if (qCuentas) {
+          const ctasBancos = qCuentas.filter(c => c.codigo_cuenta.startsWith('1.1.1') || c.nombre.toLowerCase().includes('banco') || c.nombre.toLowerCase().includes('caja'));
+          const ctasCobrar = qCuentas.filter(c => c.codigo_cuenta.startsWith('1.1.2') || c.nombre.toLowerCase().includes('cobrar') || c.nombre.toLowerCase().includes('cliente'));
+          const ctasPagar = qCuentas.filter(c => c.codigo_cuenta.startsWith('2.1.1') || c.nombre.toLowerCase().includes('pagar') || c.nombre.toLowerCase().includes('proveedor'));
+
+          const bancoId = movForm.id_cuenta_banco_contable || ctasBancos[0]?.id;
+          const cxcId = ctasCobrar[0]?.id;
+          const cxpId = ctasPagar[0]?.id;
+
+          if (bancoId && ((movForm.tipo_movimiento === 'Cobro' && cxcId) || (movForm.tipo_movimiento === 'Pago' && cxpId))) {
+            const { data: transaccion } = await supabase.from('transacciones').insert({
+              id_empresa: empresaId,
+              id_usuario: user.id,
+              fecha: movForm.fecha,
+              concepto: movForm.concepto || `${movForm.tipo_movimiento} de Tesorería`,
+              tipo_comprobante: movForm.tipo_movimiento === 'Cobro' ? 'Ingreso' : 'Egreso',
+              numero_comprobante: movForm.referencia || `TES-${Date.now().toString().slice(-6)}`,
+              id_entidad: movForm.id_entidad || null
+            }).select('id').single();
+
+            if (transaccion) {
+              const payloadMovimientos = [];
+              if (movForm.tipo_movimiento === 'Cobro') {
+                payloadMovimientos.push({ id_transaccion: transaccion.id, id_cuenta: bancoId, debe: monto, haber: 0 });
+                payloadMovimientos.push({ id_transaccion: transaccion.id, id_cuenta: cxcId, debe: 0, haber: monto });
+              } else {
+                payloadMovimientos.push({ id_transaccion: transaccion.id, id_cuenta: cxpId, debe: monto, haber: 0 });
+                payloadMovimientos.push({ id_transaccion: transaccion.id, id_cuenta: bancoId, debe: 0, haber: monto });
+              }
+              await supabase.from('movimientos').insert(payloadMovimientos);
+            }
+          }
+        }
+      }
+
+      setMovForm({ fecha: new Date().toISOString().slice(0, 10), tipo_movimiento: mode === 'pagos' ? 'Pago' : 'Cobro', concepto: '', monto: '', id_cuenta_financiera: '', id_cuenta_banco_contable: '', id_entidad: '', id_documento: '', referencia: '', estado: 'Aplicado' });
+      setMessage('Movimiento registrado contable y financieramente.');
       await queryClient.invalidateQueries({ queryKey: ['tesoreria', empresaId] });
     } catch (error: any) {
       setMessage(error.message || 'No se pudo registrar el movimiento.');
@@ -364,16 +412,25 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
                             </div>
                         </div>
 
-                        <div>
-                            <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Caja / Banco Origen</label>
-                            <select value={movForm.id_cuenta_financiera} onChange={e => setMovForm({...movForm, id_cuenta_financiera: e.target.value})} style={inputStyle} required>
-                                <option value="">Obligatorio</option>
-                                {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                            </select>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                             <div>
+                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Caja / Banco de Tesorería (Opcional)</label>
+                                <select value={movForm.id_cuenta_financiera} onChange={e => setMovForm({...movForm, id_cuenta_financiera: e.target.value})} style={inputStyle}>
+                                    <option value="">No deducir de panel</option>
+                                    {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Cuenta Contable (Libro Diario)</label>
+                                <select value={movForm.id_cuenta_banco_contable} onChange={e => setMovForm({...movForm, id_cuenta_banco_contable: e.target.value})} style={inputStyle} required>
+                                    <option value="">Selecciona Banco Contable</option>
+                                    {cuentasContablesBancos.map((c: any) => <option key={c.id} value={c.id}>{c.codigo_cuenta} - {c.nombre}</option>)}
+                                </select>
+                            </div>
                         </div>
                         <input value={movForm.referencia} onChange={e => setMovForm({...movForm, referencia: e.target.value})} placeholder="Referencia bancaria / Voucher..." style={inputStyle} />
                         
-                        <button className="btn btn-primary" type="submit" disabled={saving || !movForm.id_cuenta_financiera || !movForm.monto} style={{ width: '100%', marginTop: 8 }}>
+                        <button className="btn btn-primary" type="submit" disabled={saving || !movForm.monto || !movForm.id_cuenta_banco_contable} style={{ width: '100%', marginTop: 8 }}>
                             Confirmar Operación
                         </button>
                     </div>

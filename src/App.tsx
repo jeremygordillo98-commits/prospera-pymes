@@ -43,7 +43,9 @@ const App = () => {
   const [isResettingPassword, setIsResettingPassword] = useState(() => {
     return window.location.pathname === '/update-password' || sessionStorage.getItem('pw_recovery_pending') === 'true';
   });
-  const [activeView, setActiveView] = useState('dashboard');
+  const [activeView, setActiveView] = useState(() => {
+    return localStorage.getItem('pymes_active_view') || 'dashboard';
+  });
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   
   // Multitenancy states
@@ -52,6 +54,8 @@ const App = () => {
   const [loadingEmpresas, setLoadingEmpresas] = useState(true);
   const [showNewEmpresaModal, setShowNewEmpresaModal] = useState(false);
   const [newEmpresaName, setNewEmpresaName] = useState('');
+  const [newEmpresaRuc, setNewEmpresaRuc] = useState('');
+  const [newEmpresaLogo, setNewEmpresaLogo] = useState('');
   const [limiteEmpresas, setLimiteEmpresas] = useState<number>(2);
   const [showLimitModal, setShowLimitModal] = useState(false);
 
@@ -82,6 +86,10 @@ const App = () => {
       fetchLimite();
     }
   }, [session]);
+
+  useEffect(() => {
+    localStorage.setItem('pymes_active_view', activeView);
+  }, [activeView]);
 
   const fetchLimite = async () => {
     const { data, error } = await supabase
@@ -128,7 +136,8 @@ const App = () => {
           .insert({ 
             id: newId,
             nombre_empresa: newEmpresaName,
-            ruc_empresa: `TEMP-${Date.now()}`,
+            ruc_empresa: newEmpresaRuc || `TEMP-${Date.now()}`,
+            logo_url: newEmpresaLogo || null,
             id_usuario: session.user.id,
             moneda: 'USD'
           })
@@ -140,6 +149,8 @@ const App = () => {
           setSelectedEmpresa(data);
           setShowNewEmpresaModal(false);
           setNewEmpresaName('');
+          setNewEmpresaRuc('');
+          setNewEmpresaLogo('');
         } else {
           console.error("Supabase Error:", error);
           alert(`Error al crear empresa: ${error?.message || 'Revisa tu conexión o las políticas de la base de datos'}`);
@@ -156,15 +167,29 @@ const App = () => {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', textAlign: 'center' }}>
                 <Building2 size={64} className="text-sec" style={{ marginBottom: '24px', opacity: 0.3 }} />
                 <h2 className="h1">Crea tu primera empresa</h2>
-                <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '24px', width: '100%', maxWidth: '350px' }}>
                     <input 
                         type="text" 
-                        placeholder="Nombre de la empresa" 
+                        placeholder="Nombre de la empresa *" 
                         value={newEmpresaName}
                         onChange={(e) => setNewEmpresaName(e.target.value)}
-                        style={{ padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }}
+                        style={{ padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', width: '100%' }}
                     />
-                    <button className="btn btn-primary" onClick={createEmpresa}>Crear Cliente</button>
+                    <input 
+                        type="text" 
+                        placeholder="RUC o Identificación" 
+                        value={newEmpresaRuc}
+                        onChange={(e) => setNewEmpresaRuc(e.target.value)}
+                        style={{ padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', width: '100%' }}
+                    />
+                    <input 
+                        type="text" 
+                        placeholder="URL del Logo (Opcional)" 
+                        value={newEmpresaLogo}
+                        onChange={(e) => setNewEmpresaLogo(e.target.value)}
+                        style={{ padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', width: '100%' }}
+                    />
+                    <button className="btn btn-primary w-full" onClick={createEmpresa}>Crear Cliente</button>
                 </div>
             </div>
         );
@@ -371,14 +396,30 @@ const App = () => {
               style={{ width: '90%', maxWidth: '400px', padding: '32px' }}
             >
                 <h3>Nuevo Cliente Contable</h3>
-                <input 
-                    autoFocus
-                    type="text" 
-                    placeholder="Nombre de la empresa" 
-                    value={newEmpresaName}
-                    onChange={(e) => setNewEmpresaName(e.target.value)}
-                    style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', marginBottom: '24px', marginTop: '24px' }}
-                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px', marginTop: '24px' }}>
+                    <input 
+                        autoFocus
+                        type="text" 
+                        placeholder="Nombre de la empresa *" 
+                        value={newEmpresaName}
+                        onChange={(e) => setNewEmpresaName(e.target.value)}
+                        style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }}
+                    />
+                    <input 
+                        type="text" 
+                        placeholder="RUC o Identificación" 
+                        value={newEmpresaRuc}
+                        onChange={(e) => setNewEmpresaRuc(e.target.value)}
+                        style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }}
+                    />
+                    <input 
+                        type="text" 
+                        placeholder="URL del Logo (Opcional)" 
+                        value={newEmpresaLogo}
+                        onChange={(e) => setNewEmpresaLogo(e.target.value)}
+                        style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }}
+                    />
+                </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
                     <button className="btn flex-1" onClick={() => setShowNewEmpresaModal(false)}>Cancelar</button>
                     <button className="btn btn-primary flex-1" onClick={createEmpresa}>Crear Empresa</button>
