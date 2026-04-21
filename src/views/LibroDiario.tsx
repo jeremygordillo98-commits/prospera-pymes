@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   FileText, 
-  Calendar, 
   Loader2,
   ChevronDown,
   ChevronUp,
-  Download
+  Download,
+  Trash2
 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 
@@ -43,6 +43,10 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [expandedTxs, setExpandedTxs] = useState<Set<string>>(new Set());
+  const [filterDate, setFilterDate] = useState<string>('');
+  const [selectedTxs, setSelectedTxs] = useState<Set<string>>(new Set());
+
+  const filteredTransactions = transactions.filter(tx => !filterDate || tx.fecha.startsWith(filterDate));
 
   useEffect(() => {
     fetchTransactions();
@@ -105,6 +109,115 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
     setExpandedTxs(next);
   };
 
+  const handleDelete = async (e: React.MouseEvent, tx: Transaction) => {
+    e.stopPropagation(); // Evitar que expanda el acordeón
+    if (!window.confirm(`¿Estás seguro de eliminar el asiento contable por completo?\n\n"${tx.concepto}"\n\nEsto también borrará la cuenta por pagar/cobrar de Tesorería asociada si fue generada automáticamente.`)) return;
+
+    try {
+      // 1. Intentar borrar de tesoreria_documentos usando la referencia (numero_comprobante)
+      if (tx.numero_comprobante) {
+        await supabase
+          .from('tesoreria_documentos')
+          .delete()
+          .eq('id_empresa', empresaId)
+          .eq('referencia', tx.numero_comprobante);
+      }
+
+      // 2. Borrar la transacción (Supabase por defecto hace Delete Cascade a movimientos y documentos_sri)
+      const { error } = await supabase
+        .from('transacciones')
+        .delete()
+        .eq('id', tx.id);
+
+      if (error) throw error;
+
+      // 3. Actualizar el estado local para quitarrla de la pantalla de inmediato
+      setTransactions(prev => prev.filter(t => t.id !== tx.id));
+      
+    } catch (err: any) {
+      console.error("Error al eliminar la transacción:", err);
+      alert(`Error al eliminar: ${err.message}`);
+    }
+  };
+
+  const toggleSelect = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    const next = new Set(selectedTxs);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedTxs(next);
+  };
+
+  const handleSelectAll = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (selectedTxs.size === filteredTransactions.length && filteredTransactions.length > 0) {
+      setSelectedTxs(new Set());
+    } else {
+      setSelectedTxs(new Set(filteredTransactions.map(tx => tx.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedTxs.size === 0) return;
+    if (!window.confirm(`¿Estás seguro de eliminar ${selectedTxs.size} asientos contables de forma permanente?\n\nEsto también borrará las cuentas por pagar/cobrar de Tesorería asociadas si fueron generadas automáticamente.`)) return;
+
+    try {
+      const txsToDelete = filteredTransactions.filter(tx => selectedTxs.has(tx.id));
+      const referencias = txsToDelete.map(tx => tx.numero_comprobante).filter(Boolean);
+
+      if (referencias.length > 0) {
+        await supabase
+          .from('tesoreria_documentos')
+          .delete()
+          .eq('id_empresa', empresaId)
+          .in('referencia', referencias);
+      }
+
+      const idsToDelete = Array.from(selectedTxs);
+      const { error } = await supabase
+        .from('transacciones')
+        .delete()
+        .in('id', idsToDelete);
+
+      if (error) throw error;
+
+      setTransactions(prev => prev.filter(t => !selectedTxs.has(t.id)));
+      setSelectedTxs(new Set());
+      
+    } catch (err: any) {
+      console.error("Error al eliminar masivamente:", err);
+      alert(`Error al eliminar: ${err.message}`);
+    }
+  };
+
+  const exportToExcel = () => {
+    const rows = [
+      ['Fecha', 'Concepto', 'Comprobante', 'Entidad', 'Codigo Cuenta', 'Nombre Cuenta', 'Debe', 'Haber']
+    ];
+    filteredTransactions.forEach(tx => {
+      tx.movimientos.forEach(m => {
+        rows.push([
+          tx.fecha,
+          `"${tx.concepto.replace(/"/g, '""')}"`,
+          `"${tx.tipo_comprobante} #${tx.numero_comprobante}"`,
+          `"${tx.entidades?.razon_social || ''}"`,
+          m.plan_cuentas?.codigo_cuenta || '',
+          `"${m.plan_cuentas?.nombre || ''}"`,
+          m.debe.toString(),
+          m.haber.toString()
+        ]);
+      });
+    });
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + rows.map(e => e.join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Libro_Diario_${filterDate || 'Historico'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
   return (
     <div className="libro-diario-container">
       <header className="flex-between" style={{ marginBottom: '40px' }}>
@@ -116,12 +229,36 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
           <p className="text-sec" style={{ fontSize: '1.1rem' }}>Registro cronológico de todos los movimientos contables.</p>
         </div>
         
-        <div style={{ display: 'flex', gap: '12px' }}>
-            <button className="btn glass-card" style={{ border: '1px solid var(--border-color)' }}>
-                <Calendar size={18} /> <span className="hide-mobile">Filtrar Fecha</span>
-            </button>
-            <button className="btn btn-primary">
-                <Download size={18} /> <span className="hide-mobile">Exportar Local</span>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {selectedTxs.size > 0 && (
+                <button className="btn" onClick={handleBulkDelete} style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--error)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '10px 14px' }}>
+                    <Trash2 size={18} /> <span className="hide-mobile">Eliminar ({selectedTxs.size})</span>
+                </button>
+            )}
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '10px 14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--border-color)' }} onClick={handleSelectAll}>
+                 <input 
+                    type="checkbox" 
+                    readOnly
+                    checked={filteredTransactions.length > 0 && selectedTxs.size === filteredTransactions.length}
+                    style={{ width: '16px', height: '16px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                 />
+                 <span style={{ fontSize: '0.85rem', fontWeight: 600 }} className="hide-mobile">Seleccionar Todo</span>
+            </div>
+
+            <div style={{ position: 'relative' }}>
+                <input 
+                    type="date" 
+                    value={filterDate}
+                    onChange={(e) => setFilterDate(e.target.value)}
+                    style={{ padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', outline: 'none' }}
+                />
+            </div>
+            {filterDate && (
+                <button onClick={() => setFilterDate('')} className="btn glass-card" style={{ padding: '10px' }}>Limpiar</button>
+            )}
+            <button className="btn btn-primary" onClick={exportToExcel} disabled={filteredTransactions.length === 0}>
+                <Download size={18} /> <span className="hide-mobile">Exportar a Excel</span>
             </button>
         </div>
       </header>
@@ -142,7 +279,7 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {transactions.map((tx) => (
+          {filteredTransactions.map((tx) => (
             <motion.div 
               key={tx.id}
               initial={{ opacity: 0, y: 10 }}
@@ -156,6 +293,14 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
                 onClick={() => toggleExpand(tx.id)}
               >
                 <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                  <div onClick={(e) => toggleSelect(e, tx.id)} style={{ display: 'flex', alignItems: 'center', padding: '4px' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={selectedTxs.has(tx.id)}
+                      readOnly
+                      style={{ width: '18px', height: '18px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                    />
+                  </div>
                   <div style={{ textAlign: 'center', minWidth: '60px' }}>
                     <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-sec)', fontWeight: 800 }}>{new Date(tx.fecha).toLocaleString('es-EC', { month: 'short' })}</div>
                     <div style={{ fontSize: '1.2rem', fontWeight: 900 }}>{new Date(tx.fecha).getUTCDate()}</div>
@@ -178,6 +323,16 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
                       ${tx.movimientos.reduce((acc, m) => acc + m.debe, 0).toFixed(2)}
                     </div>
                   </div>
+                  <button 
+                    onClick={(e) => handleDelete(e, tx)}
+                    className="p-2"
+                    style={{ background: 'transparent', border: 'none', color: 'var(--error)', cursor: 'pointer', opacity: 0.6 }}
+                    title="Eliminar Asiento"
+                    onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                    onMouseLeave={(e) => e.currentTarget.style.opacity = '0.6'}
+                  >
+                    <Trash2 size={20} />
+                  </button>
                   {expandedTxs.has(tx.id) ? <ChevronUp size={24} className="text-primary" /> : <ChevronDown size={24} className="text-sec" />}
                 </div>
               </div>

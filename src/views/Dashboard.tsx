@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, Users, PlusCircle, Loader2, PieChart, ArrowUpRight, ArrowDownRight, LayoutDashboard, Wallet, CreditCard } from 'lucide-react';
+import { TrendingUp, Users, Loader2, ArrowUpRight, ArrowDownRight, Wallet, CreditCard, LayoutDashboard } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { useQuery } from '@tanstack/react-query';
 
@@ -15,27 +15,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ empresaId }) => {
         queryFn: async () => {
             if (!empresaId) return { txs: [], stats: { balance: 0, cxc: 0, cxp: 0, cxcCount: 0, cxpCount: 0 } };
 
-            const { data: txs } = await supabase
-                .from('transacciones')
-                .select(`
-                    id, fecha, concepto,
-                    entidades(razon_social),
-                    movimientos(debe, haber)
-                `)
-                .eq('id_empresa', empresaId)
-                .order('fecha', { ascending: false })
-                .limit(5);
+            const [txsRes, cuentasRes, docsRes, movRes] = await Promise.all([
+                supabase.from('transacciones').select(`id, fecha, concepto, entidades(razon_social), movimientos(debe, haber)`).eq('id_empresa', empresaId).order('fecha', { ascending: false }).limit(5),
+                supabase.from('cuentas_financieras').select('saldo_inicial').eq('id_empresa', empresaId),
+                supabase.from('tesoreria_documentos').select('tipo_documento, saldo_pendiente').eq('id_empresa', empresaId).gt('saldo_pendiente', 0),
+                supabase.from('tesoreria_movimientos').select('tipo_movimiento, monto').eq('id_empresa', empresaId)
+            ]);
 
-            const hasTxs = txs && txs.length > 0;
+            const txs = txsRes.data || [];
+            const cuentas = cuentasRes.data || [];
+            const docs = docsRes.data || [];
+            const movs = movRes.data || [];
+
+            const cxcDocs = docs.filter(d => d.tipo_documento === 'Cuenta por cobrar');
+            const cxpDocs = docs.filter(d => d.tipo_documento === 'Cuenta por pagar');
+
+            const cxc = cxcDocs.reduce((acc, d) => acc + Number(d.saldo_pendiente), 0);
+            const cxp = cxpDocs.reduce((acc, d) => acc + Number(d.saldo_pendiente), 0);
+            
+            const ingresos = movs.filter(m => m.tipo_movimiento === 'Cobro').reduce((acc, m) => acc + Number(m.monto), 0);
+            const egresos = movs.filter(m => m.tipo_movimiento === 'Pago').reduce((acc, m) => acc + Number(m.monto), 0);
+            const saldosFijos = cuentas.reduce((acc, c) => acc + Number(c.saldo_inicial), 0);
+            const balance = saldosFijos + ingresos - egresos;
+
             return {
-                txs: txs || [],
-                stats: {
-                    balance: hasTxs ? 45230.15 : 0,
-                    cxc: hasTxs ? 12840.00 : 0,
-                    cxp: hasTxs ? 5120.40 : 0,
-                    cxcCount: txs?.length || 0,
-                    cxpCount: 0,
-                }
+                txs,
+                stats: { balance, cxc, cxp, cxcCount: cxcDocs.length, cxpCount: cxpDocs.length }
             };
         },
         staleTime: 1000 * 60 * 5, // 5 minutos de caché
@@ -74,14 +79,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ empresaId }) => {
                         Panel de Control
                     </motion.h1>
                     <p className="text-sec" style={{ fontSize: '1.1rem', marginTop: '4px' }}>Gestión financiera inteligente para tu negocio</p>
-                </div>
-                <div className="flex gap-4" style={{ display: 'flex', gap: '12px' }}>
-                    <button className="btn btn-primary" onClick={() => alert("Módulo de asientos en construcción")}>
-                        <PlusCircle size={20} /> <span className="hide-mobile">Nuevo Asiento</span>
-                    </button>
-                    <button className="btn glass-card" style={{ border: '1px solid var(--border-color)', opacity: 0.5 }}>
-                         <LayoutDashboard size={18} /> <span className="hide-mobile">Personalizar Gráficos</span>
-                    </button>
                 </div>
             </header>
 
@@ -157,11 +154,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ empresaId }) => {
                         </motion.div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', marginTop: '32px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 1fr)', gap: '24px', marginTop: '32px' }}>
                         <motion.div variants={itemVariants} className="glass-card" style={{ height: '420px', display: 'flex', flexDirection: 'column' }}>
                             <div className="flex-between" style={{ marginBottom: '24px' }}>
                                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Últimas Transacciones</h3>
-                                <button className="btn" style={{ fontSize: '0.75rem', padding: '6px 12px', background: 'var(--primary-light)', color: 'var(--primary)', borderRadius: '8px' }}>Ver Todo</button>
                             </div>
                             <div style={{ flex: 1, overflowY: 'auto', paddingRight: '12px' }} className="custom-scrollbar">
                                 {transacciones.length > 0 ? (
@@ -207,24 +203,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ empresaId }) => {
                                         <p style={{ fontSize: '0.8rem' }}>Tus movimientos contables aparecerán aquí.</p>
                                     </div>
                                 )}
-                            </div>
-                        </motion.div>
-
-                        <motion.div variants={itemVariants} className="glass-card" style={{ height: '420px', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                            <div style={{ position: 'absolute', bottom: '20px', right: '20px', width: '150px', height: '150px', background: 'var(--primary)', filter: 'blur(80px)', opacity: 0.1 }}></div>
-                            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '24px' }}>Distribución de Gastos</h3>
-                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-                                <motion.div
-                                    animate={{ rotate: 360 }}
-                                    transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                                >
-                                    <PieChart size={140} style={{ opacity: 0.1, color: 'var(--primary)' }} />
-                                </motion.div>
-                                <div style={{ marginTop: '24px', textAlign: 'center' }}>
-                                    <div className="text-sec" style={{ fontSize: '0.95rem', fontWeight: 600 }}>Gráficos Inteligentes</div>
-                                    <p className="text-sec" style={{ fontSize: '0.8rem', maxWidth: '200px', margin: '8px auto 0' }}>Sube tus facturas XML para generar reportes automáticos de gastos.</p>
-                                </div>
-                                <button className="btn" style={{ marginTop: '24px', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '12px', fontSize: '0.85rem' }}>Configurar categorías</button>
                             </div>
                         </motion.div>
                     </div>

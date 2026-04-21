@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Mail, Save, LogOut } from 'lucide-react';
+import { User, Mail, Save, LogOut, Building2, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '../services/supabase';
 
-
 export const Perfil = () => {
-
     const [loading, setLoading] = useState(false);
     const [userData, setUserData] = useState({
         nombre_completo: '',
         email: '',
         ruc_profesional: '',
+        logo_url: ''
     });
+    const [empresas, setEmpresas] = useState<any[]>([]);
     const [message, setMessage] = useState({ text: '', type: '' });
 
     useEffect(() => {
@@ -28,11 +28,19 @@ export const Perfil = () => {
                 .eq('id_usuario', user.id)
                 .single();
 
+            // Cargar empresas del usuario
+            const { data: dbEmpresas } = await supabase
+                .from('empresas_gestionadas')
+                .select('id, nombre_empresa, ruc_empresa, logo_url')
+                .eq('id_usuario', user.id);
+
             setUserData({
                 nombre_completo: dbProfile?.nombre_completo || user.user_metadata?.nombre_completo || '',
                 email: user.email || '',
                 ruc_profesional: dbProfile?.ruc_profesional || '',
+                logo_url: dbProfile?.logo_url || ''
             });
+            setEmpresas(dbEmpresas || []);
         }
     };
 
@@ -56,7 +64,8 @@ export const Perfil = () => {
                 id_usuario: user.id,
                 nombre_completo: userData.nombre_completo,
                 email: userData.email,
-                ruc_profesional: userData.ruc_profesional
+                ruc_profesional: userData.ruc_profesional,
+                logo_url: userData.logo_url
             });
             if (dbError) throw dbError;
 
@@ -138,6 +147,19 @@ export const Perfil = () => {
                     </div>
 
                     <div>
+                        <label style={{ fontWeight: 600, fontSize: '0.9rem' }} className="flex items-center gap-2">
+                            <ImageIcon size={18} /> URL del Logo del Contador
+                        </label>
+                        <input
+                            type="text"
+                            value={userData.logo_url}
+                            onChange={e => setUserData({ ...userData, logo_url: e.target.value })}
+                            style={inputStyle}
+                            placeholder="Ej: https://midominio.com/logo.png"
+                        />
+                    </div>
+
+                    <div>
                         <label style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-sec)' }} className="flex items-center gap-2">
                             <Mail size={18} /> Correo de Acceso (No modificable)
                         </label>
@@ -157,7 +179,34 @@ export const Perfil = () => {
                             <Save size={18} /> {loading ? 'Actualizando...' : 'Guardar Cambios'}
                         </button>
                     </div>
-                </form>
+        </form>
+            </div>
+
+            <div className="glass-card" style={{ padding: '32px' }}>
+                <h3 className="h2 flex items-center gap-2 mb-6" style={{ margin: 0 }}>
+                    <Building2 size={24} className="text-primary" /> Clientes Activos ({empresas.length})
+                </h3>
+                {empresas.length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '16px' }}>
+                        {empresas.map(empresa => (
+                            <div key={empresa.id} style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                                    {empresa.logo_url ? (
+                                        <img src={empresa.logo_url} alt={empresa.nombre_empresa} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (
+                                        <Building2 size={24} className="text-primary" />
+                                    )}
+                                </div>
+                                <div style={{ overflow: 'hidden' }}>
+                                    <h4 style={{ margin: 0, fontWeight: 800, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{empresa.nombre_empresa}</h4>
+                                    <span className="text-sec" style={{ fontSize: '0.8rem' }}>RUC: {empresa.ruc_empresa || 'N/A'}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-sec">Aún no has creado ninguna empresa o cliente.</p>
+                )}
             </div>
 
             <div className="glass-card" style={{ padding: '24px', borderColor: 'rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.05)' }}>

@@ -31,10 +31,18 @@ export const Sidebar = ({
 }: SidebarProps) => {
   const [openMenus, setOpenMenus] = useState<string[]>(['config-parent']);
 
-  const toggleMenu = (id: string) => {
+  const toggleMenu = (item: any) => {
+    const id = item.id;
+    const isOpening = !openMenus.includes(id);
+
     setOpenMenus(prev => 
-      prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]
+      isOpening ? [...prev, id] : prev.filter(m => m !== id)
     );
+
+    // Si se está abriendo y tiene hijos, navega directo al primer hijo
+    if (isOpening && item.children && item.children.length > 0) {
+      setActiveView(item.children[0].id);
+    }
   };
 
   return (
@@ -117,7 +125,7 @@ export const Sidebar = ({
               // Parent Item
               <>
                 <button
-                  onClick={() => toggleMenu(item.id)}
+                  onClick={() => toggleMenu(item)}
                   style={{
                     width: '100%',
                     display: 'flex',
