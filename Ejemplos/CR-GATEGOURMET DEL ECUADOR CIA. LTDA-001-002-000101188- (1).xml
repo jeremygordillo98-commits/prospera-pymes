@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<autorizacion>
+<estado>AUTORIZADO</estado>
+<numeroAutorizacion>1603202607179141198600120010020001011880010118810</numeroAutorizacion>
+<fechaAutorizacion>2026-03-26T15:43:04-05:00</fechaAutorizacion>
+<ambiente>PRODUCCIÓN</ambiente>
+<comprobante><![CDATA[<?xml version="1.0" encoding="UTF-8"?><comprobanteRetencion id="comprobante" version="2.0.0">
+  <infoTributaria>
+    <ambiente>2</ambiente>
+    <tipoEmision>1</tipoEmision>
+    <razonSocial>GATEGOURMET DEL ECUADOR CIA. LTDA</razonSocial>
+    <nombreComercial>GATEGOURMET DEL ECUADOR CIA. LTDA</nombreComercial>
+    <ruc>1791411986001</ruc>
+    <claveAcceso>1603202607179141198600120010020001011880010118810</claveAcceso>
+    <codDoc>07</codDoc>
+    <estab>001</estab>
+    <ptoEmi>002</ptoEmi>
+    <secuencial>000101188</secuencial>
+    <dirMatriz>Aeropuerto Internacional "Mariscal Sucre" Tababela S/N Edf. Catering 2</dirMatriz>
+  </infoTributaria>
+  <infoCompRetencion>
+    <fechaEmision>16/03/2026</fechaEmision>
+    <dirEstablecimiento>Aeropuerto Internacional "Mariscal Sucre" Tababela S/N Edf. Catering 2</dirEstablecimiento>
+    <contribuyenteEspecial>154</contribuyenteEspecial>
+    <obligadoContabilidad>SI</obligadoContabilidad>
+    <tipoIdentificacionSujetoRetenido>04</tipoIdentificacionSujetoRetenido>
+    <parteRel>NO</parteRel>
+    <razonSocialSujetoRetenido>ALKALOMCIA.LTDA.</razonSocialSujetoRetenido>
+    <identificacionSujetoRetenido>1792797160001</identificacionSujetoRetenido>
+    <periodoFiscal>03/2026</periodoFiscal>
+  </infoCompRetencion>
+  <docsSustento>
+    <docSustento>
+      <codSustento>06</codSustento>
+      <codDocSustento>01</codDocSustento>
+      <numDocSustento>001004000028191</numDocSustento>
+      <fechaEmisionDocSustento>16/03/2026</fechaEmisionDocSustento>
+      <fechaRegistroContable>16/03/2026</fechaRegistroContable>
+      <numAutDocSustento>1603202601179279716000120010040000281914399707310</numAutDocSustento>
+      <pagoLocExt>01</pagoLocExt>
+      <totalSinImpuestos>1089.40</totalSinImpuestos>
+      <importeTotal>1089.40</importeTotal>
+      <impuestosDocSustento>
+        <impuestoDocSustento>
+          <codImpuestoDocSustento>2</codImpuestoDocSustento>
+          <codigoPorcentaje>0</codigoPorcentaje>
+          <baseImponible>1089.40</baseImponible>
+          <tarifa>0.00</tarifa>
+          <valorImpuesto>0.00</valorImpuesto>
+        </impuestoDocSustento>
+      </impuestosDocSustento>
+      <retenciones>
+        <retencion>
+          <codigo>1</codigo>
+          <codigoRetencion>312A</codigoRetencion>
+          <baseImponible>1089.40</baseImponible>
+          <porcentajeRetener>1.00</porcentajeRetener>
+          <valorRetenido>10.89</valorRetenido>
+        </retencion>
+      </retenciones>
+      <pagos>
+        <pago>
+          <formaPago>20</formaPago>
+          <total>1078.51</total>
+        </pago>
+      </pagos>
+    </docSustento>
+  </docsSustento>
+  <infoAdicional>
+    <campoAdicional nombre="Email">athurdekoos@alkalom.com.ec</campoAdicional>
+  </infoAdicional>
+<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:etsi="http://uri.etsi.org/01903/v1.3.2#" Id="Signature886739">
+<ds:SignedInfo Id="Signature-SignedInfo456102">
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<ds:Reference Id="SignedPropertiesID289722" Type="http://uri.etsi.org/01903#SignedProperties" URI="#Signature886739-SignedProperties212976">
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>0mF0MUb9dB+0t2OUzH4XQTv7Xkk=</ds:DigestValue>
+</ds:Reference>
+<ds:Reference URI="#Certificate1941283">
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>ZLE2OwIN+6bPhx3QcQBT92p05cU=</ds:DigestValue>
+</ds:Reference>
+<ds:Reference Id="Reference-ID-632668" URI="#comprobante">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<ds:DigestValue>5sImhm9mUJAi1Vxz306Ybl1T92c=</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue Id="SignatureValue306261">
+Vs0MToDffzQGxWxmeg244PNc0eUYr+h6jjcDavqh0dIZScUL/5XwvWTmL933eZ/Ah0ZMS8vfQSWv
+LkxfL9y2lRAB5/eEKOr3HjrngLXAMRsynvky1Je60yMVTcTSDsebx18ZDO692Qaae9UhvdTO/c7c
+RI0gEDRDn7L8aegWiiFrA4rl81fP7ST2kEzI2FjQoyfQel8uWdkNFhHnsYPqPGWBeqGFUzvuGiR4
+Q1O5R24hW17Wmg6ig8n35D+2plX5UZuo9RPvMIJ3w7kkOBikV1MYOZu/qbYDmGgBz5Dwis0hCVtr
+4nOwna2z42W0RV/uI+d+p128Y4zHho0/+QfZwg==
+</ds:SignatureValue>
+<ds:KeyInfo Id="Certificate1941283">
+<ds:X509Data>
+<ds:X509Certificate>
+MIIMKzCCChOgAwIBAgIEbXXAtjANBgkqhkiG9w0BAQsFADCBmTELMAkGA1UEBhMCRUMxHTAbBgNV
+BAoMFFNFQ1VSSVRZIERBVEEgUy5BLiAyMTAwLgYDVQQLDCdFTlRJREFEIERFIENFUlRJRklDQUNJ
+T04gREUgSU5GT1JNQUNJT04xOTA3BgNVBAMMMEFVVE9SSURBRCBERSBDRVJUSUZJQ0FDSU9OIFNV
+QkNBLTIgU0VDVVJJVFkgREFUQTAeFw0yNDEyMTMyMjE3MDZaFw0yNjEyMTMyMjE3MDZaMIGlMSMw
+IQYDVQQDDBpFRFdJTiBIRVJOQU4gRVNQSU4gUkVNQUNIRTEgMB4GA1UEBRMXMTcxNjk4OTEwNi0x
+MzEyMjQxNzI3MDAxMDAuBgNVBAsMJ0VOVElEQUQgREUgQ0VSVElGSUNBQ0lPTiBERSBJTkZPUk1B
+Q0lPTjEdMBsGA1UECgwUU0VDVVJJVFkgREFUQSBTLkEuIDIxCzAJBgNVBAYTAkVDMIIBIjANBgkq
+hkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2hUWHn/CTl2TQUNS/te2lZxvuwXIZBNU/M0uYkwP+5dJ
+nmRAd0kT/e94oyxbUCma4pvfpRKnAILWOjfa0/FrMExP1fGki8+xS1BUqwMYgfGaKZNQWsaxRr59
+WNPbrwAHB5TCUvitkri8KodBmVmduUsrliFR5S+6P6L31UO+iDdBvuYQsyYnm/wksyirzjyg3cJK
+41aincbd9FEIOFXn/mG/kyDstxxyW3cb41SMg+CIPUgezeyl5Isio4H9yooeQ9HSV6RLaITvp4Rk
+Rgd+dNOwypTEVAM/wUYqoUrIAWWdxyWZ3K3ZDYIvohaNkfW+5AAO0QQRLHStpLOI8rM3MQIDAQAB
+o4IHazCCB2cwDAYDVR0TAQH/BAIwADAfBgNVHSMEGDAWgBSMusoRV3glgB1rCktVv42uYt29jzBZ
+BggrBgEFBQcBAQRNMEswSQYIKwYBBQUHMAGGPWh0dHA6Ly9vY3NwZ3cuc2VjdXJpdHlkYXRhLm5l
+dC5lYy9lamJjYS9wdWJsaWN3ZWIvc3RhdHVzL29jc3Awgc8GA1UdLgSBxzCBxDCBwaCBvqCBu4aB
+uGxkYXA6Ly9sZGFwc2RjYTIuc2VjdXJpdHlkYXRhLm5ldC5lYy9DTj1BVVRPUklEQUQgREUgQ0VS
+VElGSUNBQ0lPTiBTVUJDQS0yIFNFQ1VSSVRZIERBVEEsT1U9RU5USURBRCBERSBDRVJUSUZJQ0FD
+SU9OIERFIElORk9STUFDSU9OLE89U0VDVVJJVFkgREFUQSBTLkEuIDIsQz1FQz9kZWx0YVJldm9j
+YXRpb25MaXN0P2Jhc2UwHwYDVR0RBBgwFoEUZWVzcGluQGdhdGVncm91cC5jb20wggESBgNVHSAE
+ggEJMIIBBTBgBgorBgEEAYKmcgIKMFIwUAYIKwYBBQUHAgIwRB5CAEMAZQByAHQAaQBmAGkAYwBh
+AGQAbwAgAGQAZQAgAE0AaQBlAG0AYgByAG8AIABkAGUAIABFAG0AcAByAGUAcwBhMIGgBgorBgEE
+AYKmcgIEMIGRMIGOBggrBgEFBQcCARaBgWh0dHBzOi8vd3d3LnNlY3VyaXR5ZGF0YS5uZXQuZWMv
+d3AtY29udGVudC9kb3dubG9hZHMvTm9ybWF0aXZhcy9QX2RlX0NlcnRpZmljYWRvcy9Qb2xpdGlj
+YXMgZGUgQ2VydGlmaWNhZG8gTWllbWJybyBkZSBFbXByZXNhLnBkZjAdBgNVHSUEFjAUBggrBgEF
+BQcDAgYIKwYBBQUHAwQwggKiBgNVHR8EggKZMIIClTCB5aBBoD+GPWh0dHA6Ly9vY3NwZ3cuc2Vj
+dXJpdHlkYXRhLm5ldC5lYy9lamJjYS9wdWJsaWN3ZWIvc3RhdHVzL29jc3CigZ+kgZwwgZkxOTA3
+BgNVBAMMMEFVVE9SSURBRCBERSBDRVJUSUZJQ0FDSU9OIFNVQkNBLTIgU0VDVVJJVFkgREFUQTEw
+MC4GA1UECwwnRU5USURBRCBERSBDRVJUSUZJQ0FDSU9OIERFIElORk9STUFDSU9OMR0wGwYDVQQK
+DBRTRUNVUklUWSBEQVRBIFMuQS4gMjELMAkGA1UEBhMCRUMwgceggcSggcGGgb5sZGFwOi8vbGRh
+cHNkY2EyLnNlY3VyaXR5ZGF0YS5uZXQuZWMvQ049QVVUT1JJREFEIERFIENFUlRJRklDQUNJT04g
+U1VCQ0EtMiBTRUNVUklUWSBEQVRBLE9VPUVOVElEQUQgREUgQ0VSVElGSUNBQ0lPTiBERSBJTkZP
+Uk1BQ0lPTixPPVNFQ1VSSVRZIERBVEEgUy5BLiAyLEM9RUM/Y2VydGlmaWNhdGVSZXZvY2F0aW9u
+TGlzdD9iYXNlMIHgoIHdoIHahoHXaHR0cHM6Ly9wb3J0YWwtb3BlcmFkb3IyLnNlY3VyaXR5ZGF0
+YS5uZXQuZWMvZWpiY2EvcHVibGljd2ViL3dlYmRpc3QvY2VydGRpc3Q/Y21kPWNybCZpc3N1ZXI9
+Q049QVVUT1JJREFEIERFIENFUlRJRklDQUNJT04gU1VCQ0EtMiBTRUNVUklUWSBEQVRBLE9VPUVO
+VElEQUQgREUgQ0VSVElGSUNBQ0lPTiBERSBJTkZPUk1BQ0lPTixPPVNFQ1VSSVRZIERBVEEgUy5B
+LiAyLEM9RUMwHQYDVR0OBBYEFDb0e8w7+mdfQre4mxiMLWz7EwieMCsGA1UdEAQkMCKADzIwMjQx
+MjEzMjIxNzA2WoEPMjAyNjEyMTMyMjE3MDZaMAsGA1UdDwQEAwIF4DAYBgorBgEEAYKmcgMFBAoM
+CENPTlRBRE9SMBoGCisGAQQBgqZyAwEEDAwKMTcxNjk4OTEwNjAYBgorBgEEAYKmcgMJBAoMCFRB
+QkFCRUxBMBEGCisGAQQBgqZyAyIEAwwBLjAhBgorBgEEAYKmcgMHBBMMEVBSSU5DSVBBTCBTTiBZ
+IFNOMBwGCisGAQQBgqZyAwIEDgwMRURXSU4gSEVSTkFOMB8GCisGAQQBgqZyAyAEEQwPMDAyMDAx
+MDAwOTIwODI2MBMGCisGAQQBgqZyAyEEBQwDUEZYMBcGCisGAQQBgqZyAwwECQwHRUNVQURPUjAV
+BgorBgEEAYKmcgMDBAcMBUVTUElOMBEGCisGAQQBgqZyAx4EAwwBLjAwBgorBgEEAYKmcgMKBCIM
+IEdBVEVHT1VSTUVUIERFTCBFQ1VBRE9SIENJQSBMVERBMB0GCisGAQQBgqZyAwsEDwwNMTc5MTQx
+MTk4NjAwMTARBgorBgEEAYKmcgMdBAMMAS4wFwYKKwYBBAGCpnIDBAQJDAdSRU1BQ0hFMBoGCisG
+AQQBgqZyAwgEDAwKMDk5MTQ3ODE2NTANBgkqhkiG9w0BAQsFAAOCAgEAgzhOcGItRdsOGf9DEYi9
+nonA15aeyWd+36SaQS/dtc2syvGsWS8Qe/eKNJzd5V6MyKxxviVDFHR13RoTYaufTc7lHtQOZwbi
+JHCpSDdvjm9a0hdguNQXJDxw2yCpzk1bjDHt0FahG/qxak+RwNxdaUC0J2W+SYR58NS7MedoF4kb
+SS0kCkiJWK+m1ZnlX43hBkvsqpSb4M93ZVoPjSMUO8l3Osq0LFdFgBSIVc1nNhuXidpbcvL+Gatj
+JdKbzKCPPcCysrbyPSrBoOzVildm0oaTuUKAUvV1/0n0AuOFjwCQURPoUEWZdnRihJAv9WWWrmyl
+LeLPo5X26wS5URMoWcIoGldDkOlQ8ngIndgzE3X9FdQ1MHn/pmWVuLWer6MsQ4QGxLfowK0OBHG9
+a3ktm50h8QNfQAXmUGwyN22JS3M2DRwbFFLkEtMxvZk1HUvWWCrHkSDqqBttu9QeY8+Ek524GNla
+Vne3RGlijLEO/kDSK0QoyE0kn0djlxHtIr5hwDyxYww/KGjAB5j3TvaIWmr9t7qyclQ/G+tx/dbM
+UcTGYIT3Lnsk1Q6p1Gc97OMPX9o5di0OZYSsdKbRvLC+osCzkbJbV7ecYoc/N6Rnsbtlxh5ugKwV
+t4gOgaERgIQJuAbnplHHt3sWQdxxJG6SvZFEOo5DAOZnnw6gMTDHkGg=
+</ds:X509Certificate>
+</ds:X509Data>
+<ds:KeyValue>
+<ds:RSAKeyValue>
+<ds:Modulus>
+2hUWHn/CTl2TQUNS/te2lZxvuwXIZBNU/M0uYkwP+5dJnmRAd0kT/e94oyxbUCma4pvfpRKnAILW
+Ojfa0/FrMExP1fGki8+xS1BUqwMYgfGaKZNQWsaxRr59WNPbrwAHB5TCUvitkri8KodBmVmduUsr
+liFR5S+6P6L31UO+iDdBvuYQsyYnm/wksyirzjyg3cJK41aincbd9FEIOFXn/mG/kyDstxxyW3cb
+41SMg+CIPUgezeyl5Isio4H9yooeQ9HSV6RLaITvp4RkRgd+dNOwypTEVAM/wUYqoUrIAWWdxyWZ
+3K3ZDYIvohaNkfW+5AAO0QQRLHStpLOI8rM3MQ==
+</ds:Modulus>
+<ds:Exponent>AQAB</ds:Exponent>
+</ds:RSAKeyValue>
+</ds:KeyValue>
+</ds:KeyInfo>
+<ds:Object Id="Signature886739-Object905549"><etsi:QualifyingProperties Target="#Signature886739"><etsi:SignedProperties Id="Signature886739-SignedProperties212976"><etsi:SignedSignatureProperties><etsi:SigningTime>2026-03-26T15:43:02-05:00</etsi:SigningTime><etsi:SigningCertificate><etsi:Cert><etsi:CertDigest><ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><ds:DigestValue>8/c1O3Tn/I/JQpVgL2IRQfl10qY=</ds:DigestValue></etsi:CertDigest><etsi:IssuerSerial><ds:X509IssuerName>CN=AUTORIDAD DE CERTIFICACION SUBCA-2 SECURITY DATA,OU=ENTIDAD DE CERTIFICACION DE INFORMACION,O=SECURITY DATA S.A. 2,C=EC</ds:X509IssuerName><ds:X509SerialNumber>1836433590</ds:X509SerialNumber></etsi:IssuerSerial></etsi:Cert></etsi:SigningCertificate></etsi:SignedSignatureProperties><etsi:SignedDataObjectProperties><etsi:DataObjectFormat ObjectReference="#Reference-ID-632668"><etsi:Description>contenido comprobante</etsi:Description><etsi:MimeType>text/xml</etsi:MimeType></etsi:DataObjectFormat></etsi:SignedDataObjectProperties></etsi:SignedProperties></etsi:QualifyingProperties></ds:Object></ds:Signature></comprobanteRetencion>
+]]></comprobante>
+<mensajes/>
+</autorizacion>
+
