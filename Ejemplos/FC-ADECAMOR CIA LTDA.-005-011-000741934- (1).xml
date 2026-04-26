@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<autorizacion>
+<estado>AUTORIZADO</estado>
+<numeroAutorizacion>1303202601179245893500120050110007419341234567810</numeroAutorizacion>
+<fechaAutorizacion>2026-03-13T04:22:07-05:00</fechaAutorizacion>
+<ambiente>PRODUCCIÓN</ambiente>
+<comprobante><![CDATA[<?xml version="1.0" encoding="UTF-8"?>
+<factura id="comprobante" version="1.1.0">
+<infoTributaria>
+<ambiente>2</ambiente>
+<tipoEmision>1</tipoEmision>
+<razonSocial>ADECAMOR CIA LTDA.</razonSocial>
+<nombreComercial>ESTACIÓN DE SERVICIO FERRARI</nombreComercial>
+<ruc>1792458935001</ruc>
+<claveAcceso>1303202601179245893500120050110007419341234567810</claveAcceso>
+<codDoc>01</codDoc>
+<estab>005</estab>
+<ptoEmi>011</ptoEmi>
+<secuencial>000741934</secuencial>
+<dirMatriz>PICHINCHA / QUITO / IÑAQUITO / AV MANUEL CORDOVA GALARZA S/N</dirMatriz>
+<agenteRetencion>1</agenteRetencion>
+</infoTributaria>
+<infoFactura>
+<fechaEmision>13/03/2026</fechaEmision>
+<dirEstablecimiento>PICHINCHA / QUITO / COTOCOLLAO / AV MANUEL CORDOVA GALARZA</dirEstablecimiento>
+<contribuyenteEspecial>1145</contribuyenteEspecial>
+<obligadoContabilidad>SI</obligadoContabilidad>
+<tipoIdentificacionComprador>04</tipoIdentificacionComprador>
+<razonSocialComprador>ALKALOM CIA. LTDA.</razonSocialComprador>
+<identificacionComprador>1792797160001</identificacionComprador>
+<direccionComprador>EGEO L-13 ORION</direccionComprador>
+<totalSinImpuestos>17.39</totalSinImpuestos>
+<totalDescuento>0.00</totalDescuento>
+<totalConImpuestos>
+<totalImpuesto>
+<codigo>2</codigo>
+<codigoPorcentaje>4</codigoPorcentaje>
+<descuentoAdicional>0.00</descuentoAdicional>
+<baseImponible>17.39</baseImponible>
+<valor>2.61</valor>
+</totalImpuesto>
+</totalConImpuestos>
+<propina>0.00</propina>
+<importeTotal>20.00</importeTotal>
+<moneda>DOLAR</moneda>
+<placa>PCG1026</placa>
+<pagos>
+<pago>
+<formaPago>01</formaPago>
+<total>20.00</total>
+</pago>
+</pagos>
+</infoFactura>
+<detalles>
+<detalle>
+<codigoPrincipal>0121</codigoPrincipal>
+<descripcion>DIESEL PREMIUM</descripcion>
+<cantidad>7.072000</cantidad>
+<precioUnitario>2.459130</precioUnitario>
+<descuento>0.00</descuento>
+<precioTotalSinImpuesto>17.39</precioTotalSinImpuesto>
+<impuestos>
+<impuesto>
+<codigo>2</codigo>
+<codigoPorcentaje>4</codigoPorcentaje>
+<tarifa>15.00</tarifa>
+<baseImponible>17.39</baseImponible>
+<valor>2.61</valor>
+</impuesto>
+</impuestos>
+</detalle>
+</detalles>
+<infoAdicional>
+<campoAdicional nombre="DIRECCION">EGEO L-13 ORION</campoAdicional>
+<campoAdicional nombre="TELEFONO">0</campoAdicional>
+</infoAdicional>
+<ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:etsi="http://uri.etsi.org/01903/v1.3.2#" Id="Signature446129">
+<ds:SignedInfo Id="Signature-SignedInfo854719">
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></ds:CanonicalizationMethod>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"></ds:SignatureMethod>
+<ds:Reference Id="SignedPropertiesID521532" Type="http://uri.etsi.org/01903#SignedProperties" URI="#Signature446129-SignedProperties638613">
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></ds:DigestMethod>
+<ds:DigestValue>rbVyoa4wQdrlk7y2shk84gwJSb0=</ds:DigestValue>
+</ds:Reference>
+<ds:Reference URI="#Certificate1905879">
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></ds:DigestMethod>
+<ds:DigestValue>vlscBpoV5LqZzePLS4X/iYdu2kQ=</ds:DigestValue>
+</ds:Reference>
+<ds:Reference Id="Reference-ID-952705" URI="#comprobante">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"></ds:Transform>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></ds:DigestMethod>
+<ds:DigestValue>xTO9+m+z/irL5lE+8fyr/NLj/9M=</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue Id="SignatureValue531008">
+eh7P57JVuxakZLGSLZ+klJALCLqYlZGOdwswZw7wLR6e+tftWdsOb6WK7Rq7sa82lnAAgatRrrr1
+a8Ayn4/ZyKODswVyuNdIO01Tl02NQMf9FStr4mYwMK4wA4fG0eNP4qBjHStEacVAn+CJXgZCIXoz
+uOTJj7nzLzCLxl6FVTDH+vnN051bzlIs6WkA9vBuRDYk/8S3u9EpttH4fXD/Hg0GvqLs9As0df1k
+h8SHq4TdHP09ulI/x4tTKokaslELcO6xZhB4VPsTf0I2lUNfZI/q1U03u2cVaJ3zj7vayTZuQmAz
+A884BAZdHvsnGrUTvXZm4yvqKLyeKQegXxVWGg==
+</ds:SignatureValue>
+<ds:KeyInfo Id="Certificate1905879">
+<ds:X509Data>
+<ds:X509Certificate>
+MIIIJTCCBg2gAwIBAgIQIoMCI4/BvKwgMtAvmE3c/TANBgkqhkiG9w0BAQsFADCBwjELMAkGA1UE
+BhMCRUMxGzAZBgNVBAoMEkZJUk1BU0VHVVJBIFMuQS5TLjEwMC4GA1UECwwnRU5USURBRCBERSBD
+RVJUSUZJQ0FDSU9OIERFIElORk9STUFDSU9OMRMwEQYDVQQIDApUVU5HVVJBSFVBMT4wPAYDVQQD
+DDVBVVRPUklEQUQgREUgQ0VSVElGSUNBQ0lPTiBTVUJDQS0xIEZJUk1BU0VHVVJBIFMuQS5TLjEP
+MA0GA1UEBwwGQU1CQVRPMB4XDTI1MTIyOTE2NDQwM1oXDTI3MTIyOTE3NDQwM1owgd4xLTArBgNV
+BAUTJGUwYTQ4ZTM3LTEwZjEtNDM0Ni1iOTU5LTZhYmZhMDc5NjAwZTEnMCUGCSqGSIb3DQEJARYY
+YWRlY2Ftb3JjaWFsdGRhQHlhaG9vLmVzMSgwJgYDVQQDEx9GUkFOS0xJTiBSQU1JUk8gQ0FCRVpB
+UyBNT1JFQU5PMTAwLgYDVQQLEydFTlRJREFEIERFIENFUlRJRklDQUNJT04gREUgSU5GT1JNQUNJ
+T04xGzAZBgNVBAoTEkZJUk1BU0VHVVJBIFMuQS5TLjELMAkGA1UEBhMCRUMwggEiMA0GCSqGSIb3
+DQEBAQUAA4IBDwAwggEKAoIBAQCUu6jxrKm9LINc6vAVVEffVpWJ+IvhwwXaESOX6ckzh/cUHp/d
+OH0qjGOA76KwkCY8wNNlBLa73e9tMU5CAyck7WCIxs8WOO6dmHeHfWZIQkTpQRs3eZ1ONV9QfTWk
++mYloIf8ATNcNTiIikn3Z+MJUtvVpWqZD7vB9IbO6CU412EqLZtnVK//pphgO7FyGy3P9W/O+BRA
+TVR3dLKe/TPYbO4iaqifwkErV4STaDWirQd4IHOaLLEUZANlFNz6Jk6DErEJu4rfi/DREkJVZCpr
+uctrr0JOFUlWAvh45J2TvouEArAUXDRTlTGUo1HOF9QpMuXzl5q5Oi3POzdfLJmbAgMBAAGjggL3
+MIIC8zAJBgNVHRMEAjAAMB8GA1UdIwQYMBaAFBNGk2gJrtckhzNFYyZ336xeXopRMB0GA1UdDgQW
+BBTo+fDl9tWnF4vy6ecGE3jRjmocnjBaBgNVHR8EUzBRME+gTaBLhklodHRwOi8vY3JsLmZpcm1h
+c2VndXJhZWMuY29tL2NybC9jY2NlNWE0Zi02YjY4LTQ2ZmMtYTYyMC00YWJjYzRjNGE2OTAuY3Js
+MDkGCCsGAQUFBwEBBC0wKzApBggrBgEFBQcwAYYdaHR0cDovL29jc3AuZmlybWFzZWd1cmFlYy5j
+b20wGgYKKwYBBAGD3nkDAQQMFgowNjAyODk5NjY4MB8GCisGAQQBg955AwIEERYPRlJBTktMSU4g
+UkFNSVJPMBcGCisGAQQBg955AwMECRYHQ0FCRVpBUzAXBgorBgEEAYPeeQMEBAkWB01PUkVBTk8w
+IwYKKwYBBAGD3nkDBQQVFhNSRVBSRVNFTlRBTlRFIExFR0FMMDgGCisGAQQBg955AwcEKhYoUElD
+SElOQ0hBLCBRVUlUTywgQ0FMTEVTIFNJTiBFU1BFQ0lGSUNBUjAcBgorBgEEAYPeeQMIBA4WDDU5
+Mzk2MzkyMDQ1NTAVBgorBgEEAYPeeQMJBAcWBVFVSVRPMCEGCisGAQQBg955AwoEExYRQURFQ0FN
+T1IgQ0lBIExUREEwHQYKKwYBBAGD3nkDCwQPFg0xNzkyNDU4OTM1MDAxMBMGCisGAQQBg955AwwE
+BRYDRUNVMIGkBgNVHSAEgZwwgZkwVAYLKwYBBAGD3nkCAQEwRTBDBggrBgEFBQcCARY3aHR0cHM6
+Ly9maXJtYXNlZ3VyYWVjLmNvbS9wb2xpdGljYXNfcmVwcmVzZW50YW50ZV9sZWdhbDBBBgsrBgEE
+AYPeeQICAjAyMDAGCCsGAQUFBwICMCQMIkNlcnRpZmljYWRvIGRlIFJlcHJlc2VudGFudGUgTGVn
+YWwwDgYDVR0PAQH/BAQDAgXgMA0GCSqGSIb3DQEBCwUAA4ICAQAUxg8mbRcZ9MVK32zWvtZ577TM
+JQbBjFPfZ7Aq/UQetj5b+XG6jlOYQO6HL/zvQCuwIIXM1SVeEJkLokyV8H3uGZZ8gqmV875B5wW1
+RtWMv29EGGJ3CAk+8+9H48KF7cjNfdA47cLN4ZLK0flw2cTBpKPgubOBpN3rOPJGGKyloguLOu3x
+wEdzu8yhRxMhgYW/jK2UA80a69qnpShXH1raHQ3T4Ek+WWsEPtklXhs6hYybdbd0FABon7dwnfhf
+JBhCFrOy8BBfalsSEd+qc//68d03rRVotbKkk5oJ/5N2q16z5y7/8cKwYCFCZCs+trZtzix1dbfR
+J+reEguSU2gYTUxXNMwSficURS5w54eIptb7c/LwRBUpQPzdw/xTeFUxbvjeoMDFc42y0gyraUqA
+FGDzvhNfJJUOVv/6py0PAuj8mxEQ4EAjgN9nYSLELKjOIkI57C8FqycqJB3x9ab3du4Z9rNzLQZN
+/OAib5BzsITHAN9dgME/QcuvKbv3VBqNMMJNmut+Cmb19zRoNjsl/U1TCV8Zfa6MQRko4yr+XMv+
+3MM8WiG921z+cvd3B3BtWeTQBaqfpsfG0bG5YdQiIlMi73+G/eHegQx+qipYsemJpVpBAD5jouFm
+vmYMTRQEUXWQseBmnfpenJS4ADuhdidugbqwgftc1RmWvEF/Ww==
+</ds:X509Certificate>
+</ds:X509Data>
+<ds:KeyValue>
+<ds:RSAKeyValue>
+<ds:Modulus>
+lLuo8aypvSyDXOrwFVRH31aVifiL4cMF2hEjl+nJM4f3FB6f3Th9KoxjgO+isJAmPMDTZQS2u93v
+bTFOQgMnJO1giMbPFjjunZh3h31mSEJE6UEbN3mdTjVfUH01pPpmJaCH/AEzXDU4iIpJ92fjCVLb
+1aVqmQ+7wfSGzuglONdhKi2bZ1Sv/6aYYDuxchstz/VvzvgUQE1Ud3Synv0z2GzuImqon8JBK1eE
+k2g1oq0HeCBzmiyxFGQDZRTc+iZOgxKxCbuK34vw0RJCVWQqa7nLa69CThVJVgL4eOSdk76LhAKw
+FFw0U5UxlKNRzhfUKTLl85eauTotzzs3XyyZmw==
+</ds:Modulus>
+<ds:Exponent>AQAB</ds:Exponent>
+</ds:RSAKeyValue>
+</ds:KeyValue>
+</ds:KeyInfo>
+<ds:Object Id="Signature446129-Object699394"><etsi:QualifyingProperties Target="#Signature446129"><etsi:SignedProperties Id="Signature446129-SignedProperties638613"><etsi:SignedSignatureProperties><etsi:SigningTime>2026-03-13T04:22:06-05:00</etsi:SigningTime><etsi:SigningCertificate><etsi:Cert><etsi:CertDigest><ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></ds:DigestMethod><ds:DigestValue>cyHiiwy4NFV+jz0vxqnkjbUUYPc=</ds:DigestValue></etsi:CertDigest><etsi:IssuerSerial><ds:X509IssuerName>L=AMBATO,CN=AUTORIDAD DE CERTIFICACION SUBCA-1 FIRMASEGURA S.A.S.,ST=TUNGURAHUA,OU=ENTIDAD DE CERTIFICACION DE INFORMACION,O=FIRMASEGURA S.A.S.,C=EC</ds:X509IssuerName><ds:X509SerialNumber>45873986127450667468356472827791924477</ds:X509SerialNumber></etsi:IssuerSerial></etsi:Cert></etsi:SigningCertificate></etsi:SignedSignatureProperties><etsi:SignedDataObjectProperties><etsi:DataObjectFormat ObjectReference="#Reference-ID-952705"><etsi:Description>contenido comprobante</etsi:Description><etsi:MimeType>text/xml</etsi:MimeType></etsi:DataObjectFormat></etsi:SignedDataObjectProperties></etsi:SignedProperties></etsi:QualifyingProperties></ds:Object></ds:Signature></factura>]]></comprobante>
+<mensajes/>
+</autorizacion>
+
