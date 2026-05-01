@@ -222,6 +222,14 @@ export const XMLUploadModal: React.FC<XMLUploadModalProps> = ({ isOpen, empresaI
       if (mError) throw mError;
 
       // 3. Crear documento SRI para ATS
+      // Determinar es_compra para la factura (el emisor es el proveedor, no nuestra empresa)
+      let esCompra = false;
+      if (isFactura || isNotaCredito) {
+        const { data: empData2 } = await supabase.from('empresas_gestionadas').select('ruc_empresa').eq('id', empresaId).single();
+        const rucEmpresa2 = empData2?.ruc_empresa || '';
+        esCompra = parsedData.rucEmisor !== rucEmpresa2;
+      }
+
       let payloadSRI: any = {
         id_transaccion: transaccion.id,
         clave_acceso_xml: parsedData.claveAcceso,
@@ -229,21 +237,45 @@ export const XMLUploadModal: React.FC<XMLUploadModalProps> = ({ isOpen, empresaI
       };
 
       if (isFactura) {
-        payloadSRI.base_12 = parsedData.baseImponible;
+        payloadSRI.base_12 = parsedData.base12;
+        payloadSRI.base_0 = parsedData.base0;
+        payloadSRI.base_no_objeto = parsedData.baseNoObjeto;
         payloadSRI.monto_iva = parsedData.iva;
+        payloadSRI.forma_pago = parsedData.formaPago;
+        payloadSRI.es_compra = esCompra;
+        payloadSRI.tipo_identificacion_receptor = parsedData.tipoIdentificacionReceptor;
         payloadSRI.retenciones_aplicadas = valorRetenidoCalculado > 0 ? [{
-          codigo: retencionSeleccionada.codigo, porcentaje: retencionSeleccionada.porcentaje, base: parsedData.baseImponible, valor: valorRetenidoCalculado, tipo: 'RENTA'
+          codigo: retencionSeleccionada.codigo,
+          porcentaje: retencionSeleccionada.porcentaje,
+          base: parsedData.base12,
+          valor: valorRetenidoCalculado,
+          tipo: 'RENTA'
         }] : [];
       } else if (isRetencion) {
         payloadSRI.base_12 = 0;
-        payloadSRI.monto_iva = 0;
-        payloadSRI.retenciones_aplicadas = parsedData.documentosSustento.flatMap((doc: any) => doc.retenciones.map((ret: any) => ({
-          codigo: ret.codigoRetencion, porcentaje: ret.porcentajeRetener, base: ret.baseImponible, valor: ret.valorRetenido, desc_doc: doc.numDocSustento
-        })));
+        payloadSRI.base_0 = 0;
+        payloadSRI.base_no_objeto = 0;
+        payloadSRI.monto_iva = parsedData.totalRetenidoIVA;
+        payloadSRI.es_compra = true;
+        payloadSRI.retenciones_aplicadas = parsedData.documentosSustento.flatMap((doc: any) =>
+          doc.retenciones.map((ret: any) => ({
+            codigo: ret.codigoRetencion,
+            porcentaje: ret.porcentajeRetener,
+            base: ret.baseImponible,
+            valor: ret.valorRetenido,
+            tipo: ret.tipo,          // 'RENTA' o 'IVA'
+            desc_doc: doc.numDocSustento,
+            cod_doc_sustento: doc.codDocSustento
+          }))
+        );
       } else if (isNotaCredito) {
-        payloadSRI.base_12 = parsedData.baseImponible;
+        payloadSRI.base_12 = parsedData.base12;
+        payloadSRI.base_0 = parsedData.base0;
+        payloadSRI.base_no_objeto = parsedData.baseNoObjeto;
         payloadSRI.monto_iva = parsedData.iva;
-        payloadSRI.retenciones_aplicadas = []; // TODO: Relacionar de otra forma si necesita, Supabase permite JSON relajado
+        payloadSRI.es_compra = esCompra;
+        payloadSRI.tipo_identificacion_receptor = parsedData.tipoIdentificacionReceptor;
+        payloadSRI.retenciones_aplicadas = [];
       }
 
       const { error: dError } = await supabase.from('documentos_sri').insert(payloadSRI);
@@ -258,7 +290,7 @@ export const XMLUploadModal: React.FC<XMLUploadModalProps> = ({ isOpen, empresaI
         // Determinar si es Venta (yo emito) o Compra (me emiten) cruzando el RUC
         const { data: empData } = await supabase.from('empresas_gestionadas').select('ruc_empresa').eq('id', empresaId).single();
         const rucEmpresa = empData?.ruc_empresa || '';
-        
+
         const esVenta = rucEmpresa === parsedData.rucEmisor;
         const tipoTesoreria = esVenta ? 'Cuenta por cobrar' : 'Cuenta por pagar';
         const netoAPagar = parseFloat((totalComprobante - valorRetenidoCalculado).toFixed(2));
