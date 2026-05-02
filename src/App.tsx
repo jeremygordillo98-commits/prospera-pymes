@@ -32,6 +32,8 @@ const ATS = React.lazy(() => import('./views/ATS').then(m => ({ default: m.ATS }
 const SoporteChat = React.lazy(() => import('./components/SoporteChat').then(m => ({ default: m.SoporteChat })));
 const NotificationBellPymes = React.lazy(() => import('./components/NotificationBellPymes').then(m => ({ default: m.NotificationBellPymes })));
 
+import { ImageUploader } from './components/ImageUploader';
+
 interface Empresa {
   id: string;
   nombre_empresa: string;
@@ -56,6 +58,7 @@ const App = () => {
   const [selectedEmpresa, setSelectedEmpresa] = useState<Empresa | null>(null);
   const [loadingEmpresas, setLoadingEmpresas] = useState(true);
   const [showNewEmpresaModal, setShowNewEmpresaModal] = useState(false);
+  const [newEmpresaId, setNewEmpresaId] = useState(() => crypto.randomUUID());
   const [newEmpresaName, setNewEmpresaName] = useState('');
   const [newEmpresaRuc, setNewEmpresaRuc] = useState('');
   const [newEmpresaLogo, setNewEmpresaLogo] = useState('');
@@ -139,7 +142,7 @@ const App = () => {
         return;
       }
 
-      const newId = crypto.randomUUID();
+      const newId = newEmpresaId;
 
       const { data, error } = await supabase
         .from('empresas_gestionadas')
@@ -161,6 +164,7 @@ const App = () => {
         setNewEmpresaName('');
         setNewEmpresaRuc('');
         setNewEmpresaLogo('');
+        setNewEmpresaId(crypto.randomUUID());
       } else {
         console.error("Supabase Error:", error);
         alert(`Error al crear empresa: ${error?.message || 'Revisa tu conexión o las políticas de la base de datos'}`);
@@ -226,12 +230,11 @@ const App = () => {
               onChange={(e) => setNewEmpresaRuc(e.target.value)}
               style={{ padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', width: '100%' }}
             />
-            <input
-              type="text"
-              placeholder="URL del Logo (Opcional)"
-              value={newEmpresaLogo}
-              onChange={(e) => setNewEmpresaLogo(e.target.value)}
-              style={{ padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', width: '100%' }}
+            <ImageUploader
+              storagePath={`empresas/empresa_${newEmpresaId}.webp`}
+              currentLogoUrl={newEmpresaLogo}
+              onUploadSuccess={(url: string) => setNewEmpresaLogo(url)}
+              onRemove={() => setNewEmpresaLogo('')}
             />
             <button className="btn btn-primary w-full" onClick={createEmpresa}>Crear Cliente</button>
           </div>
@@ -464,12 +467,11 @@ const App = () => {
                   onChange={(e) => setNewEmpresaRuc(e.target.value)}
                   style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }}
                 />
-                <input
-                  type="text"
-                  placeholder="URL del Logo (Opcional)"
-                  value={newEmpresaLogo}
-                  onChange={(e) => setNewEmpresaLogo(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }}
+                <ImageUploader
+                  storagePath={`empresas/empresa_${newEmpresaId}.webp`}
+                  currentLogoUrl={newEmpresaLogo}
+                  onUploadSuccess={(url: string) => setNewEmpresaLogo(url)}
+                  onRemove={() => setNewEmpresaLogo('')}
                 />
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
@@ -509,7 +511,12 @@ const App = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
                 <input autoFocus type="text" placeholder="Nombre de la empresa *" value={editForm.nombre_empresa} onChange={e => setEditForm({ ...editForm, nombre_empresa: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }} />
                 <input type="text" placeholder="RUC o Identificación" value={editForm.ruc_empresa} onChange={e => setEditForm({ ...editForm, ruc_empresa: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }} />
-                <input type="text" placeholder="URL del Logo (Opcional)" value={editForm.logo_url} onChange={e => setEditForm({ ...editForm, logo_url: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }} />
+                <ImageUploader
+                  storagePath={`empresas/empresa_${editingEmpresa.id}.webp`}
+                  currentLogoUrl={editForm.logo_url}
+                  onUploadSuccess={(url: string) => setEditForm({ ...editForm, logo_url: url })}
+                  onRemove={() => setEditForm({ ...editForm, logo_url: '' })}
+                />
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button className="btn flex-1" onClick={() => setEditingEmpresa(null)}>Cancelar</button>

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart3, FileSpreadsheet, TrendingUp, Landmark, Loader2, BookCopy, CheckCircle2, XCircle, Download, Calendar } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { MayorGeneral } from '../components/MayorGeneral';
+import { generatePDFReport } from '../utils/pdfGenerator';
 
 interface Props { empresaId: string; }
 interface Account { id: string; codigo_cuenta: string; nombre: string; tipo: string; }
@@ -97,6 +98,24 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
     a.click();
   };
 
+  const exportBalancePDF = async () => {
+    const columns = ['Código', 'Cuenta', 'Tipo', 'Debe', 'Haber', 'Saldo'];
+    const rows = filteredLedger.map(i => [
+      i.codigo_cuenta,
+      i.nombre,
+      i.tipo,
+      `$${i.debe.toFixed(2)}`,
+      `$${i.haber.toFixed(2)}`,
+      `$${i.saldo.toFixed(2)}`
+    ]);
+    const foot = [['', 'TOTALES', '', `$${totalDebe.toFixed(2)}`, `$${totalHaber.toFixed(2)}`, '']];
+
+    let subtitle = 'Balance de Comprobación';
+    if (desde || hasta) subtitle += ` (${desde || 'Inicio'} al ${hasta || 'Hoy'})`;
+
+    await generatePDFReport(empresaId, 'Balance de Comprobación', subtitle, columns, rows, foot);
+  };
+
   if (loading) return <div className="flex-center" style={{ padding: '120px 0' }}><Loader2 className="animate-spin" size={36} style={{ color: 'var(--primary)' }} /></div>;
 
   return (
@@ -172,6 +191,9 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
             <button onClick={exportBalanceCSV} className="btn" style={{ padding: '7px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
               <Download size={14} /> CSV
             </button>
+            <button onClick={exportBalancePDF} className="btn btn-primary" style={{ padding: '7px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
+              <Download size={14} /> PDF
+            </button>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table className="data-table" style={{ minWidth: 760 }}>
@@ -219,6 +241,24 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
           a.download = `Estado_Resultados${desde ? '_' + desde : ''}${hasta ? '_al_' + hasta : ''}.csv`;
           a.click();
         };
+
+        const exportERPDF = async () => {
+          const columns = ['Tipo', 'Cuenta', 'Saldo'];
+          const rows: any[][] = [];
+
+          ingresos.forEach(i => rows.push(['Ingreso', i.nombre, `$${i.saldo.toFixed(2)}`]));
+          rows.push([{ content: 'TOTAL INGRESOS', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, `$${totalIng.toFixed(2)}`]);
+
+          gastos.forEach(i => rows.push(['Gasto', i.nombre, `$${i.saldo.toFixed(2)}`]));
+          rows.push([{ content: 'TOTAL GASTOS', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, `$${totalGas.toFixed(2)}`]);
+
+          const foot = [['', 'UTILIDAD NETA', `$${utilidad.toFixed(2)}`]];
+
+          let subtitle = 'Estado de Resultados';
+          if (desde || hasta) subtitle += ` (${desde || 'Inicio'} al ${hasta || 'Hoy'})`;
+
+          await generatePDFReport(empresaId, 'Estado de Resultados', subtitle, columns, rows, foot);
+        };
         return (
           <section style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {/* Barra de período + exportar */}
@@ -241,6 +281,9 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
               </div>
               <button onClick={exportER} className="btn" style={{ padding: '7px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
                 <Download size={14} /> CSV
+              </button>
+              <button onClick={exportERPDF} className="btn btn-primary" style={{ padding: '7px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
+                <Download size={14} /> PDF
               </button>
             </div>
 
@@ -321,6 +364,27 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
           a.download = `Balance_General${desde ? '_' + desde : ''}${hasta ? '_al_' + hasta : ''}.csv`;
           a.click();
         };
+
+        const exportBGPDF = async () => {
+          const columns = ['Grupo', 'Cuenta', 'Saldo'];
+          const rows: any[][] = [];
+
+          activos.forEach(i => rows.push(['Activo', i.nombre, `$${i.saldo.toFixed(2)}`]));
+          rows.push([{ content: 'TOTAL ACTIVOS', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, `$${totalA.toFixed(2)}`]);
+
+          pasivos.forEach(i => rows.push(['Pasivo', i.nombre, `$${i.saldo.toFixed(2)}`]));
+          rows.push([{ content: 'TOTAL PASIVOS', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, `$${totalPa.toFixed(2)}`]);
+
+          patrimonio.forEach(i => rows.push(['Patrimonio', i.nombre, `$${i.saldo.toFixed(2)}`]));
+          rows.push([{ content: 'TOTAL PATRIMONIO', colSpan: 2, styles: { halign: 'right', fontStyle: 'bold' } }, `$${totalPat.toFixed(2)}`]);
+
+          const foot = [['', 'PASIVO + PATRIMONIO', `$${totalPP.toFixed(2)}`]];
+
+          let subtitle = 'Balance General';
+          if (desde || hasta) subtitle += ` (${desde || 'Inicio'} al ${hasta || 'Hoy'})`;
+
+          await generatePDFReport(empresaId, 'Balance General', subtitle, columns, rows, foot);
+        };
         const renderGroup = (items: typeof activos, color: string, emptyMsg: string) => (
           items.length === 0
             ? <div style={{ padding: '16px 20px', color: 'var(--text-sec)', fontSize: '0.85rem', textAlign: 'center' }}>{emptyMsg}</div>
@@ -353,6 +417,9 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
               </div>
               <button onClick={exportBG} className="btn" style={{ padding: '7px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
                 <Download size={14} /> CSV
+              </button>
+              <button onClick={exportBGPDF} className="btn btn-primary" style={{ padding: '7px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
+                <Download size={14} /> PDF
               </button>
             </div>
 
