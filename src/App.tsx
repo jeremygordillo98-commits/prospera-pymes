@@ -29,6 +29,8 @@ const LibroDiario = React.lazy(() => import('./views/LibroDiario').then(m => ({ 
 const Tesoreria = React.lazy(() => import('./views/Tesoreria').then(m => ({ default: m.Tesoreria })));
 const UpdatePassword = React.lazy(() => import('./views/UpdatePassword').then(m => ({ default: m.UpdatePassword })));
 const ATS = React.lazy(() => import('./views/ATS').then(m => ({ default: m.ATS })));
+const SoporteChat = React.lazy(() => import('./components/SoporteChat').then(m => ({ default: m.SoporteChat })));
+const NotificationBellPymes = React.lazy(() => import('./components/NotificationBellPymes').then(m => ({ default: m.NotificationBellPymes })));
 
 interface Empresa {
   id: string;
@@ -59,6 +61,13 @@ const App = () => {
   const [newEmpresaLogo, setNewEmpresaLogo] = useState('');
   const [limiteEmpresas, setLimiteEmpresas] = useState<number>(2);
   const [showLimitModal, setShowLimitModal] = useState(false);
+
+  // ── Editar / Archivar empresa ─────────────────────────────────────
+  const [editingEmpresa, setEditingEmpresa] = useState<Empresa | null>(null);
+  const [editForm, setEditForm] = useState({ nombre_empresa: '', ruc_empresa: '', logo_url: '' });
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState<Empresa | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  // ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -161,6 +170,40 @@ const App = () => {
       alert(`Error inesperado: ${err?.message || 'No se pudo procesar la solicitud'}`);
     }
   };
+
+  // ── Editar empresa ────────────────────────────────────────────────
+  const openEditEmpresa = (emp: Empresa) => {
+    setEditingEmpresa(emp);
+    setEditForm({ nombre_empresa: emp.nombre_empresa, ruc_empresa: emp.ruc_empresa || '', logo_url: (emp as any).logo_url || '' });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingEmpresa || !editForm.nombre_empresa.trim()) return;
+    setSavingEdit(true);
+    const { data, error } = await supabase
+      .from('empresas_gestionadas')
+      .update({ nombre_empresa: editForm.nombre_empresa, ruc_empresa: editForm.ruc_empresa, logo_url: editForm.logo_url || null })
+      .eq('id', editingEmpresa.id)
+      .select().single();
+    if (!error && data) {
+      setEmpresas(prev => prev.map(e => e.id === data.id ? data : e));
+      if (selectedEmpresa?.id === data.id) setSelectedEmpresa(data);
+      setEditingEmpresa(null);
+    } else { alert('Error al guardar: ' + error?.message); }
+    setSavingEdit(false);
+  };
+
+  // ── Archivar empresa ──────────────────────────────────────────────
+  const handleArchiveEmpresa = async (emp: Empresa) => {
+    const { error } = await supabase.from('empresas_gestionadas').delete().eq('id', emp.id);
+    if (!error) {
+      const remaining = empresas.filter(e => e.id !== emp.id);
+      setEmpresas(remaining);
+      if (selectedEmpresa?.id === emp.id) setSelectedEmpresa(remaining[0] || null);
+      setShowArchiveConfirm(null);
+    } else { alert('Error al eliminar: ' + error.message); }
+  };
+  // ─────────────────────────────────────────────────────────────────
 
   const renderContent = () => {
     if (!selectedEmpresa) {
@@ -287,6 +330,8 @@ const App = () => {
           empresas={empresas}
           setShowNewEmpresaModal={setShowNewEmpresaModal}
           session={session}
+          openEditEmpresa={openEditEmpresa}
+          onArchiveEmpresa={(emp) => setShowArchiveConfirm(emp)}
         />
       </Suspense>
 
@@ -299,6 +344,18 @@ const App = () => {
           </div>
         </AnimatePresence>
       </main>
+
+      {/* Chat de Soporte flotante — visible en todas las vistas */}
+      <Suspense fallback={null}>
+        <SoporteChat />
+      </Suspense>
+
+      {/* Campana de Notificaciones Flotante */}
+      <Suspense fallback={null}>
+        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999 }}>
+          <NotificationBellPymes />
+        </div>
+      </Suspense>
 
       <nav className="mobile-nav">
         <button
@@ -443,6 +500,46 @@ const App = () => {
           </div>
         )}
       </AnimatePresence>
+      {/* ── Modal Editar Empresa ── */}
+      <AnimatePresence>
+        {editingEmpresa && (
+          <div className="modal-overlay" style={{ zIndex: 300 }}>
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="glass-card" style={{ width: '90%', maxWidth: '420px', padding: '32px' }}>
+              <h3 style={{ marginTop: 0, marginBottom: 24 }}>✏️ Editar Empresa</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+                <input autoFocus type="text" placeholder="Nombre de la empresa *" value={editForm.nombre_empresa} onChange={e => setEditForm({ ...editForm, nombre_empresa: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }} />
+                <input type="text" placeholder="RUC o Identificación" value={editForm.ruc_empresa} onChange={e => setEditForm({ ...editForm, ruc_empresa: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }} />
+                <input type="text" placeholder="URL del Logo (Opcional)" value={editForm.logo_url} onChange={e => setEditForm({ ...editForm, logo_url: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }} />
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button className="btn flex-1" onClick={() => setEditingEmpresa(null)}>Cancelar</button>
+                <button className="btn btn-primary flex-1" onClick={handleSaveEdit} disabled={savingEdit}>{savingEdit ? 'Guardando...' : 'Guardar Cambios'}</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Modal Confirmar Archivo/Eliminar ── */}
+      <AnimatePresence>
+        {showArchiveConfirm && (
+          <div className="modal-overlay" style={{ zIndex: 300 }}>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '420px', padding: '40px', textAlign: 'center' }}>
+              <div style={{ width: 64, height: 64, background: 'rgba(239,68,68,0.1)', color: 'var(--error)', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: '2rem' }}>🗑️</div>
+              <h3 style={{ color: 'var(--error)', marginTop: 0 }}>Eliminar Empresa</h3>
+              <p style={{ color: 'var(--text-sec)', marginBottom: '28px' }}>
+                ¿Estás seguro de que deseas eliminar <strong>«{showArchiveConfirm.nombre_empresa}»</strong>?<br />
+                <span style={{ fontSize: '0.82rem' }}>Esta acción es irreversible y eliminará todos sus datos contables.</span>
+              </p>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button className="btn flex-1" onClick={() => setShowArchiveConfirm(null)}>Cancelar</button>
+                <button className="btn flex-1" style={{ background: 'var(--error)', color: '#fff', border: 'none' }} onClick={() => handleArchiveEmpresa(showArchiveConfirm)}>Sí, Eliminar</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };

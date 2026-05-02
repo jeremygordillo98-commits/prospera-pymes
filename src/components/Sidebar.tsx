@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { 
+import {
   ChevronDown,
   ChevronRight,
   Building2,
@@ -18,16 +18,20 @@ interface SidebarProps {
   empresas: any[];
   setShowNewEmpresaModal: (show: boolean) => void;
   session: any;
+  openEditEmpresa: (emp: any) => void;
+  onArchiveEmpresa: (emp: any) => void;
 }
 
-export const Sidebar = ({ 
-  activeView, 
-  setActiveView, 
-  selectedEmpresa, 
-  setSelectedEmpresa, 
-  empresas, 
+export const Sidebar = ({
+  activeView,
+  setActiveView,
+  selectedEmpresa,
+  setSelectedEmpresa,
+  empresas,
   setShowNewEmpresaModal,
-  session
+  session,
+  openEditEmpresa,
+  onArchiveEmpresa,
 }: SidebarProps) => {
   const [openMenus, setOpenMenus] = useState<string[]>(['config-parent']);
 
@@ -35,7 +39,7 @@ export const Sidebar = ({
     const id = item.id;
     const isOpening = !openMenus.includes(id);
 
-    setOpenMenus(prev => 
+    setOpenMenus(prev =>
       isOpening ? [...prev, id] : prev.filter(m => m !== id)
     );
 
@@ -49,15 +53,15 @@ export const Sidebar = ({
     <aside className="sidebar custom-scrollbar" style={{ overflowY: 'auto', overflowX: 'hidden' }}>
       <div style={{ padding: '0 20px', margin: '24px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-          <div style={{ 
-            width: 36, 
-            height: 36, 
-            background: 'linear-gradient(135deg, var(--primary), #8B5CF6)', 
-            borderRadius: 10, 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            color: '#fff', 
+          <div style={{
+            width: 36,
+            height: 36,
+            background: 'linear-gradient(135deg, var(--primary), #8B5CF6)',
+            borderRadius: 10,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
             fontWeight: 800,
             boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
           }}>P</div>
@@ -73,47 +77,63 @@ export const Sidebar = ({
         <div className="glass-card" style={{ padding: '12px', border: '1px solid var(--border-color)', borderRadius: '16px', background: 'rgba(255,255,255,0.02)' }}>
           <label style={{ fontSize: '0.65rem', color: 'var(--text-sec)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', display: 'block', paddingLeft: '4px' }}>Empresa Gestionada</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-             <Building2 size={16} className="text-sec" style={{ opacity: 0.6 }} />
-             <select 
-                value={selectedEmpresa?.id || ''} 
-                onChange={(e) => setSelectedEmpresa(empresas.find(emp => emp.id === e.target.value) || null)}
-                style={{ 
-                  flex: 1, 
-                  background: 'transparent', 
-                  border: 'none', 
-                  color: 'var(--text-main)', 
-                  fontSize: '0.85rem', 
-                  fontWeight: 600, 
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
+            <Building2 size={16} className="text-sec" style={{ opacity: 0.6 }} />
+            <select
+              value={selectedEmpresa?.id || ''}
+              onChange={(e) => setSelectedEmpresa(empresas.find(emp => emp.id === e.target.value) || null)}
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-main)',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                outline: 'none',
+                cursor: 'pointer'
+              }}
             >
-                {empresas.map(emp => (
-                    <option key={emp.id} value={emp.id} style={{ background: 'var(--bg-color)', color: 'var(--text-main)' }}>{emp.nombre_empresa}</option>
-                ))}
+              {empresas.map(emp => (
+                <option key={emp.id} value={emp.id} style={{ background: 'var(--bg-color)', color: 'var(--text-main)' }}>{emp.nombre_empresa}</option>
+              ))}
             </select>
           </div>
-          <button 
+          <button
             onClick={() => setShowNewEmpresaModal(true)}
-            style={{ 
-              width: '100%', 
-              padding: '8px', 
-              background: 'var(--primary-light)', 
-              border: 'none', 
-              borderRadius: '8px', 
-              color: 'var(--primary)', 
-              fontSize: '0.75rem', 
-              fontWeight: 700, 
-              cursor: 'pointer', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
+            style={{
+              width: '100%',
+              padding: '8px',
+              background: 'var(--primary-light)',
+              border: 'none',
+              borderRadius: '8px',
+              color: 'var(--primary)',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               gap: '6px',
               transition: 'all 0.2s'
             }}
           >
-              <Plus size={14} /> Registrar Empresa
+            <Plus size={14} /> Registrar Empresa
           </button>
+
+          {/* Acciones sobre empresa activa */}
+          {selectedEmpresa && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button
+                onClick={() => openEditEmpresa(selectedEmpresa)}
+                title="Editar empresa"
+                style={{ flex: 1, padding: '7px', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 8, color: '#818CF8', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+              >✏️ Editar</button>
+              <button
+                onClick={() => onArchiveEmpresa(selectedEmpresa)}
+                title="Eliminar empresa"
+                style={{ flex: 1, padding: '7px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: 'var(--error)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+              >🗑️ Eliminar</button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -214,13 +234,13 @@ export const Sidebar = ({
 
       {/* Sección de Usuario Footer UI */}
       <div style={{ padding: '16px', marginTop: 'auto', borderTop: '1px solid var(--border-color)' }}>
-        <div 
-          className="glass-card" 
+        <div
+          className="glass-card"
           onClick={() => setActiveView('perfil')}
-          style={{ 
-            padding: '12px', 
-            borderRadius: '16px', 
-            background: activeView === 'perfil' ? 'rgba(255,190,0,0.1)' : 'rgba(255,190,0,0.03)', 
+          style={{
+            padding: '12px',
+            borderRadius: '16px',
+            background: activeView === 'perfil' ? 'rgba(255,190,0,0.1)' : 'rgba(255,190,0,0.03)',
             border: activeView === 'perfil' ? '1px solid rgba(255,190,0,0.3)' : '1px solid rgba(255,190,0,0.1)',
             display: 'flex',
             alignItems: 'center',
@@ -229,15 +249,15 @@ export const Sidebar = ({
             transition: 'all 0.2s'
           }}
         >
-          <div style={{ 
-            width: 40, 
-            height: 40, 
-            borderRadius: '12px', 
-            background: 'linear-gradient(135deg, #FFBD00, #FF0058)', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            color: '#fff', 
+          <div style={{
+            width: 40,
+            height: 40,
+            borderRadius: '12px',
+            background: 'linear-gradient(135deg, #FFBD00, #FF0058)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
             fontWeight: 800,
             fontSize: '1.1rem'
           }}>
@@ -249,24 +269,26 @@ export const Sidebar = ({
             </div>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-sec)', fontWeight: 600 }}>Plan Contador</div>
           </div>
-          <button 
-             onClick={(e) => {
-               e.stopPropagation();
-               supabase.auth.signOut();
-             }}
-             style={{ 
-               padding: '6px', 
-               background: 'transparent', 
-               border: 'none', 
-               color: 'var(--error)', 
-               cursor: 'pointer',
-               opacity: 0.7,
-               transition: 'opacity 0.2s'
-             }}
-             title="Cerrar Sesión"
-          >
-            <LogOut size={18} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                supabase.auth.signOut();
+              }}
+              style={{
+                padding: '6px',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--error)',
+                cursor: 'pointer',
+                opacity: 0.7,
+                transition: 'opacity 0.2s'
+              }}
+              title="Cerrar Sesión"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
         </div>
       </div>
     </aside>
