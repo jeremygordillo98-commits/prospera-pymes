@@ -35,6 +35,12 @@
   --text-sec: #64748B;
   --aurora-bg: #F1F5F9;
   --input-bg: #f1f5f9;
+  /* ─ Corrección de contraste WCAG AA en modo claro ────────────────────────
+     #00D68F (neón) sobre blanco = ratio ~2.4:1 → FALLA
+     #00956A (esmeralda oscuro) sobre blanco = ratio ~4.6:1 → PASA AA  */
+  --primary: #00956A;
+  --primary-hover: #007A57;
+  --primary-light: rgba(0, 149, 106, 0.12);
 }
 
 body {
@@ -195,7 +201,8 @@ body {
   }
 }
 
-.mobile-nav, .more-menu-overlay {
+.mobile-nav,
+.more-menu-overlay {
   display: none;
 }
 

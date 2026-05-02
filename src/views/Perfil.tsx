@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Mail, Save, LogOut, Building2, Image as ImageIcon } from 'lucide-react';
+import { User, Mail, Save, LogOut, Building2, Image as ImageIcon, Sun, Moon } from 'lucide-react';
 import { supabase } from '../services/supabase';
+import { useTheme } from '../context/ThemeContext';
 
 export const Perfil = () => {
+    const { isDark, toggleTheme } = useTheme();
     const [loading, setLoading] = useState(false);
     const [userData, setUserData] = useState({
         nombre_completo: '',
@@ -58,7 +60,7 @@ export const Perfil = () => {
                 data: { nombre_completo: userData.nombre_completo }
             });
             if (authError) throw authError;
-            
+
             // 2. Actualizar o Insertar en tabla perfiles (upsert)
             const { error: dbError } = await supabase.from('perfiles').upsert({
                 id_usuario: user.id,
@@ -135,7 +137,7 @@ export const Perfil = () => {
 
                     <div>
                         <label style={{ fontWeight: 600, fontSize: '0.9rem' }} className="flex items-center gap-2">
-                             RUC Profesional o Firma
+                            RUC Profesional o Firma
                         </label>
                         <input
                             type="text"
@@ -179,7 +181,7 @@ export const Perfil = () => {
                             <Save size={18} /> {loading ? 'Actualizando...' : 'Guardar Cambios'}
                         </button>
                     </div>
-        </form>
+                </form>
             </div>
 
             <div className="glass-card" style={{ padding: '32px' }}>
@@ -209,12 +211,46 @@ export const Perfil = () => {
                 )}
             </div>
 
+            {/* Toggle de Tema */}
+            <div className="glass-card" style={{ padding: '24px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                    <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {isDark ? <Moon size={20} style={{ color: 'var(--primary)' }} /> : <Sun size={20} style={{ color: 'var(--primary)' }} />}
+                        Apariencia
+                    </h3>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-sec)' }}>
+                        Actualmente en modo <strong>{isDark ? 'oscuro' : 'claro'}</strong>
+                    </p>
+                </div>
+                <button
+                    onClick={toggleTheme}
+                    style={{
+                        width: 56, height: 30, borderRadius: 999,
+                        background: isDark ? 'var(--primary)' : 'var(--border-color)',
+                        border: 'none', cursor: 'pointer', position: 'relative',
+                        transition: 'background 0.3s',
+                    }}
+                >
+                    <div style={{
+                        position: 'absolute', top: 3,
+                        left: isDark ? 28 : 3,
+                        width: 24, height: 24, borderRadius: '50%',
+                        background: '#fff',
+                        transition: 'left 0.3s',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                        {isDark ? <Moon size={12} color="#000" /> : <Sun size={12} color="#F59E0B" />}
+                    </div>
+                </button>
+            </div>
+
             <div className="glass-card" style={{ padding: '24px', borderColor: 'rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.05)' }}>
                 <h3 style={{ color: 'var(--error)', margin: '0 0 8px 0', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <LogOut size={20} /> Sesión de Seguridad
                 </h3>
                 <p className="text-sec mb-4">Cierra tu sesión activa para proteger la información de tus clientes en este dispositivo.</p>
-                <button 
+                <button
                     onClick={handleLogout}
                     className="btn"
                     style={{ background: 'transparent', border: '1px solid var(--error)', color: 'var(--error)', fontWeight: 600 }}

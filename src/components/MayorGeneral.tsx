@@ -39,6 +39,9 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
   const [onlyWithMov, setOnlyWithMov] = useState(true);
+  const [accTypeFilter, setAccTypeFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
 
   // Totales aggregados por cuenta (para el listado)
   const [totalesMap, setTotalesMap] = useState<Map<string, { debe: number; haber: number }>>(new Map());
@@ -97,6 +100,11 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
     });
   }, [lines, desde, hasta]);
 
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [selected, desde, hasta]);
+
   // Calcular saldo acumulado
   const linesConSaldo = useMemo(() => {
     let saldo = 0;
@@ -117,10 +125,18 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
     return accounts.filter(a => {
       const hasMov = totalesMap.has(a.id);
       if (onlyWithMov && !hasMov) return false;
+      if (accTypeFilter && a.tipo !== accTypeFilter) return false;
       if (term && !a.nombre.toLowerCase().includes(term) && !a.codigo_cuenta.includes(term)) return false;
       return true;
     });
-  }, [accounts, search, onlyWithMov, totalesMap]);
+  }, [accounts, search, onlyWithMov, totalesMap, accTypeFilter]);
+
+  // Paginación
+  const paginatedLines = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return linesConSaldo.slice(start, start + pageSize);
+  }, [linesConSaldo, page]);
+  const totalPages = Math.ceil(linesConSaldo.length / pageSize);
 
   // Exportar CSV
   const exportCSV = () => {
@@ -160,6 +176,14 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
             <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-sec)' }} />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." style={{ ...inp, paddingLeft: 30, width: '100%', fontSize: '0.85rem', boxSizing: 'border-box' }} />
           </div>
+          <select value={accTypeFilter} onChange={e => setAccTypeFilter(e.target.value)} style={{ ...inp, width: '100%', fontSize: '0.8rem', marginBottom: 8, padding: '6px 10px' }}>
+            <option value="">Todos los tipos</option>
+            <option value="Activo">Activos</option>
+            <option value="Pasivo">Pasivos</option>
+            <option value="Patrimonio">Patrimonio</option>
+            <option value="Ingreso">Ingresos</option>
+            <option value="Gasto">Gastos</option>
+          </select>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', color: 'var(--text-sec)', cursor: 'pointer', userSelect: 'none' }}>
             <input type="checkbox" checked={onlyWithMov} onChange={e => setOnlyWithMov(e.target.checked)} style={{ accentColor: 'var(--primary)' }} />
             Solo con movimientos
@@ -236,60 +260,71 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
                 No hay movimientos{(desde || hasta) ? ' en el período seleccionado' : ' para esta cuenta'}.
               </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                      {['Fecha', 'Concepto / Tercero', 'Comprobante', 'Debe', 'Haber', 'Saldo Acum.'].map(h => (
-                        <th key={h} style={{ padding: '10px 14px', textAlign: ['Debe', 'Haber', 'Saldo Acum.'].includes(h) ? 'right' : 'left', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)', whiteSpace: 'nowrap' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {linesConSaldo.map((l, i) => (
-                      <tr key={l.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-                        <td style={{ padding: '11px 14px', fontSize: '0.83rem', whiteSpace: 'nowrap', color: 'var(--text-sec)' }}>
-                          {l.transacciones?.fecha ? new Date(l.transacciones.fecha).toLocaleDateString('es-EC') : '—'}
-                        </td>
-                        <td style={{ padding: '11px 14px', maxWidth: 280 }}>
-                          <div style={{ fontSize: '0.87rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {l.transacciones?.concepto || '—'}
-                          </div>
-                          {l.transacciones?.entidades?.razon_social && (
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', marginTop: 2 }}>
-                              {l.transacciones.entidades.razon_social}
+              <>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
+                        {['Fecha', 'Concepto / Tercero', 'Comprobante', 'Debe', 'Haber', 'Saldo Acum.'].map(h => (
+                          <th key={h} style={{ padding: '10px 14px', textAlign: ['Debe', 'Haber', 'Saldo Acum.'].includes(h) ? 'right' : 'left', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)', whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedLines.map((l, i) => (
+                        <tr key={l.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                          <td style={{ padding: '11px 14px', fontSize: '0.83rem', whiteSpace: 'nowrap', color: 'var(--text-sec)' }}>
+                            {l.transacciones?.fecha ? new Date(l.transacciones.fecha).toLocaleDateString('es-EC') : '—'}
+                          </td>
+                          <td style={{ padding: '11px 14px', maxWidth: 280 }}>
+                            <div style={{ fontSize: '0.87rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {l.transacciones?.concepto || '—'}
                             </div>
-                          )}
+                            {l.transacciones?.entidades?.razon_social && (
+                              <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', marginTop: 2 }}>
+                                {l.transacciones.entidades.razon_social}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: '11px 14px', fontSize: '0.78rem', color: 'var(--text-sec)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                            {l.transacciones?.tipo_comprobante} {l.transacciones?.numero_comprobante}
+                          </td>
+                          <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: l.debe > 0 ? 800 : 400, color: l.debe > 0 ? 'var(--text-main)' : 'var(--text-sec)', fontSize: '0.88rem' }}>
+                            {l.debe > 0 ? `$${l.debe.toFixed(2)}` : '—'}
+                          </td>
+                          <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: l.haber > 0 ? 800 : 400, color: l.haber > 0 ? 'var(--text-main)' : 'var(--text-sec)', fontSize: '0.88rem' }}>
+                            {l.haber > 0 ? `$${l.haber.toFixed(2)}` : '—'}
+                          </td>
+                          <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 900, fontSize: '0.9rem', color: l.saldoAcum >= 0 ? 'var(--primary)' : 'var(--error)', whiteSpace: 'nowrap' }}>
+                            ${l.saldoAcum.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', fontWeight: 900 }}>
+                        <td colSpan={3} style={{ padding: '13px 14px', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Totales del período — {linesConSaldo.length} movimientos
                         </td>
-                        <td style={{ padding: '11px 14px', fontSize: '0.78rem', color: 'var(--text-sec)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                          {l.transacciones?.tipo_comprobante} {l.transacciones?.numero_comprobante}
-                        </td>
-                        <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: l.debe > 0 ? 800 : 400, color: l.debe > 0 ? 'var(--text-main)' : 'var(--text-sec)', fontSize: '0.88rem' }}>
-                          {l.debe > 0 ? `$${l.debe.toFixed(2)}` : '—'}
-                        </td>
-                        <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: l.haber > 0 ? 800 : 400, color: l.haber > 0 ? 'var(--text-main)' : 'var(--text-sec)', fontSize: '0.88rem' }}>
-                          {l.haber > 0 ? `$${l.haber.toFixed(2)}` : '—'}
-                        </td>
-                        <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 900, fontSize: '0.9rem', color: l.saldoAcum >= 0 ? 'var(--primary)' : 'var(--error)', whiteSpace: 'nowrap' }}>
-                          ${l.saldoAcum.toFixed(2)}
+                        <td style={{ padding: '13px 14px', textAlign: 'right', color: 'var(--text-main)' }}>${totalDebe.toFixed(2)}</td>
+                        <td style={{ padding: '13px 14px', textAlign: 'right', color: 'var(--text-main)' }}>${totalHaber.toFixed(2)}</td>
+                        <td style={{ padding: '13px 14px', textAlign: 'right', color: 'var(--primary)' }}>
+                          ${linesConSaldo[linesConSaldo.length - 1]?.saldoAcum.toFixed(2) ?? '0.00'}
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ borderTop: '2px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', fontWeight: 900 }}>
-                      <td colSpan={3} style={{ padding: '13px 14px', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        Totales del período — {linesConSaldo.length} movimientos
-                      </td>
-                      <td style={{ padding: '13px 14px', textAlign: 'right', color: 'var(--text-main)' }}>${totalDebe.toFixed(2)}</td>
-                      <td style={{ padding: '13px 14px', textAlign: 'right', color: 'var(--text-main)' }}>${totalHaber.toFixed(2)}</td>
-                      <td style={{ padding: '13px 14px', textAlign: 'right', color: 'var(--primary)' }}>
-                        ${linesConSaldo[linesConSaldo.length - 1]?.saldoAcum.toFixed(2) ?? '0.00'}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                    </tfoot>
+                  </table>
+                </div>
+                {totalPages > 1 && (
+                  <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-sec)', fontWeight: 600 }}>Página {page} de {totalPages}</span>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="btn" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>Anterior</button>
+                      <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="btn" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>Siguiente</button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
