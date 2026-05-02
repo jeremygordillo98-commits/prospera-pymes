@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import { ChevronLeft, Download, Search, Calendar, ArrowUpDown } from 'lucide-react';
+import { generatePDFReport } from '../utils/pdfGenerator';
 
 interface Props { empresaId: string; }
 
@@ -159,6 +160,31 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
     a.click();
   };
 
+  const exportPDF = async () => {
+    if (!selected) return;
+    const columns = ['Fecha', 'Concepto / Tercero', 'Comprobante', 'Debe', 'Haber', 'Saldo Acum.'];
+    const rows = linesConSaldo.map(l => [
+      l.transacciones?.fecha ? new Date(l.transacciones.fecha).toLocaleDateString('es-EC') : '—',
+      `${l.transacciones?.concepto || '—'} ${l.transacciones?.entidades?.razon_social ? ' - ' + l.transacciones.entidades.razon_social : ''}`,
+      `${l.transacciones?.tipo_comprobante || ''} ${l.transacciones?.numero_comprobante || ''}`.trim() || '—',
+      `$${l.debe.toFixed(2)}`,
+      `$${l.haber.toFixed(2)}`,
+      `$${l.saldoAcum.toFixed(2)}`
+    ]);
+
+    const foot = [[
+      '', 'TOTALES', '',
+      `$${totalDebe.toFixed(2)}`,
+      `$${totalHaber.toFixed(2)}`,
+      `$${(linesConSaldo[linesConSaldo.length - 1]?.saldoAcum || 0).toFixed(2)}`
+    ]];
+
+    let subtitle = `Cuenta: ${selected.codigo_cuenta} - ${selected.nombre}`;
+    if (desde || hasta) subtitle += ` | ${desde || 'Inicio'} al ${hasta || 'Hoy'}`;
+
+    await generatePDFReport(empresaId, 'Mayor General', subtitle, columns, rows, foot);
+  };
+
   if (loadingAcc) return (
     <div style={{ padding: '60px 0', textAlign: 'center', color: 'var(--text-sec)' }}>
       Cargando cuentas...
@@ -247,9 +273,14 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
                   <button onClick={() => { setDesde(''); setHasta(''); }} style={{ background: 'none', border: 'none', color: 'var(--text-sec)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}>✕ Limpiar</button>
                 )}
               </div>
-              <button onClick={exportCSV} className="btn btn-primary" style={{ padding: '8px 16px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', fontWeight: 800 }}>
-                <Download size={15} /> Exportar CSV
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={exportCSV} className="btn" style={{ padding: '8px 16px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', fontWeight: 800 }}>
+                  <Download size={15} /> CSV
+                </button>
+                <button onClick={exportPDF} className="btn btn-primary" style={{ padding: '8px 16px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', fontWeight: 800 }}>
+                  <Download size={15} /> PDF
+                </button>
+              </div>
             </div>
 
             {/* Tabla de movimientos */}

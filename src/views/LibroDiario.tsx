@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  FileText, 
+import {
+  FileText,
   Loader2,
   ChevronDown,
   ChevronUp,
@@ -9,6 +9,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { supabase } from '../services/supabase';
+import { generatePDFReport } from '../utils/pdfGenerator';
 
 interface Movement {
   id: string;
@@ -78,22 +79,22 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
         .order('fecha', { ascending: false });
 
       if (error) throw error;
-      
+
       // Handle potential type mismatch from Supabase many-to-one
       // We ensure it matches our Transaction interface
       const sanitizedData = (data || []).map((item: any) => ({
-          ...item,
-          entidades: Array.isArray(item.entidades) ? item.entidades[0] : item.entidades,
-          movimientos: (item.movimientos || []).map((m: any) => ({
-              ...m,
-              plan_cuentas: Array.isArray(m.plan_cuentas) ? m.plan_cuentas[0] : m.plan_cuentas
-          }))
+        ...item,
+        entidades: Array.isArray(item.entidades) ? item.entidades[0] : item.entidades,
+        movimientos: (item.movimientos || []).map((m: any) => ({
+          ...m,
+          plan_cuentas: Array.isArray(m.plan_cuentas) ? m.plan_cuentas[0] : m.plan_cuentas
+        }))
       }));
 
       setTransactions(sanitizedData);
-      
+
       if (sanitizedData.length > 0) {
-          setExpandedTxs(new Set(sanitizedData.map((t: any) => t.id)));
+        setExpandedTxs(new Set(sanitizedData.map((t: any) => t.id)));
       }
     } catch (err) {
       console.error("Error fetching transactions:", err);
@@ -133,7 +134,7 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
 
       // 3. Actualizar el estado local para quitarrla de la pantalla de inmediato
       setTransactions(prev => prev.filter(t => t.id !== tx.id));
-      
+
     } catch (err: any) {
       console.error("Error al eliminar la transacción:", err);
       alert(`Error al eliminar: ${err.message}`);
@@ -183,7 +184,7 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
 
       setTransactions(prev => prev.filter(t => !selectedTxs.has(t.id)));
       setSelectedTxs(new Set());
-      
+
     } catch (err: any) {
       console.error("Error al eliminar masivamente:", err);
       alert(`Error al eliminar: ${err.message}`);
@@ -218,6 +219,32 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
     link.remove();
   };
 
+  const handleExportTxPDF = async (e: React.MouseEvent, tx: Transaction) => {
+    e.stopPropagation();
+
+    const columns = ['Código', 'Cuenta Contable', 'Debe', 'Haber'];
+    const rows = tx.movimientos.map(m => [
+      m.plan_cuentas?.codigo_cuenta || '',
+      m.plan_cuentas?.nombre || '',
+      m.debe > 0 ? `$${m.debe.toFixed(2)}` : '-',
+      m.haber > 0 ? `$${m.haber.toFixed(2)}` : '-'
+    ]);
+
+    const totalDebe = tx.movimientos.reduce((acc, m) => acc + m.debe, 0);
+    const totalHaber = tx.movimientos.reduce((acc, m) => acc + m.haber, 0);
+
+    const foot = [[
+      '', 'TOTAL ASIENTO',
+      `$${totalDebe.toFixed(2)}`,
+      `$${totalHaber.toFixed(2)}`
+    ]];
+
+    const fechaFormat = new Date(tx.fecha).toLocaleDateString('es-EC');
+    const subtitle = `Asiento del ${fechaFormat}\nConcepto: ${tx.concepto}\n${tx.tipo_comprobante} #${tx.numero_comprobante} | Tercero: ${tx.entidades?.razon_social || 'N/A'}`;
+
+    await generatePDFReport(empresaId, 'Detalle de Asiento Contable', subtitle, columns, rows, foot);
+  };
+
   return (
     <div className="libro-diario-container">
       <header className="flex-between" style={{ marginBottom: '40px' }}>
@@ -228,38 +255,38 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
           <h1 className="h1" style={{ fontSize: '2.5rem', fontWeight: 900 }}>Libro Diario</h1>
           <p className="text-sec" style={{ fontSize: '1.1rem' }}>Registro cronológico de todos los movimientos contables.</p>
         </div>
-        
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-            {selectedTxs.size > 0 && (
-                <button className="btn" onClick={handleBulkDelete} style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--error)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '10px 14px' }}>
-                    <Trash2 size={18} /> <span className="hide-mobile">Eliminar ({selectedTxs.size})</span>
-                </button>
-            )}
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '10px 14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--border-color)' }} onClick={handleSelectAll}>
-                 <input 
-                    type="checkbox" 
-                    readOnly
-                    checked={filteredTransactions.length > 0 && selectedTxs.size === filteredTransactions.length}
-                    style={{ width: '16px', height: '16px', accentColor: 'var(--primary)', cursor: 'pointer' }}
-                 />
-                 <span style={{ fontSize: '0.85rem', fontWeight: 600 }} className="hide-mobile">Seleccionar Todo</span>
-            </div>
 
-            <div style={{ position: 'relative' }}>
-                <input 
-                    type="date" 
-                    value={filterDate}
-                    onChange={(e) => setFilterDate(e.target.value)}
-                    style={{ padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', outline: 'none' }}
-                />
-            </div>
-            {filterDate && (
-                <button onClick={() => setFilterDate('')} className="btn glass-card" style={{ padding: '10px' }}>Limpiar</button>
-            )}
-            <button className="btn btn-primary" onClick={exportToExcel} disabled={filteredTransactions.length === 0}>
-                <Download size={18} /> <span className="hide-mobile">Exportar a Excel</span>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {selectedTxs.size > 0 && (
+            <button className="btn" onClick={handleBulkDelete} style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--error)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '10px 14px' }}>
+              <Trash2 size={18} /> <span className="hide-mobile">Eliminar ({selectedTxs.size})</span>
             </button>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '10px 14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--border-color)' }} onClick={handleSelectAll}>
+            <input
+              type="checkbox"
+              readOnly
+              checked={filteredTransactions.length > 0 && selectedTxs.size === filteredTransactions.length}
+              style={{ width: '16px', height: '16px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: '0.85rem', fontWeight: 600 }} className="hide-mobile">Seleccionar Todo</span>
+          </div>
+
+          <div style={{ position: 'relative' }}>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              style={{ padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', outline: 'none' }}
+            />
+          </div>
+          {filterDate && (
+            <button onClick={() => setFilterDate('')} className="btn glass-card" style={{ padding: '10px' }}>Limpiar</button>
+          )}
+          <button className="btn btn-primary" onClick={exportToExcel} disabled={filteredTransactions.length === 0}>
+            <Download size={18} /> <span className="hide-mobile">Exportar a Excel</span>
+          </button>
         </div>
       </header>
 
@@ -270,7 +297,7 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
       ) : transactions.length === 0 ? (
         <div className="glass-card text-center" style={{ padding: '80px 20px' }}>
           <div style={{ width: 64, height: 64, background: 'var(--primary-light)', color: 'var(--primary)', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-             <FileText size={32} />
+            <FileText size={32} />
           </div>
           <h2 className="h1">Sin Asientos Contables</h2>
           <p className="text-sec" style={{ maxWidth: '400px', margin: '16px auto' }}>
@@ -280,22 +307,22 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {filteredTransactions.map((tx) => (
-            <motion.div 
+            <motion.div
               key={tx.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="glass-card"
               style={{ padding: '0', overflow: 'hidden', borderBottom: expandedTxs.has(tx.id) ? '2px solid var(--primary)' : '1px solid var(--border-color)' }}
             >
-              <div 
-                className="flex-between" 
+              <div
+                className="flex-between"
                 style={{ padding: '20px 24px', cursor: 'pointer', background: expandedTxs.has(tx.id) ? 'rgba(99, 102, 241, 0.03)' : 'transparent' }}
                 onClick={() => toggleExpand(tx.id)}
               >
                 <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
                   <div onClick={(e) => toggleSelect(e, tx.id)} style={{ display: 'flex', alignItems: 'center', padding: '4px' }}>
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={selectedTxs.has(tx.id)}
                       readOnly
                       style={{ width: '18px', height: '18px', accentColor: 'var(--primary)', cursor: 'pointer' }}
@@ -305,9 +332,9 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
                     <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-sec)', fontWeight: 800 }}>{new Date(tx.fecha).toLocaleString('es-EC', { month: 'short' })}</div>
                     <div style={{ fontSize: '1.2rem', fontWeight: 900 }}>{new Date(tx.fecha).getUTCDate()}</div>
                   </div>
-                  
+
                   <div style={{ height: '30px', width: '1px', background: 'var(--border-color)' }}></div>
-                  
+
                   <div style={{ maxWidth: '300px' }}>
                     <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tx.concepto}</h4>
                     <p className="text-sec" style={{ fontSize: '0.8rem', marginTop: '2px' }}>
@@ -315,7 +342,7 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
                     </p>
                   </div>
                 </div>
-                
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-sec)', fontWeight: 800 }}>Monto Operación</div>
@@ -323,7 +350,17 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
                       ${tx.movimientos.reduce((acc, m) => acc + m.debe, 0).toFixed(2)}
                     </div>
                   </div>
-                  <button 
+                  <button
+                    onClick={(e) => handleExportTxPDF(e, tx)}
+                    className="p-2"
+                    style={{ background: 'transparent', border: 'none', color: 'var(--primary)', cursor: 'pointer', opacity: 0.6 }}
+                    title="Exportar a PDF"
+                    onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                    onMouseLeave={(e) => e.currentTarget.style.opacity = '0.6'}
+                  >
+                    <Download size={20} />
+                  </button>
+                  <button
                     onClick={(e) => handleDelete(e, tx)}
                     className="p-2"
                     style={{ background: 'transparent', border: 'none', color: 'var(--error)', cursor: 'pointer', opacity: 0.6 }}

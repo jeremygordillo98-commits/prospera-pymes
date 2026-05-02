@@ -3,11 +3,13 @@ import { motion } from 'framer-motion';
 import { User, Mail, Save, LogOut, Building2, Image as ImageIcon, Sun, Moon } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { useTheme } from '../context/ThemeContext';
+import { ImageUploader } from '../components/ImageUploader';
 
 export const Perfil = () => {
     const { isDark, toggleTheme } = useTheme();
     const [loading, setLoading] = useState(false);
     const [userData, setUserData] = useState({
+        id_usuario: '',
         nombre_completo: '',
         email: '',
         ruc_profesional: '',
@@ -37,6 +39,7 @@ export const Perfil = () => {
                 .eq('id_usuario', user.id);
 
             setUserData({
+                id_usuario: user.id,
                 nombre_completo: dbProfile?.nombre_completo || user.user_metadata?.nombre_completo || '',
                 email: user.email || '',
                 ruc_profesional: dbProfile?.ruc_profesional || '',
@@ -149,17 +152,36 @@ export const Perfil = () => {
                     </div>
 
                     <div>
-                        <label style={{ fontWeight: 600, fontSize: '0.9rem' }} className="flex items-center gap-2">
-                            <ImageIcon size={18} /> URL del Logo del Contador
+                        <label style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <ImageIcon size={18} /> Logo del Despacho (Opcional)
                         </label>
-                        <input
-                            type="text"
-                            value={userData.logo_url}
-                            onChange={e => setUserData({ ...userData, logo_url: e.target.value })}
-                            style={inputStyle}
-                            placeholder="Ej: https://midominio.com/logo.png"
-                        />
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-sec)', marginBottom: '12px' }}>
+                            Este logo aparecerá en la cabecera de los reportes PDF (Mayor General, etc.) que entregues a tus clientes.
+                        </div>
+                        {userData.id_usuario && (
+                            <ImageUploader
+                                storagePath={`perfiles/perfil_${userData.id_usuario}.webp`}
+                                currentLogoUrl={userData.logo_url}
+                                onUploadSuccess={(url) => {
+                                    setUserData({ ...userData, logo_url: url });
+                                    // Guardado automático del logo en DB
+                                    supabase.from('perfiles').upsert({
+                                        id_usuario: userData.id_usuario,
+                                        logo_url: url
+                                    }).then();
+                                }}
+                                onRemove={() => {
+                                    setUserData({ ...userData, logo_url: '' });
+                                    supabase.from('perfiles').upsert({
+                                        id_usuario: userData.id_usuario,
+                                        logo_url: ''
+                                    }).then();
+                                }}
+                            />
+                        )}
                     </div>
+
+
 
                     <div>
                         <label style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-sec)' }} className="flex items-center gap-2">
