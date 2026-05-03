@@ -1,21 +1,21 @@
-import { 
-  LayoutDashboard, 
-  Settings, 
-  BookOpen, 
-  Users, 
+import {
+  LayoutDashboard,
+  Settings,
+  BookOpen,
+  Users,
   User,
-  Zap, 
-  FileUp, 
-  Database, 
-  Grid, 
-  Wallet, 
-  CreditCard, 
-  BarChart, 
-  FileText 
+  Zap,
+  FileUp,
+  Database,
+  Grid,
+  Wallet,
+  CreditCard,
+  BarChart,
+  FileText
 } from 'lucide-react';
 
 export const MENU_STRUCTURE = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'dashboard', label: 'Resumen Financiero', icon: LayoutDashboard },
   {
     id: 'config-parent',
     label: 'Configuración',

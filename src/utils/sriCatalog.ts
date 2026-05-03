@@ -11,6 +11,8 @@ export interface ISRIRetencion {
 
 // ─── RETENCIONES EN LA FUENTE DE RENTA ──────────────────────
 export const CATALOGO_RETENCIONES_RENTA: ISRIRetencion[] = [
+  // --- Sin Retención (default) ---
+  { codigo: '000', descripcion: 'No aplica retención en la fuente', porcentaje: 0 },
   // --- Servicios ---
   { codigo: '303', descripcion: 'Honorarios profesionales y demás pagos por servicios relacionados con el título profesional', porcentaje: 10 },
   { codigo: '304', descripcion: 'Servicios de docencia dictados de forma independiente (sin relación de dependencia)', porcentaje: 8 },
@@ -35,8 +37,6 @@ export const CATALOGO_RETENCIONES_RENTA: ISRIRetencion[] = [
   // --- RIMPE / Negocios Populares ---
   { codigo: '332G', descripcion: 'Compra local a contribuyentes RIMPE - Emprendedores (bienes y servicios)', porcentaje: 1 },
   { codigo: '332H', descripcion: 'Compra local a contribuyentes RIMPE - Negocios Populares', porcentaje: 1 },
-  // --- Sin Retención ---
-  { codigo: '000', descripcion: 'No sujeto a retención en la fuente', porcentaje: 0 },
 ];
 
 // ─── RETENCIONES DE IVA ─────────────────────────────────────

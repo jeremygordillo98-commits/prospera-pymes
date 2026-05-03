@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, FileText, Zap, Sparkles, CheckCircle2, Trash2, Search, Filter, ChevronLeft, ChevronRight, Receipt, FileMinus, RefreshCw } from 'lucide-react';
 import { XMLUploadModal } from '../components/XMLUploadModal';
+import { XMLBatchModal } from '../components/XMLBatchModal';
 import { supabase } from '../services/supabase';
 
 interface SRIAutomationProps {
@@ -13,7 +14,10 @@ interface DocSRI {
     id: string;
     clave_acceso_xml: string;
     base_12: number;
+    base_0: number;
+    base_no_objeto: number;
     monto_iva: number;
+    retenciones_aplicadas?: { valor: number }[];
     created_at: string;
     transacciones: {
         id: string;
@@ -29,6 +33,7 @@ const ITEMS_PER_PAGE = 10;
 
 export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId }) => {
     const [isUploadOpen, setIsUploadOpen] = useState(false);
+    const [isBatchUploadOpen, setIsBatchUploadOpen] = useState(false);
     const [documentos, setDocumentos] = useState<DocSRI[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -40,10 +45,11 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
         if (!empresaId) return;
         setLoading(true);
         try {
-            const { data, error } = await supabase
+            const esCompras = tipo === 'Compras';
+            let query = supabase
                 .from('documentos_sri')
                 .select(`
-                    id, clave_acceso_xml, base_12, monto_iva, created_at,
+                    id, clave_acceso_xml, base_12, base_0, base_no_objeto, monto_iva, created_at, retenciones_aplicadas,
                     transacciones (
                         id, fecha, concepto, tipo_comprobante, numero_comprobante,
                         entidades ( nombre, ruc_cedula )
@@ -51,6 +57,16 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
                 `)
                 .eq('id_empresa', empresaId)
                 .order('created_at', { ascending: false });
+
+            // Compras: es_compra=true O registros viejos sin clasificar (null)
+            // Ventas:  es_compra=false
+            if (esCompras) {
+                query = query.or('es_compra.eq.true,es_compra.is.null');
+            } else {
+                query = query.eq('es_compra', false);
+            }
+
+            const { data, error } = await query;
 
             if (!error && data) {
                 setDocumentos(data as any);
@@ -67,15 +83,31 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
     }, [fetchDocumentos]);
 
     const handleDelete = async (doc: DocSRI) => {
-        if (!confirm(`¿Eliminar el documento ${doc.transacciones?.numero_comprobante || doc.clave_acceso_xml.slice(-10)}? Esta acción también eliminará el asiento contable relacionado.`)) return;
+        const txObj = Array.isArray(doc.transacciones) ? doc.transacciones[0] : doc.transacciones;
+        const txNum = txObj?.numero_comprobante || doc.clave_acceso_xml.slice(-10);
+
+        if (!confirm(`¿Eliminar el documento ${txNum}? Esta acción también eliminará el asiento contable relacionado.`)) return;
+
         setDeletingId(doc.id);
         try {
-            // Eliminar el documento SRI (el asiento se puede eliminar en cascada desde Supabase o manualmente)
-            await supabase.from('documentos_sri').delete().eq('id', doc.id);
-            if (doc.transacciones?.id) {
-                await supabase.from('movimientos').delete().eq('id_transaccion', doc.transacciones.id);
-                await supabase.from('transacciones').delete().eq('id', doc.transacciones.id);
+            // 1. Eliminar Cuentas por Pagar/Cobrar asociadas
+            if (txObj?.numero_comprobante) {
+                await supabase
+                    .from('tesoreria_documentos')
+                    .delete()
+                    .eq('id_empresa', empresaId)
+                    .eq('referencia', txObj.numero_comprobante);
             }
+
+            // 2. Eliminar el documento SRI
+            await supabase.from('documentos_sri').delete().eq('id', doc.id);
+
+            // 3. Eliminar Asiento y Movimientos
+            if (txObj?.id) {
+                await supabase.from('movimientos').delete().eq('id_transaccion', txObj.id);
+                await supabase.from('transacciones').delete().eq('id', txObj.id);
+            }
+
             setDocumentos(prev => prev.filter(d => d.id !== doc.id));
         } catch (err) {
             console.error('Error deleting doc:', err);
@@ -120,7 +152,9 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
                     </div>
                     <h1 className="h1" style={{ fontSize: '2.5rem', fontWeight: 900 }}>XML {tipo}</h1>
                     <p className="text-sec" style={{ fontSize: '1.1rem' }}>
-                        Sincroniza tus facturas electrónicas con tu contabilidad.
+                        {tipo === 'Compras'
+                            ? 'Facturas recibidas y retenciones de tus proveedores.'
+                            : 'Facturas y notas de crédito emitidas a tus clientes.'}
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
@@ -133,11 +167,18 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
                         <RefreshCw size={18} />
                     </button>
                     <button
+                        onClick={() => setIsBatchUploadOpen(true)}
+                        className="btn"
+                        style={{ padding: '14px 28px', borderRadius: '18px', fontSize: '1rem', fontWeight: 800, letterSpacing: '0.5px', background: 'var(--primary-light)', color: 'var(--primary)', border: '1px solid var(--primary)' }}
+                    >
+                        <Zap size={20} /> Carga Masiva
+                    </button>
+                    <button
                         onClick={() => setIsUploadOpen(true)}
                         className="btn btn-primary"
                         style={{ padding: '14px 28px', borderRadius: '18px', fontSize: '1rem', fontWeight: 800, letterSpacing: '0.5px' }}
                     >
-                        <Upload size={20} /> Cargar XML
+                        <Upload size={20} /> XML Individual
                     </button>
                 </div>
             </header>
@@ -232,7 +273,10 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
                                     <tbody>
                                         {paginated.map((doc, idx) => {
                                             const tc = doc.transacciones?.tipo_comprobante || '';
-                                            const total = (doc.base_12 || 0) + (doc.monto_iva || 0);
+                                            const isRetencion = tc === 'Comprobante de Retención';
+                                            const total = isRetencion 
+                                                ? (doc.retenciones_aplicadas?.reduce((sum, r) => sum + (Number(r.valor) || 0), 0) || 0)
+                                                : (doc.base_12 || 0) + (doc.base_0 || 0) + (doc.base_no_objeto || 0) + (doc.monto_iva || 0);
                                             return (
                                                 <motion.tr
                                                     key={doc.id}
@@ -311,6 +355,15 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
                 onClose={() => setIsUploadOpen(false)}
                 onSuccess={() => {
                     setIsUploadOpen(false);
+                    fetchDocumentos();
+                }}
+            />
+
+            <XMLBatchModal
+                isOpen={isBatchUploadOpen}
+                empresaId={empresaId}
+                onClose={() => setIsBatchUploadOpen(false)}
+                onSuccess={() => {
                     fetchDocumentos();
                 }}
             />
