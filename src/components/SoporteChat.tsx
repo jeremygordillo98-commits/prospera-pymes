@@ -87,6 +87,13 @@ export const SoporteChat = () => {
             </div>
           </div>
 
+          <div style={{ padding: '8px 16px', background: 'var(--card-bg)', borderBottom: '1px solid var(--border-color)', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-sec)' }}>
+            Al usar el soporte, aceptas nuestros{' '}
+            <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', fontWeight: 700, textDecoration: 'none' }} onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'} onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}>
+              Términos y Condiciones
+            </a>.
+          </div>
+
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 10, background: 'var(--bg-color)' }}>
             {rlsError && (
               <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 12, padding: '12px 14px', fontSize: '0.82rem', color: 'var(--error)', textAlign: 'center', lineHeight: 1.6 }}>

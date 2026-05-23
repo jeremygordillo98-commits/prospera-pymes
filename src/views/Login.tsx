@@ -222,6 +222,12 @@ export const Login = () => {
                         </button>
                     )}
                 </div>
+
+                <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-color)', textAlign: 'center' }}>
+                    <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-sec)', fontSize: '0.8rem', textDecoration: 'none', fontWeight: 600, transition: 'color 0.2s' }} onMouseEnter={e => e.currentTarget.style.color = 'var(--primary)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--text-sec)'}>
+                        Términos y Condiciones (Aspectos Legales)
+                    </a>
+                </div>
             </motion.div>
         </div>
     );

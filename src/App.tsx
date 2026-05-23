@@ -31,6 +31,7 @@ const UpdatePassword = React.lazy(() => import('./views/UpdatePassword').then(m 
 const ATS = React.lazy(() => import('./views/ATS').then(m => ({ default: m.ATS })));
 const SoporteChat = React.lazy(() => import('./components/SoporteChat').then(m => ({ default: m.SoporteChat })));
 const NotificationBellPymes = React.lazy(() => import('./components/NotificationBellPymes').then(m => ({ default: m.NotificationBellPymes })));
+const Terms = React.lazy(() => import('./views/Terms').then(m => ({ default: m.Terms })));
 
 import { ImageUploader } from './components/ImageUploader';
 
@@ -274,6 +275,15 @@ const App = () => {
         );
     }
   };
+
+  // Si se visita la sección de términos y condiciones públicos, mostrarla directamente sin verificar auth
+  if (window.location.pathname === '/terms') {
+    return (
+      <Suspense fallback={<div className="flex-center" style={{ height: '100vh', background: '#0f172a' }}><Loader2 className="animate-spin text-primary" size={48} /></div>}>
+        <Terms />
+      </Suspense>
+    );
+  }
 
   // Si se detectó un link de recuperación de contraseña, mostrar el formulario de nueva clave
   if (isResettingPassword) {
