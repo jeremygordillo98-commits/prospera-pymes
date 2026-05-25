@@ -52,11 +52,28 @@ const App = () => {
   const [activeView, setActiveView] = useState(() => {
     return localStorage.getItem('pymes_active_view') || 'dashboard';
   });
+  const [visitedViews, setVisitedViews] = useState<string[]>(['dashboard']);
+
+  // Registrar la vista activa como visitada
+  useEffect(() => {
+    if (!visitedViews.includes(activeView)) {
+      setVisitedViews((prev) => [...prev, activeView]);
+    }
+  }, [activeView]);
+
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
   // Multitenancy states
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [selectedEmpresa, setSelectedEmpresa] = useState<Empresa | null>(null);
+
+  // Al cambiar de empresa, reiniciamos las vistas visitadas para evitar cruce de datos y liberar recursos
+  useEffect(() => {
+    if (selectedEmpresa) {
+      setVisitedViews([activeView]);
+    }
+  }, [selectedEmpresa?.id]);
+
   const [loadingEmpresas, setLoadingEmpresas] = useState(true);
   const [showNewEmpresaModal, setShowNewEmpresaModal] = useState(false);
   const [newEmpresaId, setNewEmpresaId] = useState(() => crypto.randomUUID());
@@ -210,44 +227,14 @@ const App = () => {
   };
   // ─────────────────────────────────────────────────────────────────
 
-  const renderContent = () => {
-    if (!selectedEmpresa) {
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', textAlign: 'center' }}>
-          <Building2 size={64} className="text-sec" style={{ marginBottom: '24px', opacity: 0.3 }} />
-          <h2 className="h1">Crea tu primera empresa</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '24px', width: '100%', maxWidth: '350px' }}>
-            <input
-              type="text"
-              placeholder="Nombre de la empresa *"
-              value={newEmpresaName}
-              onChange={(e) => setNewEmpresaName(e.target.value)}
-              style={{ padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', width: '100%' }}
-            />
-            <input
-              type="text"
-              placeholder="RUC o Identificación"
-              value={newEmpresaRuc}
-              onChange={(e) => setNewEmpresaRuc(e.target.value)}
-              style={{ padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', width: '100%' }}
-            />
-            <ImageUploader
-              storagePath={`empresas/empresa_${newEmpresaId}.webp`}
-              currentLogoUrl={newEmpresaLogo}
-              onUploadSuccess={(url: string) => setNewEmpresaLogo(url)}
-              onRemove={() => setNewEmpresaLogo('')}
-            />
-            <button className="btn btn-primary w-full" onClick={createEmpresa}>Crear Cliente</button>
-          </div>
-        </div>
-      );
-    }
+  const renderView = (view: string) => {
+    if (!selectedEmpresa) return null;
 
-    switch (activeView) {
+    switch (view) {
       case 'dashboard': return <DashboardView empresaId={selectedEmpresa.id} />;
       case 'xml-compras':
       case 'xml-ventas':
-        return <SRIAutomation tipo={activeView === 'xml-compras' ? 'Compras' : 'Ventas'} empresaId={selectedEmpresa.id} />;
+        return <SRIAutomation tipo={view === 'xml-compras' ? 'Compras' : 'Ventas'} empresaId={selectedEmpresa.id} />;
       case 'libro-diario': return <LibroDiario empresaId={selectedEmpresa.id} />;
       case 'entidades': return <Entidades empresaId={selectedEmpresa.id} />;
       case 'plan-cuentas': return <PlanCuentas empresaId={selectedEmpresa.id} />;
@@ -262,16 +249,13 @@ const App = () => {
       case 'perfil': return <Perfil />;
       default:
         return (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
+          <div
             className="flex-center flex-col glass-card"
             style={{ textAlign: 'center', padding: '100px 0', marginTop: '40px' }}
           >
             <h2 className="h1">Módulo en Construcción</h2>
-            <p className="text-sec">Próxima entrega: {activeView}</p>
-          </motion.div>
+            <p className="text-sec">Próxima entrega: {view}</p>
+          </div>
         );
     }
   };
@@ -349,13 +333,48 @@ const App = () => {
       </Suspense>
 
       <main className="main-content">
-        <AnimatePresence mode="wait">
-          <div key={activeView}>
-            <Suspense fallback={<div className="flex-center" style={{ height: '60vh' }}><Loader2 className="animate-spin text-primary" size={32} /></div>}>
-              {renderContent()}
-            </Suspense>
+        {!selectedEmpresa ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', textAlign: 'center' }}>
+            <Building2 size={64} className="text-sec" style={{ marginBottom: '24px', opacity: 0.3 }} />
+            <h2 className="h1">Crea tu primera empresa</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '24px', width: '100%', maxWidth: '350px' }}>
+              <input
+                type="text"
+                placeholder="Nombre de la empresa *"
+                value={newEmpresaName}
+                onChange={(e) => setNewEmpresaName(e.target.value)}
+                style={{ padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', width: '100%' }}
+              />
+              <input
+                type="text"
+                placeholder="RUC o Identificación"
+                value={newEmpresaRuc}
+                onChange={(e) => setNewEmpresaRuc(e.target.value)}
+                style={{ padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)', width: '100%' }}
+              />
+              <ImageUploader
+                storagePath={`empresas/empresa_${newEmpresaId}.webp`}
+                currentLogoUrl={newEmpresaLogo}
+                onUploadSuccess={(url: string) => setNewEmpresaLogo(url)}
+                onRemove={() => setNewEmpresaLogo('')}
+              />
+              <button className="btn btn-primary w-full" onClick={createEmpresa}>Crear Cliente</button>
+            </div>
           </div>
-        </AnimatePresence>
+        ) : (
+          <div>
+            {visitedViews.map(view => (
+              <div
+                key={view}
+                style={{ display: activeView === view ? 'block' : 'none' }}
+              >
+                <Suspense fallback={<div className="flex-center" style={{ height: '60vh' }}><Loader2 className="animate-spin text-primary" size={32} /></div>}>
+                  {renderView(view)}
+                </Suspense>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
 
       {/* Chat de Soporte flotante — visible en todas las vistas */}
