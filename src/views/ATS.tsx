@@ -1,6 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { FileDown, Calendar, RefreshCw, AlertCircle, CheckCircle2, FileText, Receipt } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  FileDown, 
+  Calendar, 
+  RefreshCw, 
+  CheckCircle2, 
+  FileText, 
+  Receipt, 
+  TrendingUp, 
+  TrendingDown, 
+  ShieldAlert,
+  Code2,
+  Copy,
+  ChevronDown,
+  ChevronUp
+} from 'lucide-react';
 import { supabase } from '../services/supabase';
 
 interface ATSProps { empresaId: string; }
@@ -9,14 +23,27 @@ interface DocSRI {
   id: string;
   base_12: number;
   base_0: number;
+  base_no_objeto?: number;
   monto_iva: number;
   clave_acceso_xml: string;
+  es_compra: boolean;
+  forma_pago?: string;
+  tipo_identificacion_receptor?: string;
   retenciones_aplicadas: any[];
   transacciones: {
+    id: string;
     fecha: string;
+    concepto: string;
     tipo_comprobante: string;
     numero_comprobante: string;
-    entidades?: { nombre: string; ruc_cedula: string; tipo_identificacion?: string } | null;
+    entidades?: { 
+      id: string;
+      nombre: string; 
+      razon_social: string;
+      ruc_cedula: string; 
+      tipo_identificacion?: string; 
+      persona_tipo?: string 
+    } | null;
   } | null;
 }
 
@@ -25,7 +52,7 @@ interface EmpresaInfo {
   ruc_empresa: string;
 }
 
-type Tab = 'compras' | 'retenciones';
+type Tab = 'compras' | 'ventas' | 'retenciones' | 'anulados';
 
 export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
   const now = new Date();
@@ -35,7 +62,15 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
   const [docs, setDocs] = useState<DocSRI[]>([]);
   const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
   const [loading, setLoading] = useState(false);
+  
+  // Shield Diagnóstico
+  const [alertasCriticas, setAlertasCriticas] = useState<string[]>([]);
   const [advertencias, setAdvertencias] = useState<string[]>([]);
+  
+  // Live Previewer
+  const [showXmlPreview, setShowXmlPreview] = useState(false);
+  const [xmlStringPreview, setXmlStringPreview] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!empresaId) return;
@@ -44,15 +79,17 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       const [{ data: empData }, { data: docsData }] = await Promise.all([
         supabase.from('empresas_gestionadas').select('nombre_empresa, ruc_empresa').eq('id', empresaId).single(),
         supabase.from('documentos_sri').select(`
-          id, base_12, base_0, monto_iva, clave_acceso_xml, retenciones_aplicadas,
-          transacciones ( fecha, tipo_comprobante, numero_comprobante,
-            entidades ( nombre, ruc_cedula, tipo_identificacion )
+          id, base_12, base_0, base_no_objeto, monto_iva, clave_acceso_xml, es_compra, forma_pago, tipo_identificacion_receptor, retenciones_aplicadas,
+          transacciones ( id, fecha, concepto, tipo_comprobante, numero_comprobante,
+            entidades ( id, nombre, razon_social, ruc_cedula, tipo_identificacion, persona_tipo )
           )
         `).eq('id_empresa', empresaId)
       ]);
+
       if (empData) setEmpresa(empData);
+      
       if (docsData) {
-        // Filtrar por mes/año
+        // Filtrar por periodo (mes y año)
         const filtered = (docsData as any[]).filter(d => {
           const fecha = d.transacciones?.fecha;
           if (!fecha) return false;
@@ -60,115 +97,300 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
           return f.getFullYear() === anio && f.getMonth() + 1 === mes;
         });
         setDocs(filtered);
-        // Validaciones
+
+        // --- MOTOR DE DIAGNÓSTICO SRI-SHIELD ---
+        const criticals: string[] = [];
         const warns: string[] = [];
+
         filtered.forEach(d => {
-          if (!d.transacciones?.entidades) warns.push(`Doc ${d.transacciones?.numero_comprobante || '?'}: sin entidad vinculada`);
-          if (!d.transacciones?.entidades?.tipo_identificacion) warns.push(`Entidad "${d.transacciones?.entidades?.nombre || '?'}": sin tipo de identificación SRI`);
+          const ent = d.transacciones?.entidades;
+          const numComp = d.transacciones?.numero_comprobante || '';
+          const esComp = d.es_compra;
+
+          if (!d.transacciones) {
+            criticals.push(`Comprobante sin datos de transacción enlazados.`);
+            return;
+          }
+
+          if (!ent) {
+            criticals.push(`Comprobante ${numComp}: No tiene una Entidad (Cliente/Proveedor) vinculada.`);
+            return;
+          }
+
+          // Validación de Identificaciones
+          const idStr = ent.ruc_cedula || '';
+          if (idStr === '9999999999999' && esComp) {
+            criticals.push(`Proveedor "${ent.razon_social}": Consumidor Final no permitido en Compras.`);
+          } else if (idStr.length !== 13 && idStr.length !== 10 && idStr !== '9999999999999') {
+            criticals.push(`Entidad "${ent.razon_social}": Identificación no válida (${idStr.length} dígitos).`);
+          }
+
+          // Tipo de Identificación SRI
+          if (!ent.tipo_identificacion) {
+            criticals.push(`Entidad "${ent.razon_social}": Falta configurar el "Tipo de Identificación SRI".`);
+          }
+
+          // Validación de Secuenciales (9 dígitos)
+          const partesNum = numComp.split('-');
+          if (partesNum.length === 3) {
+            if (partesNum[0].length !== 3 || partesNum[1].length !== 3 || partesNum[2].length !== 9) {
+              warns.push(`Doc ${numComp}: Formato de secuencial inusual (Debe ser estab[3]-ptoEmi[3]-secuencial[9]).`);
+            }
+          } else {
+            criticals.push(`Doc "${numComp || 'Sin número'}": Formato de número de comprobante incorrecto.`);
+          }
+
+          // Forma de pago en compras
+          if (esComp && !d.forma_pago) {
+            warns.push(`Compra ${numComp}: Sin forma de pago especificada. Se asignará 'Otros con sistema financiero (20)' por defecto.`);
+          }
         });
-        setAdvertencias([...new Set(warns)].slice(0, 5));
+
+        setAlertasCriticas([...new Set(criticals)]);
+        setAdvertencias([...new Set(warns)]);
       }
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error("Error cargando datos ATS:", e);
+    } finally {
+      setLoading(false);
+    }
   }, [empresaId, anio, mes]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-  // ─── Cálculos ───────────────────────────────────────────────
-  const facturas = docs.filter(d => d.transacciones?.tipo_comprobante === 'Factura');
+  // ─── Clasificación y Filtros ──────────────────────────────────
+  const compras = docs.filter(d => d.transacciones?.tipo_comprobante === 'Factura' && d.es_compra);
+  const ventas = docs.filter(d => d.transacciones?.tipo_comprobante === 'Factura' && !d.es_compra);
   const retenciones = docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retención');
+  const anulados = docs.filter(d => 
+    d.transacciones?.concepto?.toLowerCase().includes('anulado') || 
+    d.transacciones?.tipo_comprobante === 'Anulado'
+  );
 
-  const totalBase12 = facturas.reduce((s, d) => s + (d.base_12 || 0), 0);
-  const totalIVA    = facturas.reduce((s, d) => s + (d.monto_iva || 0), 0);
-  const totalRet    = retenciones.reduce((s, d) =>
+  // ─── Agrupamientos y KPIs Contables ──────────────────────────
+  const totalBase12Ventas  = ventas.reduce((s, d) => s + (d.base_12 || 0), 0);
+  const totalBase0Ventas   = ventas.reduce((s, d) => s + (d.base_0 || 0), 0);
+  const totalIVAVentas     = ventas.reduce((s, d) => s + (d.monto_iva || 0), 0);
+
+  const totalRetEmitido    = compras.reduce((s, d) =>
     s + (d.retenciones_aplicadas || []).reduce((a: number, r: any) => a + (r.valor || 0), 0), 0);
 
-  // ─── Generador XML ATS ──────────────────────────────────────
-  const generarXML = () => {
-    if (!empresa) return;
+  // Agrupamiento de Ventas por Cliente para el ATS
+  const ventasAgrupadasPorCliente = Object.values(
+    ventas.reduce((acc, v) => {
+      const ent = v.transacciones?.entidades;
+      const idCliente = ent?.ruc_cedula || '9999999999999';
+      if (!acc[idCliente]) {
+        acc[idCliente] = {
+          ruc: idCliente,
+          razonSocial: ent?.razon_social || ent?.nombre || 'Consumidor Final',
+          tipoId: ent?.tipo_identificacion || '07',
+          numeroComprobantes: 0,
+          base0: 0,
+          base12: 0,
+          iva: 0,
+          total: 0
+        };
+      }
+      acc[idCliente].numeroComprobantes += 1;
+      acc[idCliente].base0 += v.base_0 || 0;
+      acc[idCliente].base12 += v.base_12 || 0;
+      acc[idCliente].iva += v.monto_iva || 0;
+      acc[idCliente].total += (v.base_12 || 0) + (v.base_0 || 0) + (v.monto_iva || 0);
+      return acc;
+    }, {} as Record<string, any>)
+  );
+
+  // ─── COMPILADOR DE XML ATS (SRI COMPLIANT) ────────────────────
+  const buildXMLString = (): string => {
+    if (!empresa) return '';
     const mesStr = String(mes).padStart(2, '0');
-    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<ats>\n`;
+    
+    // Calcular total de ventas reales
+    const totalVentasSRI = (totalBase12Ventas + totalBase0Ventas + totalIVAVentas).toFixed(2);
+
+    // Obtener establecimientos únicos
+    const estabsUnicos = [...new Set(docs.map(d => {
+      const partes = (d.transacciones?.numero_comprobante || '').split('-');
+      return partes[0] || '001';
+    }))];
+    const numEstabs = String(estabsUnicos.length).padStart(3, '0');
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    xml += `<ats>\n`;
     xml += `  <TipoIDInformante>04</TipoIDInformante>\n`;
     xml += `  <IdInformante>${empresa.ruc_empresa}</IdInformante>\n`;
-    xml += `  <razonSocial>${empresa.nombre_empresa}</razonSocial>\n`;
+    xml += `  <razonSocial>${empresa.nombre_empresa.replace(/&/g, '&amp;')}</razonSocial>\n`;
     xml += `  <Anio>${anio}</Anio>\n`;
     xml += `  <Mes>${mesStr}</Mes>\n`;
-    xml += `  <numEstabRuc>001</numEstabRuc>\n`;
-    xml += `  <totalVentas>0.00</totalVentas>\n`;
+    xml += `  <numEstabRuc>${numEstabs}</numEstabRuc>\n`;
+    xml += `  <totalVentas>${totalVentasSRI}</totalVentas>\n`;
     xml += `  <codigoOperativo>IVA</codigoOperativo>\n`;
+
+    // 1. Módulo Compras
     xml += `  <compras>\n`;
-    facturas.forEach(d => {
+    compras.forEach(d => {
       const ent = d.transacciones?.entidades;
       const num = d.transacciones?.numero_comprobante || '';
       const partes = num.split('-');
       const estab = partes[0] || '001';
       const ptoEmi = partes[1] || '001';
-      const sec    = partes[2] || '000000000';
+      const sec    = partes[2] || '000000001';
+      const fp     = d.forma_pago || '20';
+      const fechaFormat = d.transacciones?.fecha ? new Date(d.transacciones.fecha).toLocaleDateString('es-EC') : '';
+
       const rets = d.retenciones_aplicadas || [];
       const retRenta = rets.filter((r: any) => r.tipo === 'RENTA' || !r.tipo);
+      const retIVA = rets.filter((r: any) => r.tipo === 'IVA');
+
+      // Calcular retenciones de IVA según código de porcentaje
+      const retBienes = retIVA.filter(r => r.porcentaje === 30 || r.porcentaje === 10).reduce((s, r) => s + r.valor, 0);
+      const retServicios = retIVA.filter(r => r.porcentaje === 70 || r.porcentaje === 20).reduce((s, r) => s + r.valor, 0);
+      const ret100 = retIVA.filter(r => r.porcentaje === 100).reduce((s, r) => s + r.valor, 0);
+
       xml += `    <detalleCompras>\n`;
       xml += `      <codSustento>01</codSustento>\n`;
       xml += `      <tpIdProv>${ent?.tipo_identificacion || '04'}</tpIdProv>\n`;
       xml += `      <idProv>${ent?.ruc_cedula || ''}</idProv>\n`;
       xml += `      <tipoComprobante>01</tipoComprobante>\n`;
       xml += `      <parteRel>NO</parteRel>\n`;
-      xml += `      <fechaRegistro>${d.transacciones?.fecha || ''}</fechaRegistro>\n`;
+      xml += `      <fechaRegistro>${fechaFormat}</fechaRegistro>\n`;
       xml += `      <establecimiento>${estab}</establecimiento>\n`;
       xml += `      <emisionPuntoEmision>${ptoEmi}</emisionPuntoEmision>\n`;
       xml += `      <secuencial>${sec}</secuencial>\n`;
-      xml += `      <fechaEmision>${d.transacciones?.fecha || ''}</fechaEmision>\n`;
+      xml += `      <fechaEmision>${fechaFormat}</fechaEmision>\n`;
       xml += `      <autorizacion>${d.clave_acceso_xml || ''}</autorizacion>\n`;
-      xml += `      <baseNoGraIva>${(d.base_0 || 0).toFixed(2)}</baseNoGraIva>\n`;
-      xml += `      <baseImponible>0.00</baseImponible>\n`;
+      xml += `      <baseNoGraIva>${(d.base_no_objeto || 0).toFixed(2)}</baseNoGraIva>\n`;
+      xml += `      <baseImponible>${(d.base_0 || 0).toFixed(2)}</baseImponible>\n`;
       xml += `      <baseImpGrav>${(d.base_12 || 0).toFixed(2)}</baseImpGrav>\n`;
       xml += `      <montoIce>0.00</montoIce>\n`;
       xml += `      <montoIva>${(d.monto_iva || 0).toFixed(2)}</montoIva>\n`;
-      const ret1 = retRenta[0];
       xml += `      <valRetBien10>0.00</valRetBien10>\n`;
       xml += `      <valRetServ20>0.00</valRetServ20>\n`;
-      xml += `      <valorRetBienes>${ret1?.valor?.toFixed(2) || '0.00'}</valorRetBienes>\n`;
-      xml += `      <valorRetServicios>0.00</valorRetServicios>\n`;
-      xml += `      <valRetServ100>0.00</valRetServ100>\n`;
+      xml += `      <valorRetBienes>${retBienes.toFixed(2)}</valorRetBienes>\n`;
+      xml += `      <valorRetServicios>${retServicios.toFixed(2)}</valorRetServicios>\n`;
+      xml += `      <valRetServ100>${ret100.toFixed(2)}</valRetServ100>\n`;
       xml += `      <totbasesImpReemb>0.00</totbasesImpReemb>\n`;
       xml += `      <pagoExterior>\n        <pagoLocExt>01</pagoLocExt>\n      </pagoExterior>\n`;
-      xml += `      <air>\n`;
-      retRenta.forEach((r: any) => {
-        xml += `        <detalleAir>\n`;
-        xml += `          <codRetAir>${r.codigo || '332'}</codRetAir>\n`;
-        xml += `          <baseImpAir>${(r.base || 0).toFixed(2)}</baseImpAir>\n`;
-        xml += `          <porcentajeAir>${r.porcentaje || 0}</porcentajeAir>\n`;
-        xml += `          <valRetAir>${(r.valor || 0).toFixed(2)}</valRetAir>\n`;
-        xml += `        </detalleAir>\n`;
-      });
-      xml += `      </air>\n`;
+      xml += `      <formasDePago>\n        <formaPago>${fp}</formaPago>\n      </formasDePago>\n`;
+      
+      if (retRenta.length > 0) {
+        xml += `      <air>\n`;
+        retRenta.forEach((r: any) => {
+          xml += `        <detalleAir>\n`;
+          xml += `          <codRetAir>${r.codigo || '332'}</codRetAir>\n`;
+          xml += `          <baseImpAir>${(r.base || d.base_12 || 0).toFixed(2)}</baseImpAir>\n`;
+          xml += `          <porcentajeAir>${r.porcentaje || 0}</porcentajeAir>\n`;
+          xml += `          <valRetAir>${(r.valor || 0).toFixed(2)}</valRetAir>\n`;
+          xml += `        </detalleAir>\n`;
+        });
+        xml += `      </air>\n`;
+      }
       xml += `    </detalleCompras>\n`;
     });
     xml += `  </compras>\n`;
-    xml += `  <ventas>\n  </ventas>\n`;
-    xml += `  <ventasEstablecimiento>\n  </ventasEstablecimiento>\n`;
-    xml += `  <anulados>\n  </anulados>\n`;
+
+    // 2. Módulo Ventas (Agrupadas por cliente)
+    xml += `  <ventas>\n`;
+    ventasAgrupadasPorCliente.forEach((v: any) => {
+      xml += `    <detalleVentas>\n`;
+      xml += `      <tpIdCliente>${v.tipoId}</tpIdCliente>\n`;
+      xml += `      <idCliente>${v.ruc}</idCliente>\n`;
+      xml += `      <parteRelVentas>NO</parteRelVentas>\n`;
+      xml += `      <tipoComprobante>01</tipoComprobante>\n`;
+      xml += `      <numeroComprobantes>${v.numeroComprobantes}</numeroComprobantes>\n`;
+      xml += `      <baseNoGraIva>${v.base0.toFixed(2)}</baseNoGraIva>\n`;
+      xml += `      <baseImponible>0.00</baseImponible>\n`;
+      xml += `      <baseImpGrav>${v.base12.toFixed(2)}</baseImpGrav>\n`;
+      xml += `      <montoIva>${v.iva.toFixed(2)}</montoIva>\n`;
+      xml += `      <montoIce>0.00</montoIce>\n`;
+      xml += `      <valorRetIva>0.00</valorRetIva>\n`;
+      xml += `      <valorRetRenta>0.00</valorRetRenta>\n`;
+      xml += `      <formasDePago>\n        <formaPago>20</formaPago>\n      </formasDePago>\n`;
+      xml += `    </detalleVentas>\n`;
+    });
+    xml += `  </ventas>\n`;
+
+    // 3. Módulo Ventas por Establecimiento
+    xml += `  <ventasEstablecimiento>\n`;
+    estabsUnicos.forEach(est => {
+      // Sumar ventas reales del establecimiento
+      const totalEstab = ventas.filter(d => {
+        const partes = (d.transacciones?.numero_comprobante || '').split('-');
+        return (partes[0] || '001') === est;
+      }).reduce((sum, d) => sum + (d.base_12 || 0) + (d.base_0 || 0) + (d.monto_iva || 0), 0);
+
+      xml += `    <ventaEstablecimiento>\n`;
+      xml += `      <codEstab>${est}</codEstab>\n`;
+      xml += `      <ventasEstab>${totalEstab.toFixed(2)}</ventasEstab>\n`;
+      xml += `      <ivaComp>0.00</ivaComp>\n`;
+      xml += `    </ventaEstablecimiento>\n`;
+    });
+    xml += `  </ventasEstablecimiento>\n`;
+
+    // 4. Módulo Anulados
+    xml += `  <anulados>\n`;
+    anulados.forEach(d => {
+      const num = d.transacciones?.numero_comprobante || '';
+      const partes = num.split('-');
+      const estab = partes[0] || '001';
+      const ptoEmi = partes[1] || '001';
+      const sec    = partes[2] || '000000001';
+
+      xml += `    <detalleAnulados>\n`;
+      xml += `      <tipoComprobante>01</tipoComprobante>\n`;
+      xml += `      <establecimiento>${estab}</establecimiento>\n`;
+      xml += `      <puntoEmision>${ptoEmi}</puntoEmision>\n`;
+      xml += `      <secuencialInicio>${sec}</secuencialInicio>\n`;
+      xml += `      <secuencialFin>${sec}</secuencialFin>\n`;
+      xml += `      <autorizacion>${d.clave_acceso_xml || ''}</autorizacion>\n`;
+      xml += `    </detalleAnulados>\n`;
+    });
+    xml += `  </anulados>\n`;
     xml += `</ats>`;
 
+    return xml;
+  };
+
+  const generarXML = () => {
+    if (!empresa) return;
+    const xml = buildXMLString();
+    const mesStr = String(mes).padStart(2, '0');
     const blob = new Blob([xml], { type: 'text/xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ATS_${anio}${mesStr}_${empresa.ruc_empresa}.xml`;
+    a.download = `ATS_${mesStr}_${anio}_${empresa.ruc_empresa}.xml`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(xmlStringPreview);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleTogglePreview = () => {
+    if (!showXmlPreview) {
+      setXmlStringPreview(buildXMLString());
+    }
+    setShowXmlPreview(!showXmlPreview);
   };
 
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
   return (
-    <div>
+    <div className="space-y-6">
       {/* Header */}
       <header style={{ marginBottom: 40 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--primary)', fontWeight: 800, textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '2px', marginBottom: 8 }}>
           <FileText size={14} /> Módulo Fiscal
         </div>
-        <h1 className="h1" style={{ fontSize: '2.5rem', fontWeight: 900 }}>Anexo Transaccional</h1>
-        <p className="text-sec" style={{ fontSize: '1.1rem' }}>Genera el ATS para declarar al SRI desde tus documentos procesados.</p>
+        <h1 className="h1" style={{ fontSize: '2.5rem', fontWeight: 900 }}>Anexo Transaccional (ATS)</h1>
+        <p className="text-sec" style={{ fontSize: '1.1rem' }}>Genera y pre-audita el anexo tributario XML para la declaración mensual ante el SRI.</p>
       </header>
 
       {/* Selector Periodo + Acciones */}
@@ -181,135 +403,190 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
           {[2023, 2024, 2025, 2026].map(y => <option key={y}>{y}</option>)}
         </select>
         <button onClick={fetchData} className="btn" style={{ padding: '8px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <RefreshCw size={15} /> Cargar
+          <RefreshCw size={15} /> Cargar Periodo
         </button>
         <div style={{ flex: 1 }} />
         <button
           onClick={generarXML}
-          disabled={facturas.length === 0}
+          disabled={docs.length === 0 || alertasCriticas.length > 0}
           className="btn btn-primary"
-          style={{ padding: '10px 22px', borderRadius: 14, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, opacity: facturas.length === 0 ? 0.5 : 1 }}
+          style={{ padding: '10px 22px', borderRadius: 14, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, opacity: (docs.length === 0 || alertasCriticas.length > 0) ? 0.5 : 1 }}
         >
           <FileDown size={18} /> Descargar ATS XML
         </button>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs Fiscales */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
         {[
-          { label: 'Facturas de Compra', value: facturas.length, unit: 'docs', color: 'var(--primary)' },
-          { label: 'Base Gravada 12%', value: `$${totalBase12.toFixed(2)}`, unit: '', color: '#10b981' },
-          { label: 'IVA Total', value: `$${totalIVA.toFixed(2)}`, unit: '', color: 'var(--warning)' },
-          { label: 'Retenciones IR', value: `$${totalRet.toFixed(2)}`, unit: '', color: '#8b5cf6' },
+          { label: 'Facturas de Compra', value: compras.length, unit: 'docs', color: 'var(--primary)', isCurrency: false },
+          { label: 'Facturas de Venta', value: ventas.length, unit: 'docs', color: '#10b981', isCurrency: false },
+          { label: 'IVA Cobrado (Ventas)', value: totalIVAVentas, unit: '', color: 'var(--warning)', isCurrency: true },
+          { label: 'Retenciones de Renta', value: totalRetEmitido, unit: '', color: '#8b5cf6', isCurrency: true },
         ].map(k => (
           <motion.div key={k.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="glass-card" style={{ padding: '20px 24px' }}>
             <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-sec)' }}>{k.label}</p>
-            <p style={{ margin: '8px 0 0', fontSize: '1.8rem', fontWeight: 900, color: k.color }}>{k.value}</p>
+            <p style={{ margin: '8px 0 0', fontSize: '1.8rem', fontWeight: 900, color: k.color }}>
+              {k.isCurrency ? `$${k.value.toFixed(2)}` : k.value}
+            </p>
           </motion.div>
         ))}
       </div>
 
-      {/* Advertencias */}
-      {advertencias.length > 0 && (
-        <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: 'var(--warning)', marginBottom: 8 }}>
-            <AlertCircle size={16} /> Advertencias antes de generar
+      {/* Diagnóstico SRI-Shield */}
+      {(alertasCriticas.length > 0 || advertencias.length > 0) ? (
+        <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: `1px solid ${alertasCriticas.length > 0 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`, borderRadius: 20, padding: '20px 24px', marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900, color: alertasCriticas.length > 0 ? '#ef4444' : 'var(--warning)', marginBottom: 12 }}>
+            <ShieldAlert size={20} /> Diagnóstico Tributario Inteligente (Pre-Auditoría)
           </div>
-          {advertencias.map((w, i) => <p key={i} style={{ margin: '4px 0', fontSize: '0.85rem', color: 'var(--text-sec)' }}>• {w}</p>)}
+          
+          {alertasCriticas.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 800, marginBottom: 6 }}>🚨 ERRORES CRÍTICOS (Impiden la descarga):</div>
+              {alertasCriticas.map((err, i) => (
+                <p key={i} style={{ margin: '4px 0', fontSize: '0.82rem', color: 'var(--text-main)', paddingLeft: 12 }}>• {err}</p>
+              ))}
+            </div>
+          )}
+
+          {advertencias.length > 0 && (
+            <div>
+              <div style={{ color: 'var(--warning)', fontSize: '0.85rem', fontWeight: 800, marginBottom: 6 }}>⚠️ ADVERTENCIAS (Permiten descarga con cautela):</div>
+              {advertencias.map((warn, i) => (
+                <p key={i} style={{ margin: '4px 0', fontSize: '0.82rem', color: 'var(--text-sec)', paddingLeft: 12 }}>• {warn}</p>
+              ))}
+            </div>
+          )}
         </div>
+      ) : (
+        docs.length > 0 && (
+          <div style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 20, padding: '20px 24px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, color: '#10b981', fontWeight: 800 }}>
+            <CheckCircle2 size={20} /> ¡Tu ATS cumple con los requisitos iniciales del SRI para descarga!
+          </div>
+        )
       )}
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {([['compras','Facturas de Compra', facturas.length], ['retenciones','Retenciones Recibidas', retenciones.length]] as [Tab,string,number][]).map(([id, label, cnt]) => (
+      {/* Tabs de inspección */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        {([
+          ['compras', 'Facturas Compra', compras.length], 
+          ['ventas', 'Ventas (Agrupadas)', ventasAgrupadasPorCliente.length],
+          ['retenciones', 'Retenciones', retenciones.length],
+          ['anulados', 'Anulados', anulados.length]
+        ] as [Tab, string, number][]).map(([id, label, cnt]) => (
           <button key={id} onClick={() => setTab(id)} style={{ padding: '10px 20px', borderRadius: 12, border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', background: tab === id ? 'var(--primary)' : 'var(--glass-bg)', color: tab === id ? '#fff' : 'var(--text-sec)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            {id === 'compras' ? <FileText size={15}/> : <Receipt size={15}/>} {label}
+            {id === 'compras' && <FileText size={15}/>}
+            {id === 'ventas' && <TrendingUp size={15}/>}
+            {id === 'retenciones' && <Receipt size={15}/>}
+            {id === 'anulados' && <TrendingDown size={15}/>}
+            {label}
             <span style={{ background: tab === id ? 'rgba(255,255,255,0.25)' : 'var(--primary-light)', color: tab === id ? '#fff' : 'var(--primary)', padding: '2px 8px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 800 }}>{cnt}</span>
           </button>
         ))}
       </div>
 
-      {/* Tabla */}
+      {/* Visor de Tablas de Inspección */}
       <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-sec)' }}>
             <RefreshCw size={28} style={{ animation: 'spin 1s linear infinite', marginBottom: 12 }} />
-            <p>Cargando documentos del período...</p>
+            <p>Cargando registros contables...</p>
           </div>
         ) : tab === 'compras' ? (
-          facturas.length === 0 ? (
+          compras.length === 0 ? (
             <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-sec)' }}>
               <CheckCircle2 size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
-              <p>No hay facturas de compra para {MESES[mes-1]} {anio}.<br />Procesa XMLs desde el módulo de Automatización SRI.</p>
+              <p>No hay facturas de compra procesadas en este periodo.</p>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                  {['Proveedor / RUC','Comprobante','Fecha','Base 0%','Base 12%','IVA','Retención IR','Total'].map(h => (
-                    <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Proveedor / RUC' ? 'left' : 'right', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)', whiteSpace: 'nowrap' }}>{h}</th>
+                  {['Proveedor','Número Comprobante','Fecha','Base 0%','Base Imp Grav','IVA','Forma Pago','Total'].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Proveedor' ? 'left' : 'right', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {facturas.map((d) => {
-                  const ret = (d.retenciones_aplicadas || []).reduce((a: number, r: any) => a + (r.valor || 0), 0);
-                  return (
-                    <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ fontWeight: 700 }}>{d.transacciones?.entidades?.nombre || <span style={{ color: 'var(--error)', fontStyle: 'italic' }}>Sin entidad</span>}</div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)' }}>{d.transacciones?.entidades?.ruc_cedula || '—'}</div>
-                      </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace', fontSize: '0.78rem' }}>{d.transacciones?.numero_comprobante || '—'}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-sec)', whiteSpace: 'nowrap' }}>{d.transacciones?.fecha ? new Date(d.transacciones.fecha).toLocaleDateString('es-EC') : '—'}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>${(d.base_0 || 0).toFixed(2)}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>${(d.base_12 || 0).toFixed(2)}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--primary)', fontWeight: 700 }}>${(d.monto_iva || 0).toFixed(2)}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', color: '#8b5cf6', fontWeight: 700 }}>{ret > 0 ? `-$${ret.toFixed(2)}` : '—'}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900 }}>${((d.base_12 || 0) + (d.monto_iva || 0)).toFixed(2)}</td>
-                    </tr>
-                  );
-                })}
+                {compras.map((d) => (
+                  <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ fontWeight: 700 }}>{d.transacciones?.entidades?.razon_social || '—'}</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)' }}>{d.transacciones?.entidades?.ruc_cedula || '—'}</div>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace', fontSize: '0.78rem' }}>{d.transacciones?.numero_comprobante}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-sec)' }}>{d.transacciones?.fecha ? new Date(d.transacciones.fecha).toLocaleDateString('es-EC') : '—'}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>${(d.base_0 || 0).toFixed(2)}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>${(d.base_12 || 0).toFixed(2)}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--primary)', fontWeight: 700 }}>${(d.monto_iva || 0).toFixed(2)}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800 }}>{d.forma_pago || '20'}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900 }}>${((d.base_12 || 0) + (d.base_0 || 0) + (d.monto_iva || 0)).toFixed(2)}</td>
+                  </tr>
+                ))}
               </tbody>
-              <tfoot>
-                <tr style={{ borderTop: '2px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', fontWeight: 900 }}>
-                  <td colSpan={4} style={{ padding: '14px 16px', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>TOTALES</td>
-                  <td style={{ padding: '14px 16px', textAlign: 'right', color: '#10b981' }}>${totalBase12.toFixed(2)}</td>
-                  <td style={{ padding: '14px 16px', textAlign: 'right', color: 'var(--primary)' }}>${totalIVA.toFixed(2)}</td>
-                  <td style={{ padding: '14px 16px', textAlign: 'right', color: '#8b5cf6' }}>-${totalRet.toFixed(2)}</td>
-                  <td style={{ padding: '14px 16px', textAlign: 'right' }}>${(totalBase12 + totalIVA).toFixed(2)}</td>
-                </tr>
-              </tfoot>
             </table>
           )
-        ) : (
-          retenciones.length === 0 ? (
+        ) : tab === 'ventas' ? (
+          ventasAgrupadasPorCliente.length === 0 ? (
             <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-sec)' }}>
-              <Receipt size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
-              <p>No hay comprobantes de retención para {MESES[mes-1]} {anio}.</p>
+              <TrendingUp size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
+              <p>No hay registros de ventas en este periodo.</p>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                  {['Agente de Retención','N° Comprobante','Fecha','Docs Sustento','Total Retenido'].map(h => (
-                    <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Agente de Retención' ? 'left' : 'right', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)' }}>{h}</th>
+                  {['Cliente','Tipo ID','Comprobantes','Suma Base 0%','Suma Base 12%','Suma IVA','Total Facturado'].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Cliente' ? 'left' : 'right', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ventasAgrupadasPorCliente.map((v: any) => (
+                  <tr key={v.ruc} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ fontWeight: 700 }}>{v.razonSocial}</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)' }}>{v.ruc}</div>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800 }}>{v.tipoId}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>{v.numeroComprobantes}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>${v.base0.toFixed(2)}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>${v.base12.toFixed(2)}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--primary)', fontWeight: 700 }}>${v.iva.toFixed(2)}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900 }}>${v.total.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        ) : tab === 'retenciones' ? (
+          retenciones.length === 0 ? (
+            <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-sec)' }}>
+              <Receipt size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
+              <p>No hay comprobantes de retención cargados.</p>
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
+                  {['Tercero','Secuencial','Fecha','Conceptos Aplicados','Total Retenido'].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Tercero' ? 'left' : 'right', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {retenciones.map(d => {
                   const totalRetDoc = (d.retenciones_aplicadas || []).reduce((a: number, r: any) => a + (r.valor || 0), 0);
-                  const docsRef = [...new Set((d.retenciones_aplicadas || []).map((r: any) => r.desc_doc).filter(Boolean))];
+                  const docsRef = [...new Set((d.retenciones_aplicadas || []).map((r: any) => r.codigo).filter(Boolean))];
                   return (
                     <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
                       <td style={{ padding: '12px 16px' }}>
-                        <div style={{ fontWeight: 700 }}>{d.transacciones?.entidades?.nombre || '—'}</div>
+                        <div style={{ fontWeight: 700 }}>{d.transacciones?.entidades?.razon_social || '—'}</div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)' }}>{d.transacciones?.entidades?.ruc_cedula || '—'}</div>
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace', fontSize: '0.78rem' }}>{d.transacciones?.numero_comprobante || '—'}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>{d.transacciones?.fecha ? new Date(d.transacciones.fecha).toLocaleDateString('es-EC') : '—'}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.78rem', color: 'var(--text-sec)' }}>{docsRef.join(', ') || '—'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace', fontSize: '0.78rem' }}>{d.transacciones?.numero_comprobante}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>{d.transacciones?.fecha ? new Date(d.transacciones.fecha).toLocaleDateString('es-EC') : '—'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.78rem', color: 'var(--text-sec)' }}>Código: {docsRef.join(', ') || '—'}</td>
                       <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900, color: 'var(--warning)' }}>${totalRetDoc.toFixed(2)}</td>
                     </tr>
                   );
@@ -317,8 +594,72 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
               </tbody>
             </table>
           )
+        ) : (
+          anulados.length === 0 ? (
+            <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-sec)' }}>
+              <TrendingDown size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
+              <p>No hay facturas o comprobantes marcados como anulados en este periodo.</p>
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
+                  {['Comprobante','Secuencial','Fecha Anulación','Autorización / Clave Acceso'].map(h => (
+                    <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Comprobante' ? 'left' : 'right', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {anulados.map(d => (
+                  <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
+                    <td style={{ padding: '12px 16px', fontWeight: 800 }}>{d.transacciones?.tipo_comprobante}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace' }}>{d.transacciones?.numero_comprobante}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>{d.transacciones?.fecha ? new Date(d.transacciones.fecha).toLocaleDateString('es-EC') : '—'}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.78rem', color: 'var(--text-sec)', fontFamily: 'monospace' }}>{d.clave_acceso_xml}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
         )}
       </div>
+
+      {/* Acordeón Previsualizador de XML ATS */}
+      {docs.length > 0 && (
+        <div className="glass-card" style={{ padding: 0, marginTop: 32, overflow: 'hidden' }}>
+          <div 
+            onClick={handleTogglePreview} 
+            style={{ padding: '18px 24px', cursor: 'pointer', display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 900, color: 'var(--primary)' }}>
+              <Code2 size={18} /> Previsualizador Interactivo del XML ATS
+            </div>
+            {showXmlPreview ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </div>
+          
+          <AnimatePresence>
+            {showXmlPreview && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }} 
+                animate={{ height: 'auto', opacity: 1 }} 
+                exit={{ height: 0, opacity: 0 }}
+                style={{ borderTop: '1px solid var(--border-color)', background: '#0f172a', padding: 24, position: 'relative' }}
+              >
+                <button 
+                  onClick={copyToClipboard}
+                  style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', fontWeight: 700 }}
+                >
+                  <Copy size={14} /> {copied ? '¡Copiado!' : 'Copiar XML'}
+                </button>
+                <pre style={{ margin: 0, overflowX: 'auto', fontFamily: 'monospace', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.5' }}>
+                  <code>{xmlStringPreview.split('\n').slice(0, 35).join('\n')}\n... [XML Completo listo para descarga]</code>
+                </pre>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
