@@ -32,6 +32,7 @@ const ATS = React.lazy(() => import('./views/ATS').then(m => ({ default: m.ATS }
 const SoporteChat = React.lazy(() => import('./components/SoporteChat').then(m => ({ default: m.SoporteChat })));
 const NotificationBellPymes = React.lazy(() => import('./components/NotificationBellPymes').then(m => ({ default: m.NotificationBellPymes })));
 const Terms = React.lazy(() => import('./views/Terms').then(m => ({ default: m.Terms })));
+const Comunicados = React.lazy(() => import('./views/Comunicados').then(m => ({ default: m.Comunicados })));
 
 import { ImageUploader } from './components/ImageUploader';
 
@@ -245,6 +246,7 @@ const App = () => {
       case 'conciliacion': return <Tesoreria empresaId={selectedEmpresa.id} mode="conciliacion" />;
       case 'reportes': return <Reportes empresaId={selectedEmpresa.id} />;
       case 'reportes-fiscales': return <ATS empresaId={selectedEmpresa.id} />;
+      case 'comunicados': return <Comunicados empresaId={selectedEmpresa.id} />;
       case 'config': return <Configuracion />;
       case 'perfil': return <Perfil />;
       default:

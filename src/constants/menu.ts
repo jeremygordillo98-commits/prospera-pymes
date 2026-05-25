@@ -4,14 +4,15 @@ import {
   BookOpen,
   Users,
   User,
-  Zap,
-  FileUp,
-  Database,
-  Grid,
-  Wallet,
-  CreditCard,
-  BarChart,
-  FileText
+  Zap, 
+  FileUp, 
+  Database, 
+  Grid, 
+  Wallet, 
+  CreditCard, 
+  BarChart, 
+  FileText,
+  Mail
 } from 'lucide-react';
 
 export const MENU_STRUCTURE = [
@@ -67,6 +68,15 @@ export const MENU_STRUCTURE = [
     children: [
       { id: 'reportes', label: 'Financieros (P&L)', icon: FileText },
       { id: 'reportes-fiscales', label: 'Fiscales (ATS)', icon: FileText },
+    ]
+  },
+  {
+    id: 'comunicaciones-parent',
+    label: 'Comunicaciones',
+    isParent: true,
+    icon: Mail,
+    children: [
+      { id: 'comunicados', label: 'Comunicados Mailer', icon: Mail }
     ]
   }
 ];
