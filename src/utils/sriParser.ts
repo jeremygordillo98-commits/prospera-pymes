@@ -127,7 +127,7 @@ export const parseSRIXML = async (xmlContent: string): Promise<SRIParsedData | n
     const parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: "@_",
-      parseTagValue: true,
+      parseTagValue: false,
       trimValues: true,
     });
 
@@ -160,7 +160,7 @@ export const parseSRIXML = async (xmlContent: string): Promise<SRIParsedData | n
       rucEmisor: infoT.ruc?.toString() || '',
       razonSocialEmisor: infoT.razonSocial || '',
       claveAcceso: infoT.claveAcceso?.toString() || jsonObj.autorizacion?.numeroAutorizacion?.toString() || '',
-      numeroComprobante: `${infoT.estab}-${infoT.ptoEmi}-${infoT.secuencial}`
+      numeroComprobante: `${infoT.estab?.toString().padStart(3, '0')}-${infoT.ptoEmi?.toString().padStart(3, '0')}-${infoT.secuencial?.toString().padStart(9, '0')}`
     };
 
     // ─── FACTURA ─────────────────────────────────────────────
