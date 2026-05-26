@@ -90,6 +90,8 @@ const App = () => {
   const [editForm, setEditForm] = useState({ nombre_empresa: '', ruc_empresa: '', logo_url: '' });
   const [showArchiveConfirm, setShowArchiveConfirm] = useState<Empresa | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState<Empresa | null>(null);
+  const [resettingEmpresa, setResettingEmpresa] = useState(false);
   // ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -233,6 +235,52 @@ const App = () => {
       setShowArchiveConfirm(null);
     } else { alert('Error al eliminar: ' + error.message); }
   };
+
+  // ── Resetear empresa ──────────────────────────────────────────────
+  const handleResetEmpresa = async (emp: Empresa) => {
+    setResettingEmpresa(true);
+    try {
+      // 1. documentos_sri
+      const { error: errSri } = await supabase.from('documentos_sri').delete().eq('id_empresa', emp.id);
+      if (errSri) throw errSri;
+
+      // 2. tesoreria_movimientos
+      const { error: errTesoMov } = await supabase.from('tesoreria_movimientos').delete().eq('id_empresa', emp.id);
+      if (errTesoMov) throw errTesoMov;
+
+      // 3. tesoreria_documentos
+      const { error: errTesoDoc } = await supabase.from('tesoreria_documentos').delete().eq('id_empresa', emp.id);
+      if (errTesoDoc) throw errTesoDoc;
+
+      // 4. movimientos
+      const { error: errMov } = await supabase.from('movimientos').delete().eq('id_empresa', emp.id);
+      if (errMov) throw errMov;
+
+      // 5. transacciones
+      const { error: errTx } = await supabase.from('transacciones').delete().eq('id_empresa', emp.id);
+      if (errTx) throw errTx;
+
+      // 6. entidades
+      const { error: errEnt } = await supabase.from('entidades').delete().eq('id_empresa', emp.id);
+      if (errEnt) throw errEnt;
+
+      // 7. cuentas_financieras
+      const { error: errCuentasFin } = await supabase.from('cuentas_financieras').delete().eq('id_empresa', emp.id);
+      if (errCuentasFin) throw errCuentasFin;
+
+      alert('¡Datos de la empresa reseteados con éxito! El plan de cuentas se ha conservado.');
+      
+      // Forzar una actualización de la vista actual para que refleje el estado vacío
+      if (selectedEmpresa?.id === emp.id) {
+        setSelectedEmpresa({ ...selectedEmpresa });
+      }
+      setShowResetConfirm(null);
+    } catch (error: any) {
+      alert('Error al resetear datos: ' + (error.message || error));
+    } finally {
+      setResettingEmpresa(false);
+    }
+  };
   // ─────────────────────────────────────────────────────────────────
 
   const renderView = (view: string) => {
@@ -339,6 +387,7 @@ const App = () => {
           session={session}
           openEditEmpresa={openEditEmpresa}
           onArchiveEmpresa={(emp) => setShowArchiveConfirm(emp)}
+          onResetEmpresa={(emp) => setShowResetConfirm(emp)}
         />
       </Suspense>
 
@@ -580,6 +629,31 @@ const App = () => {
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button className="btn flex-1" onClick={() => setShowArchiveConfirm(null)}>Cancelar</button>
                 <button className="btn flex-1" style={{ background: 'var(--error)', color: '#fff', border: 'none' }} onClick={() => handleArchiveEmpresa(showArchiveConfirm)}>Sí, Eliminar</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Modal Confirmar Resetear Empresa ── */}
+      <AnimatePresence>
+        {showResetConfirm && (
+          <div className="modal-overlay" style={{ zIndex: 300 }}>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '420px', padding: '40px', textAlign: 'center' }}>
+              <div style={{ width: 64, height: 64, background: 'rgba(245,158,11,0.1)', color: '#F59E0B', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: '2rem' }}>⚠️</div>
+              <h3 style={{ color: '#F59E0B', marginTop: 0 }}>Resetear Empresa</h3>
+              <p style={{ color: 'var(--text-sec)', marginBottom: '28px', fontSize: '0.9rem', lineHeight: '1.4' }}>
+                ¿Estás seguro de que deseas resetear los datos de <strong>«{showResetConfirm.nombre_empresa}»</strong>?<br /><br />
+                <span style={{ fontSize: '0.82rem', display: 'block', background: 'rgba(245,158,11,0.05)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(245,158,11,0.1)' }}>
+                  Se eliminarán de forma <strong>PERMANENTE</strong> todas las transacciones, asientos contables, documentos SRI, movimientos de tesorería, entidades y cuentas bancarias.<br /><br />
+                  🟢 El <strong>Plan de Cuentas</strong> se conservará intacto.
+                </span>
+              </p>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button className="btn flex-1" onClick={() => setShowResetConfirm(null)} disabled={resettingEmpresa}>Cancelar</button>
+                <button className="btn flex-1" style={{ background: '#F59E0B', color: '#fff', border: 'none' }} onClick={() => handleResetEmpresa(showResetConfirm)} disabled={resettingEmpresa}>
+                  {resettingEmpresa ? 'Reseteando...' : 'Sí, Resetear'}
+                </button>
               </div>
             </motion.div>
           </div>

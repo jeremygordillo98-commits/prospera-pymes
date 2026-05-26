@@ -20,6 +20,7 @@ interface SidebarProps {
   session: any;
   openEditEmpresa: (emp: any) => void;
   onArchiveEmpresa: (emp: any) => void;
+  onResetEmpresa: (emp: any) => void;
 }
 
 export const Sidebar = ({
@@ -32,6 +33,7 @@ export const Sidebar = ({
   session,
   openEditEmpresa,
   onArchiveEmpresa,
+  onResetEmpresa,
 }: SidebarProps) => {
   const [openMenus, setOpenMenus] = useState<string[]>(['config-parent']);
 
@@ -121,17 +123,24 @@ export const Sidebar = ({
 
           {/* Acciones sobre empresa activa */}
           {selectedEmpresa && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => openEditEmpresa(selectedEmpresa)}
+                  title="Editar empresa"
+                  style={{ flex: 1, padding: '7px', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 8, color: '#818CF8', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+                >✏️ Editar</button>
+                <button
+                  onClick={() => onArchiveEmpresa(selectedEmpresa)}
+                  title="Eliminar empresa"
+                  style={{ flex: 1, padding: '7px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: 'var(--error)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+                >🗑️ Eliminar</button>
+              </div>
               <button
-                onClick={() => openEditEmpresa(selectedEmpresa)}
-                title="Editar empresa"
-                style={{ flex: 1, padding: '7px', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 8, color: '#818CF8', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
-              >✏️ Editar</button>
-              <button
-                onClick={() => onArchiveEmpresa(selectedEmpresa)}
-                title="Eliminar empresa"
-                style={{ flex: 1, padding: '7px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: 'var(--error)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
-              >🗑️ Eliminar</button>
+                onClick={() => onResetEmpresa(selectedEmpresa)}
+                title="Resetear todos los datos contables y mantener el plan de cuentas"
+                style={{ width: '100%', padding: '7px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8, color: '#F59E0B', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+              >🔄 Resetear Datos</button>
             </div>
           )}
         </div>
