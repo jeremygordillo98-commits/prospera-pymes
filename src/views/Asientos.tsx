@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, PlusCircle, Save, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../services/supabase';
+import { AccountSelector } from '../components/AccountSelector';
 
 interface Props { empresaId: string; }
 interface Account { id: string; codigo_cuenta: string; nombre: string; tipo: string; }
@@ -16,12 +17,41 @@ const createLine = (): Line => ({
   id: crypto.randomUUID(), id_cuenta: '', detalle: '', debe: '', haber: ''
 });
 
+const getNextNumeroComprobante = async (empresaId: string): Promise<string> => {
+  if (!empresaId || empresaId === 'undefined') return '1';
+  try {
+    const { data, error } = await supabase
+      .from('transacciones')
+      .select('numero_comprobante')
+      .eq('id_empresa', empresaId);
+      
+    if (error || !data || data.length === 0) return '1';
+    
+    let maxNum = 0;
+    data.forEach(tx => {
+      if (tx.numero_comprobante) {
+        const num = parseInt(tx.numero_comprobante.trim(), 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    });
+    
+    return (maxNum + 1).toString();
+  } catch {
+    return '1';
+  }
+};
+
+
+
 export const Asientos: React.FC<Props> = ({ empresaId }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string>('');
+  
   const [form, setForm] = useState({
     fecha: new Date().toISOString().slice(0, 10),
     concepto: '',
@@ -32,18 +62,43 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
   const [lines, setLines] = useState<Line[]>([createLine(), createLine()]);
 
   useEffect(() => {
+    if (!empresaId || empresaId === 'undefined') return;
     const load = async () => {
       setLoading(true);
-      const [accRes, entRes] = await Promise.all([
+      const [accRes, entRes, nextNum] = await Promise.all([
         supabase.from('plan_cuentas').select('id,codigo_cuenta,nombre,tipo').eq('id_empresa', empresaId).eq('acepta_movimientos', true).order('codigo_cuenta'),
-        supabase.from('entidades').select('id,razon_social,ruc_cedula').eq('id_empresa', empresaId).order('razon_social')
+        supabase.from('entidades').select('id,razon_social,ruc_cedula').eq('id_empresa', empresaId).order('razon_social'),
+        getNextNumeroComprobante(empresaId)
       ]);
+
       if (!accRes.error) setAccounts(accRes.data || []);
       if (!entRes.error) setEntities(entRes.data || []);
+
+      const savedDraft = localStorage.getItem(`pymes_asiento_draft_${empresaId}`);
+      if (savedDraft) {
+        try {
+          const parsed = JSON.parse(savedDraft);
+          if (parsed.form && parsed.lines) {
+            setForm(parsed.form);
+            setLines(parsed.lines);
+            setLoading(false);
+            return;
+          }
+        } catch {}
+      }
+
+      setForm(prev => ({ ...prev, numero_comprobante: nextNum }));
+      setLines([createLine(), createLine()]);
       setLoading(false);
     };
     load();
   }, [empresaId]);
+
+  useEffect(() => {
+    if (loading || !empresaId || empresaId === 'undefined') return;
+    const draft = { form, lines };
+    localStorage.setItem(`pymes_asiento_draft_${empresaId}`, JSON.stringify(draft));
+  }, [form, lines, loading, empresaId]);
 
   const totals = useMemo(() => {
     const debe = lines.reduce((acc, line) => acc + (parseFloat(line.debe) || 0), 0);
@@ -65,8 +120,11 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
   const removeLine = (id: string) => setLines((prev) => prev.length > 2 ? prev.filter((line) => line.id !== id) : prev);
 
   const resetForm = () => {
-    setForm({ fecha: new Date().toISOString().slice(0, 10), concepto: '', tipo_comprobante: 'Asiento Manual', numero_comprobante: '', id_entidad: '' });
-    setLines([createLine(), createLine()]);
+    getNextNumeroComprobante(empresaId).then(nextNum => {
+      setForm({ fecha: new Date().toISOString().slice(0, 10), concepto: '', tipo_comprobante: 'Asiento Manual', numero_comprobante: nextNum, id_entidad: '' });
+      setLines([createLine(), createLine()]);
+    });
+    localStorage.removeItem(`pymes_asiento_draft_${empresaId}`);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -81,36 +139,32 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
     setSaving(true);
     try {
       const { data: auth } = await supabase.auth.getUser();
-      const userId = auth.user?.id;
+      const userId = auth?.user?.id;
+      let finalNum = form.numero_comprobante.trim();
+      if (!finalNum) finalNum = await getNextNumeroComprobante(empresaId);
 
       const { data: transaccion, error: txError } = await supabase
         .from('transacciones')
         .insert({
-          fecha: form.fecha,
-          concepto: form.concepto,
-          tipo_comprobante: form.tipo_comprobante,
-          numero_comprobante: form.numero_comprobante || null,
-          id_entidad: form.id_entidad || null,
-          id_empresa: empresaId,
-          id_usuario: userId || null,
+          fecha: form.fecha, concepto: form.concepto, tipo_comprobante: form.tipo_comprobante,
+          numero_comprobante: finalNum, id_entidad: form.id_entidad || null,
+          id_empresa: empresaId, id_usuario: userId || null,
         })
-        .select('id')
+        .select()
         .single();
 
       if (txError) throw txError;
 
       const payload = validLines.map((line) => ({
-        id_transaccion: transaccion.id,
-        id_cuenta: line.id_cuenta,
-        debe: parseFloat(line.debe) || 0,
-        haber: parseFloat(line.haber) || 0,
-        detalle: line.detalle || null,
+        id_transaccion: transaccion.id, id_cuenta: line.id_cuenta,
+        debe: parseFloat(line.debe) || 0, haber: parseFloat(line.haber) || 0,
         id_empresa: empresaId,
       }));
 
       const { error: movError } = await supabase.from('movimientos').insert(payload);
       if (movError) throw movError;
 
+      localStorage.removeItem(`pymes_asiento_draft_${empresaId}`);
       setMessage('Asiento guardado correctamente.');
       resetForm();
     } catch (error: any) {
@@ -164,7 +218,7 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
           </div>
         </section>
 
-        <section className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
+        <section className="glass-card" style={{ padding: 0, overflow: 'visible' }}>
           <div className="flex-between" style={{ padding: 20, borderBottom: '1px solid var(--border-color)' }}>
             <div>
               <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Movimientos</h3>
@@ -172,11 +226,11 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
             </div>
             <button type="button" className="btn btn-primary" onClick={addLine}><PlusCircle size={18} /> Agregar línea</button>
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="data-table" style={{ minWidth: 760 }}>
+          <div style={{ overflowX: 'visible' }}>
+            <table className="data-table" style={{ minWidth: 760, overflow: 'visible' }}>
               <thead>
                 <tr>
-                  <th>Cuenta</th>
+                  <th style={{ width: '40%' }}>Cuenta</th>
                   <th>Detalle</th>
                   <th>Debe</th>
                   <th>Haber</th>
@@ -186,11 +240,13 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
               <tbody>
                 {lines.map((line) => (
                   <tr key={line.id}>
-                    <td style={{ padding: 12 }}>
-                      <select value={line.id_cuenta} onChange={(e) => updateLine(line.id, 'id_cuenta', e.target.value)} style={inputStyle}>
-                        <option value="">Selecciona una cuenta</option>
-                        {accounts.map((account) => <option key={account.id} value={account.id}>{account.codigo_cuenta} · {account.nombre}</option>)}
-                      </select>
+                    <td style={{ padding: 12, overflow: 'visible' }}>
+                      <AccountSelector 
+                        value={line.id_cuenta} 
+                        onChange={(val) => updateLine(line.id, 'id_cuenta', val)} 
+                        accounts={accounts} 
+                        placeholder="Buscar o seleccionar cuenta..."
+                      />
                     </td>
                     <td style={{ padding: 12 }}><input value={line.detalle} onChange={(e) => updateLine(line.id, 'detalle', e.target.value)} style={inputStyle} placeholder="Detalle opcional" /></td>
                     <td style={{ padding: 12 }}><input inputMode="decimal" value={line.debe} onChange={(e) => updateLine(line.id, 'debe', e.target.value)} style={inputStyle} placeholder="0.00" /></td>
@@ -221,3 +277,4 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
     </div>
   );
 };
+export default Asientos;

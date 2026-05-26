@@ -71,6 +71,7 @@ const App = () => {
   // Al cambiar de empresa, reiniciamos las vistas visitadas para evitar cruce de datos y liberar recursos
   useEffect(() => {
     if (selectedEmpresa) {
+      localStorage.setItem('pymes_selected_empresa_id', selectedEmpresa.id);
       setVisitedViews([activeView]);
     }
   }, [selectedEmpresa?.id]);
@@ -113,11 +114,13 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    if (session) {
+    if (session?.user?.id) {
       fetchEmpresas();
       fetchLimite();
     }
-  }, [session]);
+  // Solo ejecutar cuando CAMBIA el usuario (login/logout), no en cada refresco de token
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
 
   useEffect(() => {
     localStorage.setItem('pymes_active_view', activeView);
@@ -144,7 +147,11 @@ const App = () => {
 
     if (!error && data) {
       setEmpresas(data);
-      if (data.length > 0 && !selectedEmpresa) {
+      const savedId = localStorage.getItem('pymes_selected_empresa_id');
+      const found = data.find(e => e.id === savedId);
+      if (found) {
+        setSelectedEmpresa(found);
+      } else if (data.length > 0 && !selectedEmpresa) {
         setSelectedEmpresa(data[0]);
       }
     }
@@ -305,7 +312,8 @@ const App = () => {
     );
   }
 
-  if (loadingEmpresas) {
+  // Solo mostrar pantalla de carga completa en el primer load (sin datos previos)
+  if (loadingEmpresas && empresas.length === 0) {
     return (
       <div className="flex-center" style={{ height: '100vh', background: '#0f172a' }}>
         <Loader2 className="animate-spin text-primary" size={48} />

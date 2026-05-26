@@ -414,3 +414,17 @@ select option {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--text-sec);
 }
+
+/* Spinner Animation Utility */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
