@@ -28,7 +28,6 @@ interface DocSRI {
   clave_acceso_xml: string;
   es_compra: boolean;
   forma_pago?: string;
-  tipo_identificacion_receptor?: string;
   retenciones_aplicadas: any[];
   transacciones: {
     id: string;
@@ -79,7 +78,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       const [{ data: empData }, { data: docsData }] = await Promise.all([
         supabase.from('empresas_gestionadas').select('nombre_empresa, ruc_empresa').eq('id', empresaId).single(),
         supabase.from('documentos_sri').select(`
-          id, base_12, base_0, base_no_objeto, monto_iva, clave_acceso_xml, es_compra, forma_pago, tipo_identificacion_receptor, retenciones_aplicadas,
+          id, base_12, base_0, base_no_objeto, monto_iva, clave_acceso_xml, es_compra, forma_pago, retenciones_aplicadas,
           transacciones ( id, fecha, concepto, tipo_comprobante, numero_comprobante,
             entidades ( id, nombre, razon_social, ruc_cedula, tipo_identificacion, persona_tipo )
           )
