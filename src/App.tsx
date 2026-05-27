@@ -92,6 +92,7 @@ const App = () => {
   const [savingEdit, setSavingEdit] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState<Empresa | null>(null);
   const [resettingEmpresa, setResettingEmpresa] = useState(false);
+  const [resetCounter, setResetCounter] = useState(0);
   // ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -270,10 +271,9 @@ const App = () => {
 
       alert('¡Datos de la empresa reseteados con éxito! El plan de cuentas se ha conservado.');
       
-      // Forzar una actualización de la vista actual para que refleje el estado vacío
-      if (selectedEmpresa?.id === emp.id) {
-        setSelectedEmpresa({ ...selectedEmpresa });
-      }
+      // Forzar un reinicio completo de todas las vistas montadas
+      setResetCounter(prev => prev + 1);
+      setVisitedViews([activeView]);
       setShowResetConfirm(null);
     } catch (error: any) {
       alert('Error al resetear datos: ' + (error.message || error));
@@ -424,7 +424,7 @@ const App = () => {
           <div>
             {visitedViews.map(view => (
               <Suspense
-                key={view}
+                key={`${view}_${resetCounter}`}
                 fallback={
                   activeView === view ? (
                     <div className="flex-center" style={{ height: '60vh' }}>
