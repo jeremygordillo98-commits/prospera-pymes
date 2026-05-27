@@ -422,16 +422,16 @@ const App = () => {
           </div>
         ) : (
           <div>
-            {visitedViews.map(view => (
-              <div
-                key={view}
-                style={{ display: activeView === view ? 'block' : 'none' }}
-              >
-                <Suspense fallback={<div className="flex-center" style={{ height: '60vh' }}><Loader2 className="animate-spin text-primary" size={32} /></div>}>
+            <Suspense fallback={<div className="flex-center" style={{ height: '60vh' }}><Loader2 className="animate-spin text-primary" size={32} /></div>}>
+              {visitedViews.map(view => (
+                <div
+                  key={view}
+                  style={{ display: activeView === view ? 'block' : 'none' }}
+                >
                   {renderView(view)}
-                </Suspense>
-              </div>
-            ))}
+                </div>
+              ))}
+            </Suspense>
           </div>
         )}
       </main>
