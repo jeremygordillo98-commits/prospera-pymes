@@ -291,7 +291,7 @@ const App = () => {
       case 'xml-compras':
       case 'xml-ventas':
         return <SRIAutomation tipo={view === 'xml-compras' ? 'Compras' : 'Ventas'} empresaId={selectedEmpresa.id} />;
-      case 'libro-diario': return <LibroDiario empresaId={selectedEmpresa.id} />;
+      case 'libro-diario': return <LibroDiario empresaId={selectedEmpresa.id} activeView={activeView} />;
       case 'entidades': return <Entidades empresaId={selectedEmpresa.id} />;
       case 'plan-cuentas': return <PlanCuentas empresaId={selectedEmpresa.id} />;
       case 'asientos': return <Asientos empresaId={selectedEmpresa.id} />;
