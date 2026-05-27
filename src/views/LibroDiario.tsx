@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   FileText,
@@ -38,9 +38,10 @@ interface Transaction {
 
 interface LibroDiarioProps {
   empresaId: string;
+  activeView?: string;
 }
 
-export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
+export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView }) => {
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [expandedTxs, setExpandedTxs] = useState<Set<string>>(new Set());
@@ -49,11 +50,7 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
 
   const filteredTransactions = transactions.filter(tx => !filterDate || tx.fecha.startsWith(filterDate));
 
-  useEffect(() => {
-    fetchTransactions();
-  }, [empresaId]);
-
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -101,7 +98,55 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [empresaId]);
+
+  useEffect(() => {
+    if (!empresaId) return;
+
+    // Recargar transacciones cuando el Libro Diario se enfoca
+    if (!activeView || activeView === 'libro-diario') {
+      fetchTransactions();
+    }
+
+    // Suscribirse a cambios en tiempo real en la tabla de transacciones de Supabase
+    const channelTx = supabase
+      .channel(`transacciones_diario_${empresaId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transacciones',
+          filter: `id_empresa=eq.${empresaId}`
+        },
+        () => {
+          fetchTransactions();
+        }
+      )
+      .subscribe();
+
+    // Suscribirse a cambios en tiempo real en la tabla de movimientos de Supabase
+    const channelMov = supabase
+      .channel(`movimientos_diario_${empresaId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'movimientos',
+          filter: `id_empresa=eq.${empresaId}`
+        },
+        () => {
+          fetchTransactions();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channelTx);
+      supabase.removeChannel(channelMov);
+    };
+  }, [empresaId, activeView, fetchTransactions]);
 
   const toggleExpand = (id: string) => {
     const next = new Set(expandedTxs);
