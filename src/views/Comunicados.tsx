@@ -416,7 +416,8 @@ export const Comunicados: React.FC<ComunicadosProps> = ({ empresaId }) => {
                   name: accountantName
                 },
                 attachment: filesBase64.length > 0 ? filesBase64 : undefined,
-                scheduledAt: scheduledTime
+                scheduledAt: scheduledTime,
+                batchId: recordId
               }
             });
 
@@ -455,9 +456,84 @@ export const Comunicados: React.FC<ComunicadosProps> = ({ empresaId }) => {
     }
   };
 
-  const deleteRecord = async (id: string) => {
-    if (!confirm("¿Seguro de que deseas eliminar este registro histórico?")) return;
-    const { error } = await supabase.from('comunicados_pymes').delete().eq('id', id);
+  const cancelBrevoSchedule = async (campaignId: string): Promise<boolean> => {
+    try {
+      const { error: cancelErr } = await supabaseB2C.functions.invoke(`send-campaign?batchId=${campaignId}`, {
+        method: 'DELETE'
+      });
+      if (cancelErr) throw cancelErr;
+      return true;
+    } catch (err) {
+      console.error("Error al cancelar en Brevo:", err);
+      return false;
+    }
+  };
+
+  const handleCancelScheduled = async (camp: CampanaPymes) => {
+    if (!confirm("¿Deseas cancelar el envío programado de esta campaña? El correo se detendrá en Brevo y volverá a ser un Borrador.")) return;
+    
+    const ok = await cancelBrevoSchedule(camp.id);
+    if (ok) {
+      const { error } = await supabase.from('comunicados_pymes')
+        .update({
+          estado: 'Borrador',
+          scheduled_at: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', camp.id);
+      
+      if (error) {
+        alert("Se canceló en Brevo pero falló al actualizar la base de datos: " + error.message);
+      } else {
+        alert("Envío programado cancelado correctamente. La campaña ahora es un Borrador.");
+      }
+      refetch();
+    } else {
+      alert("No se pudo cancelar el envío programado en Brevo. Por favor, intenta de nuevo.");
+    }
+  };
+
+  const handleEditScheduled = async (camp: CampanaPymes) => {
+    if (!confirm("Para editar esta campaña programada, primero debemos cancelar el envío en Brevo. ¿Deseas continuar?")) return;
+    
+    const ok = await cancelBrevoSchedule(camp.id);
+    if (ok) {
+      const { error } = await supabase.from('comunicados_pymes')
+        .update({
+          estado: 'Borrador',
+          scheduled_at: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', camp.id);
+      
+      if (!error) {
+        loadDraft({
+          ...camp,
+          estado: 'Borrador',
+          scheduled_at: undefined
+        });
+      } else {
+        alert("Se canceló en Brevo pero falló al actualizar la base de datos: " + error.message);
+      }
+      refetch();
+    } else {
+      alert("No se pudo cancelar el envío en Brevo. No se puede editar en este momento.");
+    }
+  };
+
+  const deleteRecord = async (camp: CampanaPymes) => {
+    if (!confirm("¿Seguro de que deseas eliminar este registro?")) return;
+    
+    if (camp.estado === 'Programado') {
+      const cancelOk = await cancelBrevoSchedule(camp.id);
+      if (!cancelOk) {
+        if (!confirm("No se pudo cancelar la programación en Brevo. ¿Deseas eliminar el registro en la base de datos de todas formas?")) {
+          return;
+        }
+      }
+    }
+
+    const { error } = await supabase.from('comunicados_pymes').delete().eq('id', camp.id);
     if (!error) refetch();
   };
 
@@ -577,11 +653,21 @@ export const Comunicados: React.FC<ComunicadosProps> = ({ empresaId }) => {
                         <td style={{ padding: '12px', textAlign: 'right' }}>
                           <div style={{ display: 'inline-flex', gap: 8 }}>
                             {camp.estado === 'Borrador' && (
-                              <button onClick={() => loadDraft(camp)} className="btn" style={{ ...btnStyle, padding: 6, borderRadius: 8 }}>
+                              <button onClick={() => loadDraft(camp)} className="btn" title="Editar Borrador" style={{ ...btnStyle, padding: 6, borderRadius: 8 }}>
                                 <Layers size={14} />
                               </button>
                             )}
-                            <button onClick={() => deleteRecord(camp.id)} className="btn hover:text-error" style={{ ...btnStyle, padding: 6, borderRadius: 8, color: 'var(--error)' }}>
+                            {camp.estado === 'Programado' && (
+                              <>
+                                <button onClick={() => handleEditScheduled(camp)} className="btn" title="Editar Programación (se cancelará el envío actual)" style={{ ...btnStyle, padding: 6, borderRadius: 8 }}>
+                                  <Layers size={14} />
+                                </button>
+                                <button onClick={() => handleCancelScheduled(camp)} className="btn hover:text-warning" title="Cancelar Envío Programado" style={{ ...btnStyle, padding: 6, borderRadius: 8, color: '#F59E0B' }}>
+                                  <Clock size={14} />
+                                </button>
+                              </>
+                            )}
+                            <button onClick={() => deleteRecord(camp)} className="btn hover:text-error" title="Eliminar Registro" style={{ ...btnStyle, padding: 6, borderRadius: 8, color: 'var(--error)' }}>
                               <Trash2 size={14} />
                             </button>
                           </div>
