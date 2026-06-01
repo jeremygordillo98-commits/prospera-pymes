@@ -12,7 +12,8 @@ import {
   CreditCard, 
   BarChart, 
   FileText,
-  Mail
+  Mail,
+  Ban
 } from 'lucide-react';
 
 export const MENU_STRUCTURE = [
@@ -36,6 +37,7 @@ export const MENU_STRUCTURE = [
     children: [
       { id: 'xml-compras', label: 'XML Compras', icon: FileUp },
       { id: 'xml-ventas', label: 'XML Ventas', icon: FileUp },
+      { id: 'xml-anulados', label: 'Anulados', icon: Ban },
     ]
   },
   {

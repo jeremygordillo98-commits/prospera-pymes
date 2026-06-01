@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { CATALOGO_RETENCIONES_RENTA } from '../utils/sriCatalog';
 
 export interface BatchSaveItem {
   parsed: any;
@@ -43,8 +42,12 @@ export const saveXMLBatchToSupabase = async (
   empresaId: string,
   readyItems: BatchSaveItem[],
   userId: string,
+  tipo: 'Compras' | 'Ventas',
   onProgress: (progress: number) => void
 ): Promise<void> => {
+  const startNumStr = await getNextNumeroComprobante(empresaId);
+  let currentNum = parseInt(startNumStr, 10) || 1;
+
   for (let i = 0; i < readyItems.length; i++) {
     const item = readyItems[i];
     const parsed = item.parsed;
@@ -69,7 +72,8 @@ export const saveXMLBatchToSupabase = async (
     }
 
     // 1. Crear transacción contable
-    const finalNum = await getNextNumeroComprobante(empresaId);
+    const finalNum = currentNum.toString();
+    currentNum++;
 
     const { data: transaccion, error: tError } = await supabase
       .from('transacciones')
@@ -93,16 +97,12 @@ export const saveXMLBatchToSupabase = async (
     const ivaMonto = (isFact || isNC) ? (parsed.iva || 0) : 0;
 
     if (isFact) {
-      const retencionSel = CATALOGO_RETENCIONES_RENTA.find(r => r.codigo === item.retencionCodigo) || CATALOGO_RETENCIONES_RENTA[0];
-      const valorRetenidoCalc = parseFloat(((parsed.baseImponible * retencionSel.porcentaje) / 100).toFixed(2));
       const subtotalMonto = parseFloat((totalComprobante - ivaMonto).toFixed(2));
-      const netoAPagar = parseFloat((totalComprobante - valorRetenidoCalc).toFixed(2));
 
       batchMovimientos = [
         { id_transaccion: transaccion.id, id_cuenta: item.idCuentaDebe, debe: subtotalMonto, haber: 0, id_empresa: empresaId },
         ...(ivaMonto > 0 ? [{ id_transaccion: transaccion.id, id_cuenta: item.idCuentaIva, debe: ivaMonto, haber: 0, id_empresa: empresaId }] : []),
-        ...(valorRetenidoCalc > 0 ? [{ id_transaccion: transaccion.id, id_cuenta: item.idCuentaRetencion, debe: 0, haber: valorRetenidoCalc, id_empresa: empresaId }] : []),
-        { id_transaccion: transaccion.id, id_cuenta: item.idCuentaHaber, debe: 0, haber: netoAPagar, id_empresa: empresaId }
+        { id_transaccion: transaccion.id, id_cuenta: item.idCuentaHaber, debe: 0, haber: totalComprobante, id_empresa: empresaId }
       ];
     } else if (isNC) {
       const subtotalMonto = parseFloat((totalComprobante - ivaMonto).toFixed(2));
@@ -122,18 +122,7 @@ export const saveXMLBatchToSupabase = async (
     if (mError) throw mError;
 
     // 3. Crear documento SRI para ATS
-    const { data: empData2 } = await supabase.from('empresas_gestionadas').select('ruc_empresa').eq('id', empresaId).single();
-    const rucEmpresa2 = empData2?.ruc_empresa || '';
-    
-    let esCompra = false;
-    if (isFact || isNC) {
-      esCompra = parsed.rucEmisor !== rucEmpresa2;
-    } else if (isRet) {
-      // Si el emisor del comprobante de retención somos nosotros, corresponde a una compra
-      // (nosotros retenemos a un proveedor). Si el emisor es otro, corresponde a una venta
-      // (un cliente nos retiene a nosotros).
-      esCompra = parsed.rucEmisor === rucEmpresa2;
-    }
+    const esCompra = tipo === 'Compras';
 
     let payloadSRI: any = {
       id_transaccion: transaccion.id,
@@ -142,22 +131,13 @@ export const saveXMLBatchToSupabase = async (
     };
 
     if (isFact) {
-      const retencionSel = CATALOGO_RETENCIONES_RENTA.find(r => r.codigo === item.retencionCodigo) || CATALOGO_RETENCIONES_RENTA[0];
-      const valorRetenidoCalc = parseFloat(((parsed.baseImponible * retencionSel.porcentaje) / 100).toFixed(2));
-
-      payloadSRI.base_12 = parsed.base12;
+      payloadSRI.base_12 = (parsed.base12 || 0) + (parsed.base15 || 0) + (parsed.base5 || 0);
       payloadSRI.base_0 = parsed.base0;
       payloadSRI.base_no_objeto = parsed.baseNoObjeto;
       payloadSRI.monto_iva = parsed.iva;
       payloadSRI.forma_pago = parsed.formaPago;
       payloadSRI.es_compra = esCompra;
-      payloadSRI.retenciones_aplicadas = valorRetenidoCalc > 0 ? [{
-        codigo: retencionSel.codigo,
-        porcentaje: retencionSel.porcentaje,
-        base: parsed.base12,
-        valor: valorRetenidoCalc,
-        tipo: 'RENTA'
-      }] : [];
+      payloadSRI.retenciones_aplicadas = [];
     } else if (isRet) {
       payloadSRI.base_12 = 0;
       payloadSRI.base_0 = 0;
@@ -176,7 +156,7 @@ export const saveXMLBatchToSupabase = async (
         }))
       );
     } else if (isNC) {
-      payloadSRI.base_12 = parsed.base12;
+      payloadSRI.base_12 = (parsed.base12 || 0) + (parsed.base15 || 0) + (parsed.base5 || 0);
       payloadSRI.base_0 = parsed.base0;
       payloadSRI.base_no_objeto = parsed.baseNoObjeto;
       payloadSRI.monto_iva = parsed.iva;
@@ -197,9 +177,6 @@ export const saveXMLBatchToSupabase = async (
 
       const esVenta = rucEmpresa === parsed.rucEmisor;
       const tipoTesoreria = esVenta ? 'Cuenta por cobrar' : 'Cuenta por pagar';
-      const retencionSel = CATALOGO_RETENCIONES_RENTA.find(r => r.codigo === item.retencionCodigo) || CATALOGO_RETENCIONES_RENTA[0];
-      const valorRetenidoCalc = parseFloat(((parsed.baseImponible * retencionSel.porcentaje) / 100).toFixed(2));
-      const netoAPagar = parseFloat((totalComprobante - valorRetenidoCalc).toFixed(2));
 
       await supabase.from('tesoreria_documentos').insert({
         id_empresa: empresaId,
@@ -210,8 +187,8 @@ export const saveXMLBatchToSupabase = async (
         concepto: `[Automático] Factura #${parsed.numeroComprobante}`,
         referencia: parsed.numeroComprobante,
         total: totalComprobante,
-        saldo_pendiente: netoAPagar,
-        estado: netoAPagar > 0 ? 'Pendiente' : 'Liquidado',
+        saldo_pendiente: totalComprobante,
+        estado: totalComprobante > 0 ? 'Pendiente' : 'Liquidado',
         origen: 'SRI XML'
       });
     }

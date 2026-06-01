@@ -88,10 +88,21 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView 
         }))
       }));
 
-      setTransactions(sanitizedData);
+      // Sort numerically by numero_comprobante in descending order (highest/latest first)
+      const sortedData = sanitizedData.sort((a: any, b: any) => {
+        const numA = parseInt(a.numero_comprobante?.trim() || '0', 10) || 0;
+        const numB = parseInt(b.numero_comprobante?.trim() || '0', 10) || 0;
+        if (numA !== numB) {
+          return numB - numA;
+        }
+        // Fallback to date descending if numbers are equal or invalid
+        return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
+      });
 
-      if (sanitizedData.length > 0) {
-        setExpandedTxs(new Set(sanitizedData.map((t: any) => t.id)));
+      setTransactions(sortedData);
+
+      if (sortedData.length > 0) {
+        setExpandedTxs(new Set(sortedData.map((t: any) => t.id)));
       }
     } catch (err) {
       console.error("Error fetching transactions:", err);

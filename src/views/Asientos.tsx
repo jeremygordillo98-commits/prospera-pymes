@@ -71,7 +71,16 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
         getNextNumeroComprobante(empresaId)
       ]);
 
-      if (!accRes.error) setAccounts(accRes.data || []);
+      if (!accRes.error) {
+        const rawAccounts = accRes.data || [];
+        const allCodes = rawAccounts.map(a => a.codigo_cuenta);
+        const leafAccounts = rawAccounts.filter(acc => {
+          const code = acc.codigo_cuenta;
+          const hasChildren = allCodes.some(c => c.startsWith(code + '.'));
+          return !hasChildren;
+        });
+        setAccounts(leafAccounts);
+      }
       if (!entRes.error) setEntities(entRes.data || []);
 
       const savedDraft = localStorage.getItem(`pymes_asiento_draft_${empresaId}`);

@@ -25,6 +25,7 @@ const Perfil = React.lazy(() => import('./views/Perfil').then(m => ({ default: m
 const DashboardView = React.lazy(() => import('./views/Dashboard').then(m => ({ default: m.DashboardView })));
 const Sidebar = React.lazy(() => import('./components/Sidebar').then(m => ({ default: m.Sidebar })));
 const SRIAutomation = React.lazy(() => import('./views/SRIAutomation').then(m => ({ default: m.SRIAutomation })));
+const AnuladosSRI = React.lazy(() => import('./views/AnuladosSRI').then(m => ({ default: m.AnuladosSRI })));
 const LibroDiario = React.lazy(() => import('./views/LibroDiario').then(m => ({ default: m.LibroDiario })));
 const Tesoreria = React.lazy(() => import('./views/Tesoreria').then(m => ({ default: m.Tesoreria })));
 const UpdatePassword = React.lazy(() => import('./views/UpdatePassword').then(m => ({ default: m.UpdatePassword })));
@@ -291,6 +292,7 @@ const App = () => {
       case 'xml-compras':
       case 'xml-ventas':
         return <SRIAutomation tipo={view === 'xml-compras' ? 'Compras' : 'Ventas'} empresaId={selectedEmpresa.id} />;
+      case 'xml-anulados': return <AnuladosSRI empresaId={selectedEmpresa.id} />;
       case 'libro-diario': return <LibroDiario empresaId={selectedEmpresa.id} activeView={activeView} />;
       case 'entidades': return <Entidades empresaId={selectedEmpresa.id} />;
       case 'plan-cuentas': return <PlanCuentas empresaId={selectedEmpresa.id} />;

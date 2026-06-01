@@ -2,7 +2,6 @@ import React from 'react';
 import { CheckCircle2, Trash2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { AccountSelector } from './AccountSelector';
-import { RetentionSelector } from './RetentionSelector';
 import { CATALOGO_RETENCIONES_RENTA } from '../utils/sriCatalog';
 import type { Account, BatchItem } from '../hooks/useXMLUpload';
 
@@ -34,7 +33,7 @@ export const XMLBatchTable: React.FC<XMLBatchTableProps> = ({
         width: '100%',
         textAlign: 'left',
         borderCollapse: 'collapse',
-        minWidth: '1480px',
+        minWidth: '1240px',
         tableLayout: 'fixed',
         fontSize: '11px'
       }}>
@@ -51,10 +50,9 @@ export const XMLBatchTable: React.FC<XMLBatchTableProps> = ({
             <th style={{ padding: '12px 16px', textAlign: 'center', width: '80px' }}>Estado</th>
             <th style={{ padding: '12px 16px', width: '280px' }}>Documento</th>
             <th style={{ padding: '12px 16px', textAlign: 'right', width: '100px' }}>Total</th>
-            <th style={{ padding: '12px 16px', width: '240px' }}>Debe (Gasto/Inv)</th>
-            <th style={{ padding: '12px 16px', width: '240px' }}>IVA (Debe)</th>
+            <th style={{ padding: '12px 16px', width: '280px' }}>Debe (Gasto/Inv)</th>
+            <th style={{ padding: '12px 16px', width: '280px' }}>Bases e IVA (0%, 5%, 15%)</th>
             <th style={{ padding: '12px 16px', width: '240px' }}>Haber (Pasivo/CXP)</th>
-            <th style={{ padding: '12px 16px', width: '240px' }}>Retención IR</th>
             <th style={{ padding: '12px 16px', textAlign: 'center', width: '60px' }}></th>
           </tr>
         </thead>
@@ -209,6 +207,19 @@ export const XMLBatchTable: React.FC<XMLBatchTableProps> = ({
                     {p.razonSocialEmisor}
                   </div>
                   <div style={{ fontSize: '9px', color: 'var(--text-sec)', marginTop: '4px', fontWeight: 500 }}>RUC: {p.rucEmisor}</div>
+                  <div style={{ 
+                    fontSize: '8px', 
+                    color: 'var(--text-sec)', 
+                    marginTop: '4px', 
+                    fontWeight: 500,
+                    fontFamily: 'monospace',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    opacity: 0.8
+                  }} title={`Autorización / Clave de Acceso:\n${p.claveAcceso}`}>
+                    Aut: {p.claveAcceso}
+                  </div>
                 </td>
 
                 {/* Total */}
@@ -231,10 +242,10 @@ export const XMLBatchTable: React.FC<XMLBatchTableProps> = ({
                   </div>
                 </td>
 
-                {/* IVA */}
+                {/* IVA y Bases */}
                 <td style={{ padding: '16px' }}>
-                  {p.iva > 0 ? (
-                    <>
+                  {ivaMonto > 0 && (
+                    <div style={{ marginBottom: '8px' }}>
                       <AccountSelector
                         value={item.idCuentaIva}
                         onChange={(val) => {
@@ -243,13 +254,77 @@ export const XMLBatchTable: React.FC<XMLBatchTableProps> = ({
                         accounts={accounts}
                         placeholder="Seleccionar IVA..."
                       />
-                      <div style={{ fontSize: '9px', color: '#10b981', marginTop: '6px', fontWeight: 'black', padding: '0 6px' }}>
-                        Valor IVA: ${p.iva.toFixed(2)}
-                      </div>
-                    </>
-                  ) : (
-                    <span style={{ fontSize: '11px', color: 'var(--text-sec)', fontStyle: 'italic', paddingLeft: '8px', fontWeight: 'bold', opacity: 0.6 }}>— No grava —</span>
+                    </div>
                   )}
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.05)'
+                  }}>
+                    {(p.base0 || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                        <span style={{ color: 'var(--text-sec)' }}>Sub. 0%:</span>
+                        <span style={{ fontWeight: 'bold' }}>${(p.base0 || 0).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {(p.base5 || 0) > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '2px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                          <span style={{ color: 'var(--text-sec)' }}>Sub. 5%:</span>
+                          <span style={{ fontWeight: 'bold' }}>${(p.base5 || 0).toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: '#10b981' }}>
+                          <span>IVA 5%:</span>
+                          <span>${((p.base5 || 0) * 0.05).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    )}
+                    {(p.base12 || 0) > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '2px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                          <span style={{ color: 'var(--text-sec)' }}>Sub. 12%:</span>
+                          <span style={{ fontWeight: 'bold' }}>${(p.base12 || 0).toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: 'var(--primary)' }}>
+                          <span>IVA 12%:</span>
+                          <span>${((p.base12 || 0) * 0.12).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    )}
+                    {(p.base15 || 0) > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '2px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                          <span style={{ color: 'var(--text-sec)' }}>Sub. 15%:</span>
+                          <span style={{ fontWeight: 'bold' }}>${(p.base15 || 0).toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: 'var(--primary)' }}>
+                          <span>IVA 15%:</span>
+                          <span>${((p.base15 || 0) * 0.15).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    )}
+                    {(p.baseNoObjeto || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px' }}>
+                        <span style={{ color: 'var(--text-sec)' }}>No Objeto:</span>
+                        <span style={{ fontWeight: 'bold' }}>${(p.baseNoObjeto || 0).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {ivaMonto > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontWeight: '900', color: '#10b981', paddingTop: '4px', borderTop: '1px dashed rgba(255,255,255,0.1)' }}>
+                        <span>IVA Total:</span>
+                        <span>${ivaMonto.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {ivaMonto === 0 && (
+                      <div style={{ fontSize: '8px', color: 'var(--text-sec)', fontStyle: 'italic', textAlign: 'center', opacity: 0.6 }}>
+                        Sin IVA grabado
+                      </div>
+                    )}
+                  </div>
                 </td>
 
                 {/* Haber */}
@@ -267,37 +342,7 @@ export const XMLBatchTable: React.FC<XMLBatchTableProps> = ({
                   </div>
                 </td>
 
-                {/* Retención */}
-                <td style={{ padding: '16px' }}>
-                  {isFact ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <RetentionSelector
-                        value={item.retencionCodigo}
-                        onChange={(val) => {
-                          onChangeItem(idx, { ...item, retencionCodigo: val });
-                        }}
-                      />
-                      
-                      {valRetCalculado > 0 && (
-                        <>
-                          <AccountSelector
-                            value={item.idCuentaRetencion}
-                            onChange={(val) => {
-                              onChangeItem(idx, { ...item, idCuentaRetencion: val });
-                            }}
-                            accounts={accounts.filter(a => a.tipo === 'Pasivo')}
-                            placeholder="Cuenta Pasivo..."
-                          />
-                          <div style={{ fontSize: '9px', color: 'var(--warning)', fontWeight: 'black', padding: '0 6px' }}>
-                            Valor Renta: ${valRetCalculado.toFixed(2)}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ) : (
-                    <span style={{ fontSize: '11px', color: 'var(--text-sec)', fontStyle: 'italic', paddingLeft: '8px', fontWeight: 'bold', opacity: 0.6 }}>— No aplica —</span>
-                  )}
-                </td>
+
 
                 {/* Acción */}
                 <td style={{ padding: '16px', textAlign: 'center', verticalAlign: 'middle' }}>

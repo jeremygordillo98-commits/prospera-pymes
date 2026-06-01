@@ -37,7 +37,7 @@ export const XMLUploadModal: React.FC<XMLUploadModalProps> = ({
     handleUpdateItem,
     handleDeleteItem,
     clearDraft
-  } = useXMLUpload(empresaId, isOpen, onClose, onSuccess);
+  } = useXMLUpload(empresaId, tipo, isOpen, onClose, onSuccess);
 
   if (!isOpen) return null;
 
@@ -52,13 +52,14 @@ export const XMLUploadModal: React.FC<XMLUploadModalProps> = ({
       className="glass-card"
       style={{
         padding: 0,
-        overflow: 'visible',
+        overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
         position: 'relative',
         width: '100%',
         boxSizing: 'border-box',
-        minHeight: '500px'
+        minHeight: '500px',
+        maxHeight: 'calc(100vh - 120px)'
       }}
     >
       {/* Loader de Parsing */}
@@ -143,7 +144,8 @@ export const XMLUploadModal: React.FC<XMLUploadModalProps> = ({
         flex: 1,
         backgroundColor: 'rgba(11, 19, 24, 0.4)',
         borderBottomLeftRadius: '20px',
-        borderBottomRightRadius: '20px'
+        borderBottomRightRadius: '20px',
+        overflowY: 'auto'
       }}>
         {!hasFiles ? (
           /* DISPARADOR INICIAL */
