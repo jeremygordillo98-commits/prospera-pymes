@@ -17,7 +17,9 @@ export interface SRIFacturaData extends SRIDocumentoBase {
   rucReceptor: string;
   tipoIdentificacionReceptor: string; // 04=RUC, 05=Cedula, 06=Pasaporte, 07=CF
   // Bases imponibles separadas por tarifa
-  base12: number;        // Tarifa 12% o 15% (cod=2, tarifa=2/4)
+  base12: number;        // Tarifa 12%
+  base15: number;        // Tarifa 15%
+  base5: number;         // Tarifa 5%
   base0: number;         // Tarifa 0% (cod=2, tarifa=0)
   baseNoObjeto: number;  // No objeto IVA (cod=6)
   baseExenta: number;    // Exenta (cod=7)
@@ -64,6 +66,8 @@ export interface SRINotaCreditoData extends SRIDocumentoBase {
   motivo: string;
   valorModificacion: number;
   base12: number;
+  base15: number;
+  base5: number;
   base0: number;
   baseNoObjeto: number;
   iva: number;
@@ -80,8 +84,8 @@ export type SRIInvoiceData = SRIFacturaData;
 
 /** Extrae bases imponibles separadas por tarifa del nodo totalConImpuestos */
 const extractBases = (totalConImpuestos: any) => {
-  let base12 = 0, base0 = 0, baseNoObjeto = 0, baseExenta = 0, iva = 0;
-  if (!totalConImpuestos?.totalImpuesto) return { base12, base0, baseNoObjeto, baseExenta, iva };
+  let base0 = 0, base5 = 0, base12 = 0, base15 = 0, baseNoObjeto = 0, baseExenta = 0, iva = 0;
+  if (!totalConImpuestos?.totalImpuesto) return { base0, base5, base12, base15, baseNoObjeto, baseExenta, iva };
 
   const impuestos = Array.isArray(totalConImpuestos.totalImpuesto)
     ? totalConImpuestos.totalImpuesto
@@ -94,9 +98,18 @@ const extractBases = (totalConImpuestos: any) => {
     const valor = parseFloat(imp.valor || 0);
 
     if (cod === '2') {
-      // IVA: tarifa 0 = base0, tarifa > 0 = base12 (incluyendo 15%)
+      // IVA: 0% = base0, 5% = base5, 12% = base12, 15% = base15
       if (tarifa === 0) {
         base0 += base;
+      } else if (tarifa === 5) {
+        base5 += base;
+        iva += valor;
+      } else if (tarifa === 12) {
+        base12 += base;
+        iva += valor;
+      } else if (tarifa === 15 || tarifa === 4) {
+        base15 += base;
+        iva += valor;
       } else {
         base12 += base;
         iva += valor;
@@ -110,7 +123,7 @@ const extractBases = (totalConImpuestos: any) => {
     }
   });
 
-  return { base12, base0, baseNoObjeto, baseExenta, iva };
+  return { base0, base5, base12, base15, baseNoObjeto, baseExenta, iva };
 };
 
 /** Extrae forma de pago del nodo pagos.pago */
@@ -166,7 +179,7 @@ export const parseSRIXML = async (xmlContent: string): Promise<SRIParsedData | n
     // ─── FACTURA ─────────────────────────────────────────────
     if (tipo === 'FACTURA') {
       const infoF = comprobante.infoFactura;
-      const { base12, base0, baseNoObjeto, baseExenta, iva } = extractBases(infoF.totalConImpuestos);
+      const { base0, base5, base12, base15, baseNoObjeto, baseExenta, iva } = extractBases(infoF.totalConImpuestos);
       const formaPago = extractFormaPago(infoF.pagos || comprobante.pagos);
       const tipoIdReceptor = infoF.tipoIdentificacionComprador?.toString() || '04';
 
@@ -177,6 +190,8 @@ export const parseSRIXML = async (xmlContent: string): Promise<SRIParsedData | n
         rucReceptor: infoF.identificacionComprador?.toString() || '',
         tipoIdentificacionReceptor: tipoIdReceptor,
         base12,
+        base15,
+        base5,
         base0,
         baseNoObjeto,
         baseExenta,
@@ -184,7 +199,7 @@ export const parseSRIXML = async (xmlContent: string): Promise<SRIParsedData | n
         total: parseFloat(infoF.importeTotal || 0),
         formaPago,
         // alias retrocompat
-        baseImponible: base12,
+        baseImponible: base12 + base15 + base5,
       };
     }
 
@@ -253,7 +268,7 @@ export const parseSRIXML = async (xmlContent: string): Promise<SRIParsedData | n
     // ─── NOTA DE CRÉDITO ─────────────────────────────────────
     if (tipo === 'NOTA_CREDITO') {
       const infoNC = comprobante.infoNotaCredito;
-      const { base12, base0, baseNoObjeto, iva } = extractBases(infoNC.totalConImpuestos);
+      const { base0, base5, base12, base15, baseNoObjeto, iva } = extractBases(infoNC.totalConImpuestos);
       const tipoIdReceptor = infoNC.tipoIdentificacionComprador?.toString() || '04';
 
       return {
@@ -266,11 +281,13 @@ export const parseSRIXML = async (xmlContent: string): Promise<SRIParsedData | n
         motivo: infoNC.motivo || '',
         valorModificacion: parseFloat(infoNC.valorModificacion || 0),
         base12,
+        base15,
+        base5,
         base0,
         baseNoObjeto,
         iva,
         // alias retrocompat
-        baseImponible: base12,
+        baseImponible: base12 + base15 + base5,
       };
     }
 

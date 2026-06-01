@@ -28,6 +28,7 @@ export interface BatchItem {
 
 export const useXMLUpload = (
   empresaId: string,
+  tipo: 'Compras' | 'Ventas',
   isOpen: boolean,
   onClose: () => void,
   onSuccess: () => void
@@ -51,7 +52,14 @@ export const useXMLUpload = (
         .order('codigo_cuenta');
 
       if (data) {
-        setAccounts(data);
+        const rawAccounts = data || [];
+        const allCodes = rawAccounts.map(a => a.codigo_cuenta);
+        const leafAccounts = rawAccounts.filter(acc => {
+          const code = acc.codigo_cuenta;
+          const hasChildren = allCodes.some(c => c.startsWith(code + '.'));
+          return !hasChildren;
+        });
+        setAccounts(leafAccounts);
       }
     } catch (err) {
       console.error("Error fetching accounts:", err);
@@ -322,6 +330,7 @@ export const useXMLUpload = (
           retencionCodigo: item.retencionCodigo
         })),
         user.id,
+        tipo,
         (progress) => setBatchProgress(progress)
       );
 

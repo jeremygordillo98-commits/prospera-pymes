@@ -8,7 +8,9 @@ import {
   Trash2,
   Edit2,
   Lock,
-  X
+  X,
+  ChevronRight,
+  ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -16,6 +18,7 @@ export const PlanCuentas = ({ empresaId }: { empresaId: string }) => {
   const [cuentas, setCuentas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [expandedCodes, setExpandedCodes] = useState<Set<string>>(new Set());
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -28,6 +31,19 @@ export const PlanCuentas = ({ empresaId }: { empresaId: string }) => {
   });
   const [saving, setSaving] = useState(false);
 
+  // Helper algorithms for hierarchy
+  const getParentCode = (code: string) => {
+    const parts = code.split('.');
+    if (parts.length <= 1) return null;
+    return parts.slice(0, -1).join('.');
+  };
+
+  const parentCodesWithChildren = new Set<string>();
+  cuentas.forEach(c => {
+    const pCode = getParentCode(c.codigo_cuenta);
+    if (pCode) parentCodesWithChildren.add(pCode);
+  });
+
   const fetchCuentas = async () => {
     if (!empresaId) return;
     setLoading(true);
@@ -37,7 +53,18 @@ export const PlanCuentas = ({ empresaId }: { empresaId: string }) => {
       .eq('id_empresa', empresaId)
       .order('codigo_cuenta', { ascending: true });
     
-    if (!error && data) setCuentas(data);
+    if (!error && data) {
+      setCuentas(data);
+      // Auto-expand levels 1 and 2 by default
+      const initialExpanded = new Set<string>();
+      data.forEach((c: any) => {
+        const level = c.codigo_cuenta.split('.').length;
+        if (level <= 2) {
+          initialExpanded.add(c.codigo_cuenta);
+        }
+      });
+      setExpandedCodes(initialExpanded);
+    }
     setLoading(false);
   };
 
@@ -45,10 +72,83 @@ export const PlanCuentas = ({ empresaId }: { empresaId: string }) => {
     fetchCuentas();
   }, [empresaId]);
 
-  const filtered = cuentas.filter(c => 
-    c.nombre.toLowerCase().includes(search.toLowerCase()) || 
-    c.codigo_cuenta.includes(search)
+  // Expand / collapse single node
+  const toggleExpand = (code: string) => {
+    setExpandedCodes(prev => {
+      const next = new Set(prev);
+      if (next.has(code)) {
+        next.delete(code);
+      } else {
+        next.add(code);
+      }
+      return next;
+    });
+  };
+
+  // Expand all parent nodes
+  const expandAll = () => {
+    const allParents = new Set<string>();
+    cuentas.forEach(c => {
+      const pCode = getParentCode(c.codigo_cuenta);
+      if (pCode) allParents.add(pCode);
+    });
+    setExpandedCodes(allParents);
+  };
+
+  // Collapse all nodes (show only level 1)
+  const collapseAll = () => {
+    setExpandedCodes(new Set());
+  };
+
+  // Smart Search logic
+  const isSearchActive = search.trim() !== "";
+  const searchLower = search.toLowerCase();
+
+  // Find exact search matches
+  const exactMatches = cuentas.filter(c =>
+    c.nombre.toLowerCase().includes(searchLower) ||
+    c.codigo_cuenta.includes(searchLower)
   );
+
+  // Set of codes that should be visible during search (exact matches + all their ancestors)
+  const visibleCodesInSearch = new Set<string>();
+  const searchExpandedCodes = new Set<string>();
+
+  if (isSearchActive) {
+    exactMatches.forEach(c => {
+      visibleCodesInSearch.add(c.codigo_cuenta);
+      let parentCode = getParentCode(c.codigo_cuenta);
+      while (parentCode !== null) {
+        visibleCodesInSearch.add(parentCode);
+        searchExpandedCodes.add(parentCode);
+        parentCode = getParentCode(parentCode);
+      }
+    });
+  }
+
+  // Set of all codes present in the database to prevent orphaned nodes
+  const existingCodes = new Set(cuentas.map(c => c.codigo_cuenta));
+
+  // Determine if ancestors of a node are expanded
+  const areAncestorsExpanded = (code: string, expandedSet: Set<string>, existingSet: Set<string>): boolean => {
+    let parentCode = getParentCode(code);
+    while (parentCode !== null) {
+      if (existingSet.has(parentCode) && !expandedSet.has(parentCode)) {
+        return false;
+      }
+      parentCode = getParentCode(parentCode);
+    }
+    return true;
+  };
+
+  // Filter accounts list to display
+  const visibleCuentas = cuentas.filter(c => {
+    if (isSearchActive) {
+      return visibleCodesInSearch.has(c.codigo_cuenta);
+    } else {
+      return areAncestorsExpanded(c.codigo_cuenta, expandedCodes, existingCodes);
+    }
+  });
 
   const handleOpenModal = (cuenta?: any) => {
     if (cuenta) {
@@ -120,8 +220,16 @@ export const PlanCuentas = ({ empresaId }: { empresaId: string }) => {
       </header>
 
       <div className="glass-card" style={{ padding: '0' }}>
-        <div style={{ padding: '20px', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '12px' }}>
-          <div style={{ position: 'relative', flex: 1 }}>
+        <div style={{ 
+          padding: '20px', 
+          borderBottom: '1px solid var(--border-color)', 
+          display: 'flex', 
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          gap: '12px', 
+          alignItems: 'center' 
+        }}>
+          <div style={{ position: 'relative', flex: '1 1 300px' }}>
             <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-sec)', opacity: 0.6 }} />
             <input 
               type="text" 
@@ -130,6 +238,52 @@ export const PlanCuentas = ({ empresaId }: { empresaId: string }) => {
               onChange={(e) => setSearch(e.target.value)}
               style={inputStyle}
             />
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button 
+              onClick={expandAll}
+              className="btn"
+              style={{
+                padding: '8px 16px',
+                fontSize: '0.85rem',
+                border: '1px solid var(--border-color)',
+                background: 'rgba(255,255,255,0.02)',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontWeight: 600,
+                color: 'var(--text-main)',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+            >
+              Expandir Todo
+            </button>
+            <button 
+              onClick={collapseAll}
+              className="btn"
+              style={{
+                padding: '8px 16px',
+                fontSize: '0.85rem',
+                border: '1px solid var(--border-color)',
+                background: 'rgba(255,255,255,0.02)',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontWeight: 600,
+                color: 'var(--text-main)',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+            >
+              Colapsar Todo
+            </button>
           </div>
         </div>
 
@@ -152,36 +306,110 @@ export const PlanCuentas = ({ empresaId }: { empresaId: string }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(c => (
-                    <tr key={c.id} className="hover:bg-white/5 transition-colors">
-                      <td style={tdStyle}>
-                        <span style={{ fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.1em' }}>{c.codigo_cuenta}</span>
-                      </td>
-                      <td style={tdStyle}>
-                        <div style={{ fontWeight: 600 }}>{c.nombre}</div>
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={{ fontSize: '0.75rem', opacity: 0.8, background: 'var(--primary-light)', color: 'var(--primary)', padding: '2px 8px', borderRadius: '4px' }}>
-                          {c.tipo}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          {c.acepta_movimientos ? 
-                            <span style={{ color: 'var(--success)', fontSize: '0.75rem' }}>Si</span> : 
-                            <span style={{ opacity: 0.4, display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }}><Lock size={12} /> No</span>
-                          }
-                        </div>
-                      </td>
-                      <td style={tdStyle}>
-                        <div style={{ display: 'flex', gap: '12px' }}>
-                          <button style={btnActionStyle} onClick={() => handleOpenModal(c)}><Edit2 size={16} /></button>
-                          <button style={{ ...btnActionStyle, color: 'var(--error)' }} onClick={() => handleDelete(c.id, c.nombre)}><Trash2 size={16} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {filtered.length === 0 && (
+                  {visibleCuentas.map(c => {
+                    const level = c.codigo_cuenta.split('.').length;
+                    const isParent = parentCodesWithChildren.has(c.codigo_cuenta);
+                    const isExpanded = isSearchActive 
+                      ? searchExpandedCodes.has(c.codigo_cuenta) || expandedCodes.has(c.codigo_cuenta) 
+                      : expandedCodes.has(c.codigo_cuenta);
+                    const isGroup = !c.acepta_movimientos;
+                    const indent = (level - 1) * 24;
+                    const isExactMatch = isSearchActive && (
+                      c.nombre.toLowerCase().includes(searchLower) ||
+                      c.codigo_cuenta.includes(searchLower)
+                    );
+
+                    return (
+                      <tr 
+                        key={c.id} 
+                        className="hover:bg-white/5 transition-colors"
+                        style={{
+                          background: isExactMatch ? 'var(--primary-light)' : undefined,
+                          borderLeft: isExactMatch ? '3px solid var(--primary)' : '3px solid transparent'
+                        }}
+                      >
+                        <td style={tdStyle}>
+                          <span style={{ 
+                            fontWeight: isGroup ? 800 : 600, 
+                            color: isGroup ? 'var(--primary)' : 'var(--text-sec)', 
+                            opacity: isGroup ? 1 : 0.8,
+                            letterSpacing: '0.05em' 
+                          }}>
+                            {c.codigo_cuenta}
+                          </span>
+                        </td>
+                        <td style={{ ...tdStyle, paddingLeft: `${indent + 16}px` }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {isParent ? (
+                              <button 
+                                onClick={() => toggleExpand(c.codigo_cuenta)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: 'var(--text-sec)',
+                                  cursor: 'pointer',
+                                  padding: '2px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  borderRadius: '4px',
+                                  transition: 'background-color 0.2s',
+                                }}
+                                className="hover:bg-white/10"
+                              >
+                                {isExpanded ? <ChevronDown size={16} className="text-primary" /> : <ChevronRight size={16} />}
+                              </button>
+                            ) : (
+                              <span style={{ width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.3 }}>
+                                •
+                              </span>
+                            )}
+                            <span style={{ 
+                              fontWeight: isGroup ? 700 : 400,
+                              color: isGroup ? 'var(--text-main)' : 'var(--text-sec)',
+                              fontSize: isGroup ? '0.95rem' : '0.9rem'
+                            }}>
+                              {c.nombre}
+                            </span>
+                            {isGroup && (
+                              <span style={{ 
+                                fontSize: '0.65rem', 
+                                background: 'rgba(255,255,255,0.05)', 
+                                border: '1px solid var(--border-color)', 
+                                color: 'var(--text-sec)', 
+                                padding: '1px 6px', 
+                                borderRadius: '4px',
+                                marginLeft: '8px',
+                                fontWeight: 500
+                              }}>
+                                Grupo
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={{ fontSize: '0.75rem', opacity: 0.8, background: 'var(--primary-light)', color: 'var(--primary)', padding: '2px 8px', borderRadius: '4px' }}>
+                            {c.tipo}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {c.acepta_movimientos ? 
+                              <span style={{ color: 'var(--success)', fontSize: '0.75rem' }}>Si</span> : 
+                              <span style={{ opacity: 0.4, display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }}><Lock size={12} /> No</span>
+                            }
+                          </div>
+                        </td>
+                        <td style={tdStyle}>
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                            <button style={btnActionStyle} onClick={() => handleOpenModal(c)}><Edit2 size={16} /></button>
+                            <button style={{ ...btnActionStyle, color: 'var(--error)' }} onClick={() => handleDelete(c.id, c.nombre)}><Trash2 size={16} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {visibleCuentas.length === 0 && (
                     <tr>
                       <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-sec)' }}>
                         No se encontraron cuentas.
@@ -193,37 +421,126 @@ export const PlanCuentas = ({ empresaId }: { empresaId: string }) => {
 
               {/* Lista para Móvil */}
               <div className="mobile-card-list">
-                {filtered.map(c => (
-                  <div key={c.id} className="entity-card">
-                    <div className="flex-between" style={{ marginBottom: '4px' }}>
-                      <span style={{ fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.05em', fontSize: '0.9rem' }}>{c.codigo_cuenta}</span>
-                      <span style={{ 
-                        fontSize: '0.65rem', 
-                        background: 'var(--primary-light)', 
-                        color: 'var(--primary)', 
-                        padding: '2px 8px', 
-                        borderRadius: '6px',
-                        fontWeight: 700,
-                        textTransform: 'uppercase'
-                      }}>
-                        {c.tipo}
-                      </span>
-                    </div>
-                    <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '12px', color: 'var(--text-main)' }}>{c.nombre}</div>
-                    <div className="flex-between" style={{ alignItems: 'center' }}>
-                      <div style={{ fontSize: '0.75rem' }}>
-                        {c.acepta_movimientos ? 
-                          <span style={{ color: 'var(--success)', fontWeight: 600 }}>● Acepta Mov.</span> : 
-                          <span style={{ opacity: 0.5, display: 'flex', alignItems: 'center', gap: '4px' }}><Lock size={12} /> Solo Grupo</span>
-                        }
+                {visibleCuentas.map(c => {
+                  const level = c.codigo_cuenta.split('.').length;
+                  const isParent = parentCodesWithChildren.has(c.codigo_cuenta);
+                  const isExpanded = isSearchActive 
+                    ? searchExpandedCodes.has(c.codigo_cuenta) || expandedCodes.has(c.codigo_cuenta) 
+                    : expandedCodes.has(c.codigo_cuenta);
+                  const isGroup = !c.acepta_movimientos;
+                  const indent = (level - 1) * 12;
+                  const isExactMatch = isSearchActive && (
+                    c.nombre.toLowerCase().includes(searchLower) ||
+                    c.codigo_cuenta.includes(searchLower)
+                  );
+
+                  return (
+                    <div 
+                      key={c.id} 
+                      className="entity-card"
+                      style={{
+                        marginLeft: `${indent}px`,
+                        borderLeft: isExactMatch 
+                          ? '3px solid var(--primary)' 
+                          : isGroup 
+                            ? '3px solid rgba(255,255,255,0.15)' 
+                            : '3px solid transparent',
+                        background: isExactMatch ? 'var(--primary-light)' : undefined,
+                        transition: 'all 0.2s ease',
+                        padding: '16px'
+                      }}
+                    >
+                      <div className="flex-between" style={{ marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {isParent && (
+                            <button 
+                              onClick={() => toggleExpand(c.codigo_cuenta)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--text-sec)',
+                                cursor: 'pointer',
+                                padding: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '4px'
+                              }}
+                            >
+                              {isExpanded ? <ChevronDown size={16} className="text-primary" /> : <ChevronRight size={16} />}
+                            </button>
+                          )}
+                          <span style={{ 
+                            fontWeight: isGroup ? 800 : 600, 
+                            color: isGroup ? 'var(--primary)' : 'var(--text-sec)', 
+                            fontSize: '0.85rem',
+                            letterSpacing: '0.05em' 
+                          }}>
+                            {c.codigo_cuenta}
+                          </span>
+                        </div>
+                        <span style={{ 
+                          fontSize: '0.65rem', 
+                          background: 'var(--primary-light)', 
+                          color: 'var(--primary)', 
+                          padding: '2px 8px', 
+                          borderRadius: '6px',
+                          fontWeight: 700,
+                          textTransform: 'uppercase'
+                        }}>
+                          {c.tipo}
+                        </span>
                       </div>
-                      <div style={{ display: 'flex', gap: '16px' }}>
-                        <button style={btnActionStyle} onClick={() => handleOpenModal(c)}><Edit2 size={18} /></button>
-                        <button style={{ ...btnActionStyle, color: 'var(--error)' }} onClick={() => handleDelete(c.id, c.nombre)}><Trash2 size={18} /></button>
+                      
+                      <div 
+                        onClick={() => isParent && toggleExpand(c.codigo_cuenta)}
+                        style={{ 
+                          fontWeight: isGroup ? 700 : 500, 
+                          fontSize: '0.95rem', 
+                          marginBottom: '12px', 
+                          color: isGroup ? 'var(--text-main)' : 'var(--text-sec)',
+                          cursor: isParent ? 'pointer' : 'default',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <span>{c.nombre}</span>
+                        {isGroup && (
+                          <span style={{ 
+                            fontSize: '0.6rem', 
+                            background: 'rgba(255,255,255,0.05)', 
+                            border: '1px solid var(--border-color)', 
+                            color: 'var(--text-sec)', 
+                            padding: '1px 4px', 
+                            borderRadius: '4px',
+                            fontWeight: 500
+                          }}>
+                            Grupo
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex-between" style={{ alignItems: 'center' }}>
+                        <div style={{ fontSize: '0.75rem' }}>
+                          {c.acepta_movimientos ? 
+                            <span style={{ color: 'var(--success)', fontWeight: 600 }}>● Acepta Mov.</span> : 
+                            <span style={{ opacity: 0.5, display: 'flex', alignItems: 'center', gap: '4px' }}><Lock size={12} /> Solo Grupo</span>
+                          }
+                        </div>
+                        <div style={{ display: 'flex', gap: '16px' }}>
+                          <button style={btnActionStyle} onClick={() => handleOpenModal(c)}><Edit2 size={18} /></button>
+                          <button style={{ ...btnActionStyle, color: 'var(--error)' }} onClick={() => handleDelete(c.id, c.nombre)}><Trash2 size={18} /></button>
+                        </div>
                       </div>
                     </div>
+                  );
+                })}
+                {visibleCuentas.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-sec)' }}>
+                    No se encontraron cuentas.
                   </div>
-                ))}
+                )}
               </div>
             </>
           )}
