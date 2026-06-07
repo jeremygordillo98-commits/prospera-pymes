@@ -536,8 +536,31 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
                                                                 <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.transacciones?.entidades?.nombre || '—'}</div>
                                                                 <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', marginTop: 2 }}>{doc.transacciones?.entidades?.ruc_cedula || ''}</div>
                                                             </td>
-                                                            <td style={{ padding: '12px', fontSize: '0.82rem', fontWeight: 600, fontFamily: 'monospace' }}>
-                                                                {doc.transacciones?.numero_comprobante || '—'}
+                                                             <td style={{ padding: '12px', fontSize: '0.82rem', fontWeight: 600, fontFamily: 'monospace' }}>
+                                                                {(() => {
+                                                                    const numComp = doc.transacciones?.numero_comprobante || '';
+                                                                    // Si ya tiene formato SRI (001-001-XXXXXXXXX), mostrarlo directamente
+                                                                    if (/^\d{3}-\d{3}-\d{9}$/.test(numComp)) {
+                                                                        return numComp;
+                                                                    }
+                                                                    // Intentar extraer del concepto: "Factura: NOMBRE - 001-001-000000001"
+                                                                    const concepto = doc.transacciones?.concepto || '';
+                                                                    const matchConcepto = concepto.match(/(\d{3}-\d{3}-\d{9})/);
+                                                                    if (matchConcepto) {
+                                                                        return <span title={`Comprobante interno: ${numComp}`}>{matchConcepto[1]}</span>;
+                                                                    }
+                                                                    // Extraer del clave_acceso_xml: dígitos 25-33 son el secuencial (posición 24-33 base 0)
+                                                                    const clave = doc.clave_acceso_xml || '';
+                                                                    if (clave.length >= 33) {
+                                                                        const estab = clave.substring(24, 27);
+                                                                        const pto = clave.substring(27, 30);
+                                                                        const sec = clave.substring(30, 39);
+                                                                        if (estab && pto && sec) {
+                                                                            return <span title="Extraído de clave de acceso">{estab}-{pto}-{sec}</span>;
+                                                                        }
+                                                                    }
+                                                                    return numComp || '—';
+                                                                })()}
                                                             </td>
                                                             <td style={{ padding: '12px', fontSize: '0.82rem', color: 'var(--text-sec)', whiteSpace: 'nowrap' }}>
                                                                 {doc.transacciones?.fecha ? new Date(doc.transacciones.fecha).toLocaleDateString('es-EC') : '—'}
