@@ -16,6 +16,29 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { supabase } from '../services/supabase';
+import JSZip from 'jszip';
+
+const mapIdProv = (tipoId: string | undefined): string => {
+  if (!tipoId) return '01';
+  if (tipoId === '04') return '01';
+  if (tipoId === '05') return '02';
+  if (tipoId === '06' || tipoId === '08') return '03';
+  return tipoId;
+};
+
+const formatDateForSRI = (dateString: string | undefined): string => {
+  if (!dateString) return '';
+  const parts = dateString.split('T')[0].split('-');
+  if (parts.length === 3) {
+    return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+  }
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
 
 interface ATSProps { empresaId: string; }
 
@@ -163,6 +186,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
   const compras = docs.filter(d => d.transacciones?.tipo_comprobante === 'Factura' && d.es_compra);
   const ventas = docs.filter(d => d.transacciones?.tipo_comprobante === 'Factura' && !d.es_compra);
   const retenciones = docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retención');
+  const retencionesRecibidas = docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retención' && !d.es_compra);
   const anulados = docs.filter(d => 
     d.transacciones?.concepto?.toLowerCase().includes('anulado') || 
     d.transacciones?.tipo_comprobante === 'Anulado'
@@ -176,7 +200,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
   const totalRetEmitido    = compras.reduce((s, d) =>
     s + (d.retenciones_aplicadas || []).reduce((a: number, r: any) => a + (r.valor || 0), 0), 0);
 
-  // Agrupamiento de Ventas por Cliente para el ATS
+  // Agrupamiento de Ventas por Cliente para el ATS con retenciones dinámicas
   const ventasAgrupadasPorCliente = Object.values(
     ventas.reduce((acc, v) => {
       const ent = v.transacciones?.entidades;
@@ -190,7 +214,9 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
           base0: 0,
           base12: 0,
           iva: 0,
-          total: 0
+          total: 0,
+          retIva: 0,
+          retRenta: 0
         };
       }
       acc[idCliente].numeroComprobantes += 1;
@@ -200,7 +226,28 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       acc[idCliente].total += (v.base_12 || 0) + (v.base_0 || 0) + (v.monto_iva || 0);
       return acc;
     }, {} as Record<string, any>)
-  );
+  ).map((v: any) => {
+    const retsCliente = retencionesRecibidas.filter(r => r.transacciones?.entidades?.ruc_cedula === v.ruc);
+    let totalRetIva = 0;
+    let totalRetRenta = 0;
+    
+    retsCliente.forEach(r => {
+      const retsAplicadas = r.retenciones_aplicadas || [];
+      retsAplicadas.forEach((ra: any) => {
+        if (ra.tipo === 'IVA') {
+          totalRetIva += ra.valor || 0;
+        } else if (ra.tipo === 'RENTA' || !ra.tipo) {
+          totalRetRenta += ra.valor || 0;
+        }
+      });
+    });
+    
+    return {
+      ...v,
+      retIva: totalRetIva,
+      retRenta: totalRetRenta
+    };
+  });
 
   // ─── COMPILADOR DE XML ATS (SRI COMPLIANT) ────────────────────
   const buildXMLString = (): string => {
@@ -213,13 +260,13 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
     // Obtener establecimientos únicos
     const estabsUnicos = [...new Set(docs.map(d => {
       const partes = (d.transacciones?.numero_comprobante || '').split('-');
-      return partes[0] || '001';
+      return partes[0]?.padStart(3, '0') || '001';
     }))];
     const numEstabs = String(estabsUnicos.length).padStart(3, '0');
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
-    xml += `<ats>\n`;
-    xml += `  <TipoIDInformante>04</TipoIDInformante>\n`;
+    xml += `<iva>\n`;
+    xml += `  <TipoIDInformante>R</TipoIDInformante>\n`;
     xml += `  <IdInformante>${empresa.ruc_empresa}</IdInformante>\n`;
     xml += `  <razonSocial>${empresa.nombre_empresa.replace(/&/g, '&amp;')}</razonSocial>\n`;
     xml += `  <Anio>${anio}</Anio>\n`;
@@ -234,24 +281,27 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       const ent = d.transacciones?.entidades;
       const num = d.transacciones?.numero_comprobante || '';
       const partes = num.split('-');
-      const estab = partes[0] || '001';
-      const ptoEmi = partes[1] || '001';
-      const sec    = partes[2] || '000000001';
+      const estab = partes[0]?.padStart(3, '0') || '001';
+      const ptoEmi = partes[1]?.padStart(3, '0') || '001';
+      const sec    = partes[2]?.padStart(9, '0') || '000000001';
       const fp     = d.forma_pago || '20';
-      const fechaFormat = d.transacciones?.fecha ? new Date(d.transacciones.fecha).toLocaleDateString('es-EC') : '';
+      const fechaFormat = formatDateForSRI(d.transacciones?.fecha);
 
       const rets = d.retenciones_aplicadas || [];
       const retRenta = rets.filter((r: any) => r.tipo === 'RENTA' || !r.tipo);
       const retIVA = rets.filter((r: any) => r.tipo === 'IVA');
 
-      // Calcular retenciones de IVA según código de porcentaje
-      const retBienes = retIVA.filter(r => r.porcentaje === 30 || r.porcentaje === 10).reduce((s, r) => s + r.valor, 0);
-      const retServicios = retIVA.filter(r => r.porcentaje === 70 || r.porcentaje === 20).reduce((s, r) => s + r.valor, 0);
+      // Calcular retenciones de IVA según código de porcentaje específico
+      const ret10 = retIVA.filter(r => r.porcentaje === 10).reduce((s, r) => s + r.valor, 0);
+      const ret20 = retIVA.filter(r => r.porcentaje === 20).reduce((s, r) => s + r.valor, 0);
+      const ret30 = retIVA.filter(r => r.porcentaje === 30).reduce((s, r) => s + r.valor, 0);
+      const ret50 = retIVA.filter(r => r.porcentaje === 50).reduce((s, r) => s + r.valor, 0);
+      const ret70 = retIVA.filter(r => r.porcentaje === 70).reduce((s, r) => s + r.valor, 0);
       const ret100 = retIVA.filter(r => r.porcentaje === 100).reduce((s, r) => s + r.valor, 0);
 
       xml += `    <detalleCompras>\n`;
       xml += `      <codSustento>01</codSustento>\n`;
-      xml += `      <tpIdProv>${ent?.tipo_identificacion || '04'}</tpIdProv>\n`;
+      xml += `      <tpIdProv>${mapIdProv(ent?.tipo_identificacion)}</tpIdProv>\n`;
       xml += `      <idProv>${ent?.ruc_cedula || ''}</idProv>\n`;
       xml += `      <tipoComprobante>01</tipoComprobante>\n`;
       xml += `      <parteRel>NO</parteRel>\n`;
@@ -266,10 +316,11 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       xml += `      <baseImpGrav>${(d.base_12 || 0).toFixed(2)}</baseImpGrav>\n`;
       xml += `      <montoIce>0.00</montoIce>\n`;
       xml += `      <montoIva>${(d.monto_iva || 0).toFixed(2)}</montoIva>\n`;
-      xml += `      <valRetBien10>0.00</valRetBien10>\n`;
-      xml += `      <valRetServ20>0.00</valRetServ20>\n`;
-      xml += `      <valorRetBienes>${retBienes.toFixed(2)}</valorRetBienes>\n`;
-      xml += `      <valorRetServicios>${retServicios.toFixed(2)}</valorRetServicios>\n`;
+      xml += `      <valRetBien10>${ret10.toFixed(2)}</valRetBien10>\n`;
+      xml += `      <valRetServ20>${ret20.toFixed(2)}</valRetServ20>\n`;
+      xml += `      <valorRetBienes>${ret30.toFixed(2)}</valorRetBienes>\n`;
+      xml += `      <valRetServ50>${ret50.toFixed(2)}</valRetServ50>\n`;
+      xml += `      <valorRetServicios>${ret70.toFixed(2)}</valorRetServicios>\n`;
       xml += `      <valRetServ100>${ret100.toFixed(2)}</valRetServ100>\n`;
       xml += `      <totbasesImpReemb>0.00</totbasesImpReemb>\n`;
       xml += `      <pagoExterior>\n        <pagoLocExt>01</pagoLocExt>\n      </pagoExterior>\n`;
@@ -305,8 +356,8 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       xml += `      <baseImpGrav>${v.base12.toFixed(2)}</baseImpGrav>\n`;
       xml += `      <montoIva>${v.iva.toFixed(2)}</montoIva>\n`;
       xml += `      <montoIce>0.00</montoIce>\n`;
-      xml += `      <valorRetIva>0.00</valorRetIva>\n`;
-      xml += `      <valorRetRenta>0.00</valorRetRenta>\n`;
+      xml += `      <valorRetIva>${v.retIva.toFixed(2)}</valorRetIva>\n`;
+      xml += `      <valorRetRenta>${v.retRenta.toFixed(2)}</valorRetRenta>\n`;
       xml += `      <formasDePago>\n        <formaPago>20</formaPago>\n      </formasDePago>\n`;
       xml += `    </detalleVentas>\n`;
     });
@@ -318,7 +369,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       // Sumar ventas reales del establecimiento
       const totalEstab = ventas.filter(d => {
         const partes = (d.transacciones?.numero_comprobante || '').split('-');
-        return (partes[0] || '001') === est;
+        return (partes[0]?.padStart(3, '0') || '001') === est;
       }).reduce((sum, d) => sum + (d.base_12 || 0) + (d.base_0 || 0) + (d.monto_iva || 0), 0);
 
       xml += `    <ventaEstablecimiento>\n`;
@@ -334,9 +385,9 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
     anulados.forEach(d => {
       const num = d.transacciones?.numero_comprobante || '';
       const partes = num.split('-');
-      const estab = partes[0] || '001';
-      const ptoEmi = partes[1] || '001';
-      const sec    = partes[2] || '000000001';
+      const estab = partes[0]?.padStart(3, '0') || '001';
+      const ptoEmi = partes[1]?.padStart(3, '0') || '001';
+      const sec    = partes[2]?.padStart(9, '0') || '000000001';
 
       xml += `    <detalleAnulados>\n`;
       xml += `      <tipoComprobante>01</tipoComprobante>\n`;
@@ -348,22 +399,32 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       xml += `    </detalleAnulados>\n`;
     });
     xml += `  </anulados>\n`;
-    xml += `</ats>`;
+    xml += `</iva>`;
 
     return xml;
   };
 
-  const generarXML = () => {
+  const generarXML = async () => {
     if (!empresa) return;
     const xml = buildXMLString();
     const mesStr = String(mes).padStart(2, '0');
-    const blob = new Blob([xml], { type: 'text/xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ATS_${mesStr}_${anio}_${empresa.ruc_empresa}.xml`;
-    a.click();
-    URL.revokeObjectURL(url);
+    
+    const zip = new JSZip();
+    const filename = `AT${mesStr}${anio}`;
+    zip.file(`${filename}.xml`, xml);
+    
+    try {
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${filename}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error generating ZIP:", err);
+      alert("Error al comprimir el archivo XML.");
+    }
   };
 
   const copyToClipboard = () => {

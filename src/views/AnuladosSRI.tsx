@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Ban, Search, Filter, ChevronLeft, ChevronRight,
-    RefreshCw, FileText, FileMinus, Receipt, Eye, Trash2, Loader2
+    RefreshCw, FileText, FileMinus, Receipt, Eye
 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 
@@ -32,13 +32,150 @@ interface DocAnulado {
 
 const ITEMS_PER_PAGE = 15;
 
+const parseConceptoAnulado = (concepto: string) => {
+    const regex = /^\[ANULADO\]\s*Motivo:\s*(.*?)\s*\|\s*Fecha:\s*(.*?)\s*\|\s*(.*)$/;
+    const match = concepto.match(regex);
+    if (match) {
+        return {
+            motivo: match[1],
+            fechaAnulacion: match[2],
+            conceptoOriginal: match[3]
+        };
+    }
+    return {
+        motivo: null,
+        fechaAnulacion: null,
+        conceptoOriginal: concepto.replace(/^\[ANULADO\]\s*/, '')
+    };
+};
+
+interface AnuladoDetailModalProps {
+    doc: DocAnulado;
+    onClose: () => void;
+}
+
+const AnuladoDetailModal: React.FC<AnuladoDetailModalProps> = ({ doc, onClose }) => {
+    const parsedConcepto = parseConceptoAnulado(doc.transacciones?.concepto || '');
+
+    const formatDate = (dateStr: string) =>
+        dateStr ? new Date(dateStr).toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(5,8,16,0.85)', backdropFilter: 'blur(12px)', padding: '20px', boxSizing: 'border-box' }}>
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="glass-card"
+                style={{ padding: '32px', width: '90%', maxWidth: '600px', maxHeight: '85vh', overflowY: 'auto' }}
+            >
+                <div className="flex-between" style={{ marginBottom: '24px' }}>
+                    <h3 className="h1" style={{ fontSize: '1.4rem', margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: '#6b7280' }}>
+                        <Ban size={20} /> Comprobante Anulado
+                    </h3>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-sec)', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
+                </div>
+
+                {/* Info banner */}
+                <div style={{ background: 'rgba(107,114,128,0.1)', border: '1px solid rgba(107,114,128,0.2)', borderRadius: 12, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.85rem', color: '#9ca3af' }}>
+                    <Ban size={16} />
+                    Este comprobante fue anulado. Sus valores contables están en cero y no afecta el libro diario ni el ATS.
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {/* Fila: entidad + comprobante */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Entidad</div>
+                            <div style={{ fontWeight: 800, fontSize: '1rem' }}>{doc.transacciones?.entidades?.nombre || '—'}</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-sec)', marginTop: 2, fontFamily: 'monospace' }}>{doc.transacciones?.entidades?.ruc_cedula || ''}</div>
+                        </div>
+                        <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Comprobante Contable</div>
+                            <div style={{ fontWeight: 800, fontSize: '1.1rem', fontFamily: 'monospace' }}>#{doc.transacciones?.numero_comprobante || '—'}</div>
+                            <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: 2 }}>Anulado</div>
+                        </div>
+                    </div>
+
+                    {/* Fila: fecha + origen */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Fecha</div>
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{doc.transacciones?.fecha ? formatDate(doc.transacciones.fecha) : '—'}</div>
+                        </div>
+                        <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Origen</div>
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: doc.es_compra ? '#f59e0b' : '#8b5cf6' }}>
+                                {doc.es_compra === true ? 'XML Compras' : doc.es_compra === false ? 'XML Ventas' : '—'}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Concepto */}
+                    <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Concepto Original</div>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--text-sec)', fontStyle: 'italic' }}>
+                            {parsedConcepto.conceptoOriginal}
+                        </div>
+                    </div>
+
+                    {/* Motivo de Anulación */}
+                    {parsedConcepto.motivo && (
+                        <div style={{ background: 'rgba(239, 68, 68, 0.04)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: 10, padding: '14px' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--error)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Motivo de la Anulación</div>
+                            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                                {parsedConcepto.motivo}
+                            </div>
+                            {parsedConcepto.fechaAnulacion && (
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-sec)', marginTop: 4 }}>
+                                    Anulado el {parsedConcepto.fechaAnulacion}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {doc.clave_acceso_xml && (
+                        <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Clave de Acceso SRI</div>
+                            <div style={{ fontSize: '0.78rem', fontFamily: 'monospace', color: 'var(--text-sec)', wordBreak: 'break-all' }}>{doc.clave_acceso_xml}</div>
+                        </div>
+                    )}
+
+                    {/* Valores (todos en cero al estar anulado) */}
+                    <div style={{ background: 'rgba(107,114,128,0.05)', border: '1px dashed rgba(107,114,128,0.2)', borderRadius: 10, padding: '14px' }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 10 }}>Valores Tributarios (Anulados)</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                            {[
+                                { label: 'Base Gravada 12/15/5%', val: doc.base_12 },
+                                { label: 'Base Gravada 0%', val: doc.base_0 },
+                                { label: 'Base No Objeto', val: doc.base_no_objeto },
+                                { label: 'IVA', val: doc.monto_iva },
+                            ].map(item => (
+                                <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                    <span style={{ color: 'var(--text-sec)' }}>{item.label}</span>
+                                    <span style={{ fontWeight: 700, color: '#6b7280', textDecoration: 'line-through' }}>${(item.val || 0).toFixed(2)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>
+                    <button onClick={onClose} className="btn btn-primary" style={{ padding: '10px 28px', borderRadius: 12 }}>
+                        Cerrar
+                    </button>
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+
 export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
     const [documentos, setDocumentos] = useState<DocAnulado[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [filterTipo, setFilterTipo] = useState<'todos' | 'compras' | 'ventas'>('todos');
     const [currentPage, setCurrentPage] = useState(1);
-    const [deletingId, setDeletingId] = useState<string | null>(null);
     const [viewingDoc, setViewingDoc] = useState<DocAnulado | null>(null);
 
     const fetchAnulados = useCallback(async () => {
@@ -94,23 +231,7 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
         return () => { document.body.style.overflow = ''; };
     }, [viewingDoc]);
 
-    const handleEliminarDefinitivo = async (doc: DocAnulado) => {
-        if (!confirm(`¿Eliminar definitivamente el registro anulado del comprobante ${doc.transacciones?.numero_comprobante || ''}? Esta acción no se puede deshacer.`)) return;
-        setDeletingId(doc.id);
-        try {
-            if (doc.transacciones?.id) {
-                await supabase.from('movimientos').delete().eq('id_transaccion', doc.transacciones.id);
-                await supabase.from('transacciones').delete().eq('id', doc.transacciones.id);
-            }
-            await supabase.from('documentos_sri').delete().eq('id', doc.id);
-            setDocumentos(prev => prev.filter(d => d.id !== doc.id));
-        } catch (err) {
-            console.error('Error eliminando anulado:', err);
-            alert('Error al eliminar el registro.');
-        } finally {
-            setDeletingId(null);
-        }
-    };
+
 
     // Filtrado
     const filtered = documentos.filter(doc => {
@@ -297,14 +418,6 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
                                                             >
                                                                 <Eye size={14} /> Ver
                                                             </button>
-                                                            <button
-                                                                onClick={() => handleEliminarDefinitivo(doc)}
-                                                                disabled={deletingId === doc.id}
-                                                                title="Eliminar registro definitivamente"
-                                                                style={{ background: 'rgba(239,68,68,0.1)', border: 'none', color: 'var(--error)', cursor: 'pointer', padding: '6px 10px', borderRadius: 8, display: 'inline-flex', alignItems: 'center', transition: 'all 0.2s' }}
-                                                            >
-                                                                {deletingId === doc.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                                                            </button>
                                                         </div>
                                                     </td>
                                                 </motion.tr>
@@ -338,98 +451,10 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
             {/* ─── MODAL VER DETALLE ─── */}
             <AnimatePresence>
                 {viewingDoc && (
-                    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(5,8,16,0.85)', backdropFilter: 'blur(12px)', padding: '20px', boxSizing: 'border-box' }}>
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            className="glass-card"
-                            style={{ padding: '32px', width: '90%', maxWidth: '600px', maxHeight: '85vh', overflowY: 'auto' }}
-                        >
-                            <div className="flex-between" style={{ marginBottom: '24px' }}>
-                                <h3 className="h1" style={{ fontSize: '1.4rem', margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: '#6b7280' }}>
-                                    <Ban size={20} /> Comprobante Anulado
-                                </h3>
-                                <button onClick={() => setViewingDoc(null)} style={{ background: 'none', border: 'none', color: 'var(--text-sec)', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
-                            </div>
-
-                            {/* Info banner */}
-                            <div style={{ background: 'rgba(107,114,128,0.1)', border: '1px solid rgba(107,114,128,0.2)', borderRadius: 12, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.85rem', color: '#9ca3af' }}>
-                                <Ban size={16} />
-                                Este comprobante fue anulado. Sus valores contables están en cero y no afecta el libro diario ni el ATS.
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                                {/* Fila: entidad + comprobante */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                                    <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
-                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Entidad</div>
-                                        <div style={{ fontWeight: 800, fontSize: '1rem' }}>{viewingDoc.transacciones?.entidades?.nombre || '—'}</div>
-                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-sec)', marginTop: 2, fontFamily: 'monospace' }}>{viewingDoc.transacciones?.entidades?.ruc_cedula || ''}</div>
-                                    </div>
-                                    <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
-                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Comprobante Contable</div>
-                                        <div style={{ fontWeight: 800, fontSize: '1.1rem', fontFamily: 'monospace' }}>#{viewingDoc.transacciones?.numero_comprobante || '—'}</div>
-                                        <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: 2 }}>Anulado</div>
-                                    </div>
-                                </div>
-
-                                {/* Fila: fecha + origen */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                                    <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
-                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Fecha</div>
-                                        <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{viewingDoc.transacciones?.fecha ? formatDate(viewingDoc.transacciones.fecha) : '—'}</div>
-                                    </div>
-                                    <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
-                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Origen</div>
-                                        <div style={{ fontWeight: 700, fontSize: '0.95rem', color: viewingDoc.es_compra ? '#f59e0b' : '#8b5cf6' }}>
-                                            {viewingDoc.es_compra === true ? 'XML Compras' : viewingDoc.es_compra === false ? 'XML Ventas' : '—'}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Concepto */}
-                                <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
-                                    <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Concepto Original</div>
-                                    <div style={{ fontSize: '0.9rem', color: 'var(--text-sec)', fontStyle: 'italic' }}>
-                                        {(viewingDoc.transacciones?.concepto || '').replace('[ANULADO] ', '')}
-                                    </div>
-                                </div>
-
-                                {/* Clave de acceso */}
-                                {viewingDoc.clave_acceso_xml && (
-                                    <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
-                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Clave de Acceso SRI</div>
-                                        <div style={{ fontSize: '0.78rem', fontFamily: 'monospace', color: 'var(--text-sec)', wordBreak: 'break-all' }}>{viewingDoc.clave_acceso_xml}</div>
-                                    </div>
-                                )}
-
-                                {/* Valores (todos en cero al estar anulado) */}
-                                <div style={{ background: 'rgba(107,114,128,0.05)', border: '1px dashed rgba(107,114,128,0.2)', borderRadius: 10, padding: '14px' }}>
-                                    <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 10 }}>Valores Tributarios (Anulados)</div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                                        {[
-                                            { label: 'Base Gravada 12/15/5%', val: viewingDoc.base_12 },
-                                            { label: 'Base Gravada 0%', val: viewingDoc.base_0 },
-                                            { label: 'Base No Objeto', val: viewingDoc.base_no_objeto },
-                                            { label: 'IVA', val: viewingDoc.monto_iva },
-                                        ].map(item => (
-                                            <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                                <span style={{ color: 'var(--text-sec)' }}>{item.label}</span>
-                                                <span style={{ fontWeight: 700, color: '#6b7280', textDecoration: 'line-through' }}>${(item.val || 0).toFixed(2)}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>
-                                <button onClick={() => setViewingDoc(null)} className="btn btn-primary" style={{ padding: '10px 28px', borderRadius: 12 }}>
-                                    Cerrar
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
+                    <AnuladoDetailModal
+                        doc={viewingDoc}
+                        onClose={() => setViewingDoc(null)}
+                    />
                 )}
             </AnimatePresence>
         </div>

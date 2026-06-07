@@ -69,6 +69,7 @@ body {
   overflow-y: auto;
 }
 
+/* 🎴 GLASS CARDS */
 .glass-card {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
@@ -87,6 +88,15 @@ body {
 
 [data-theme="light"] .glass-card:hover {
   background: rgba(255, 255, 255, 0.95);
+}
+
+.glass-card.anulado {
+  border-left: 6px solid var(--error) !important;
+}
+
+.glass-card.anulado:hover {
+  border-color: var(--error) !important;
+  box-shadow: 0 20px 60px -15px rgba(239, 68, 68, 0.2) !important;
 }
 
 .btn {

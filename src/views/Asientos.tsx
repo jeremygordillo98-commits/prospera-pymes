@@ -3,7 +3,7 @@ import { BookOpen, PlusCircle, Save, Trash2, Loader2, AlertTriangle } from 'luci
 import { supabase } from '../services/supabase';
 import { AccountSelector } from '../components/AccountSelector';
 
-interface Props { empresaId: string; }
+interface Props { empresaId: string; activeView?: string; }
 interface Account { id: string; codigo_cuenta: string; nombre: string; tipo: string; }
 interface Entity { id: string; razon_social: string; ruc_cedula: string; }
 interface Line { id: string; id_cuenta: string; detalle: string; debe: string; haber: string; }
@@ -30,9 +30,12 @@ const getNextNumeroComprobante = async (empresaId: string): Promise<string> => {
     let maxNum = 0;
     data.forEach(tx => {
       if (tx.numero_comprobante) {
-        const num = parseInt(tx.numero_comprobante.trim(), 10);
-        if (!isNaN(num) && num > maxNum) {
-          maxNum = num;
+        const val = tx.numero_comprobante.trim();
+        if (/^\d+$/.test(val)) {
+          const num = parseInt(val, 10);
+          if (!isNaN(num) && num > maxNum) {
+            maxNum = num;
+          }
         }
       }
     });
@@ -45,12 +48,13 @@ const getNextNumeroComprobante = async (empresaId: string): Promise<string> => {
 
 
 
-export const Asientos: React.FC<Props> = ({ empresaId }) => {
+export const Asientos: React.FC<Props> = ({ empresaId, activeView }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string>('');
+  const [isNumeroEdited, setIsNumeroEdited] = useState(false);
   
   const [form, setForm] = useState({
     fecha: new Date().toISOString().slice(0, 10),
@@ -60,6 +64,45 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
     id_entidad: '',
   });
   const [lines, setLines] = useState<Line[]>([createLine(), createLine()]);
+
+  // Actualizar el número de comprobante cuando cambie el activeView, empresaId o a través de Supabase Realtime
+  useEffect(() => {
+    if (!empresaId || empresaId === 'undefined') return;
+
+    const updateNumber = () => {
+      getNextNumeroComprobante(empresaId).then(nextNum => {
+        if (!isNumeroEdited) {
+          setForm(prev => ({ ...prev, numero_comprobante: nextNum }));
+        }
+      });
+    };
+
+    // Actualizar al enfocar/activar la vista o cuando cambia la empresa
+    if (!activeView || activeView === 'asientos') {
+      updateNumber();
+    }
+
+    // Suscribirse a cambios en tiempo real en la tabla de transacciones de Supabase
+    const channelTx = supabase
+      .channel(`transacciones_asientos_${empresaId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transacciones',
+          filter: `id_empresa=eq.${empresaId}`
+        },
+        () => {
+          updateNumber();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channelTx);
+    };
+  }, [empresaId, activeView, isNumeroEdited]);
 
   useEffect(() => {
     if (!empresaId || empresaId === 'undefined') return;
@@ -90,6 +133,18 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
           if (parsed.form && parsed.lines) {
             setForm(parsed.form);
             setLines(parsed.lines);
+            
+            let draftEdited = false;
+            if (parsed.isNumeroEdited !== undefined) {
+              setIsNumeroEdited(parsed.isNumeroEdited);
+              draftEdited = parsed.isNumeroEdited;
+            }
+            
+            // Si el número no fue editado por el usuario, actualizamos con el valor más fresco de la DB
+            if (!draftEdited) {
+              setForm(prev => ({ ...prev, numero_comprobante: nextNum }));
+            }
+
             setLoading(false);
             return;
           }
@@ -97,6 +152,7 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
       }
 
       setForm(prev => ({ ...prev, numero_comprobante: nextNum }));
+      setIsNumeroEdited(false);
       setLines([createLine(), createLine()]);
       setLoading(false);
     };
@@ -105,9 +161,9 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
 
   useEffect(() => {
     if (loading || !empresaId || empresaId === 'undefined') return;
-    const draft = { form, lines };
+    const draft = { form, lines, isNumeroEdited };
     localStorage.setItem(`pymes_asiento_draft_${empresaId}`, JSON.stringify(draft));
-  }, [form, lines, loading, empresaId]);
+  }, [form, lines, isNumeroEdited, loading, empresaId]);
 
   const totals = useMemo(() => {
     const debe = lines.reduce((acc, line) => acc + (parseFloat(line.debe) || 0), 0);
@@ -132,6 +188,7 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
     getNextNumeroComprobante(empresaId).then(nextNum => {
       setForm({ fecha: new Date().toISOString().slice(0, 10), concepto: '', tipo_comprobante: 'Asiento Manual', numero_comprobante: nextNum, id_entidad: '' });
       setLines([createLine(), createLine()]);
+      setIsNumeroEdited(false);
     });
     localStorage.removeItem(`pymes_asiento_draft_${empresaId}`);
   };
@@ -150,7 +207,11 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
       const { data: auth } = await supabase.auth.getUser();
       const userId = auth?.user?.id;
       let finalNum = form.numero_comprobante.trim();
-      if (!finalNum) finalNum = await getNextNumeroComprobante(empresaId);
+      
+      // Si el número no fue editado manualmente o está vacío, recalculamos al guardar
+      if (!isNumeroEdited || !finalNum) {
+        finalNum = await getNextNumeroComprobante(empresaId);
+      }
 
       const { data: transaccion, error: txError } = await supabase
         .from('transacciones')
@@ -213,7 +274,7 @@ export const Asientos: React.FC<Props> = ({ empresaId }) => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
             <div><label className="text-sec" style={{ display: 'block', marginBottom: 8 }}>Fecha</label><input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} style={inputStyle} /></div>
             <div><label className="text-sec" style={{ display: 'block', marginBottom: 8 }}>Tipo comprobante</label><input value={form.tipo_comprobante} onChange={(e) => setForm({ ...form, tipo_comprobante: e.target.value })} style={inputStyle} /></div>
-            <div><label className="text-sec" style={{ display: 'block', marginBottom: 8 }}>No. comprobante</label><input value={form.numero_comprobante} onChange={(e) => setForm({ ...form, numero_comprobante: e.target.value })} style={inputStyle} placeholder="Opcional" /></div>
+            <div><label className="text-sec" style={{ display: 'block', marginBottom: 8 }}>No. comprobante</label><input value={form.numero_comprobante} readOnly style={{ ...inputStyle, opacity: 0.7, cursor: 'not-allowed' }} placeholder="Automático" /></div>
             <div><label className="text-sec" style={{ display: 'block', marginBottom: 8 }}>Tercero</label>
               <select value={form.id_entidad} onChange={(e) => setForm({ ...form, id_entidad: e.target.value })} style={inputStyle}>
                 <option value="">Sin tercero</option>

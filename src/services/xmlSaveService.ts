@@ -24,9 +24,12 @@ export const getNextNumeroComprobante = async (empresaId: string): Promise<strin
     let maxNum = 0;
     data.forEach(tx => {
       if (tx.numero_comprobante) {
-        const num = parseInt(tx.numero_comprobante.trim(), 10);
-        if (!isNaN(num) && num > maxNum) {
-          maxNum = num;
+        const val = tx.numero_comprobante.trim();
+        if (/^\d+$/.test(val)) {
+          const num = parseInt(val, 10);
+          if (!isNaN(num) && num > maxNum) {
+            maxNum = num;
+          }
         }
       }
     });
