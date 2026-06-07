@@ -296,7 +296,7 @@ const App = () => {
       case 'libro-diario': return <LibroDiario empresaId={selectedEmpresa.id} activeView={activeView} />;
       case 'entidades': return <Entidades empresaId={selectedEmpresa.id} />;
       case 'plan-cuentas': return <PlanCuentas empresaId={selectedEmpresa.id} />;
-      case 'asientos': return <Asientos empresaId={selectedEmpresa.id} />;
+      case 'asientos': return <Asientos empresaId={selectedEmpresa.id} activeView={activeView} />;
       case 'tesoreria': return <Tesoreria empresaId={selectedEmpresa.id} mode="resumen" />;
       case 'cobros': return <Tesoreria empresaId={selectedEmpresa.id} mode="cobros" />;
       case 'pagos': return <Tesoreria empresaId={selectedEmpresa.id} mode="pagos" />;

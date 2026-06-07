@@ -31,6 +31,7 @@ export const AccountSelector: React.FC<AccountSelectorProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [openUpward, setOpenUpward] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +61,34 @@ export const AccountSelector: React.FC<AccountSelectorProps> = ({
     if (isOpen && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
+    }
+  }, [isOpen]);
+
+  // Detectar espacio disponible debajo para decidir si abrir hacia arriba
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      
+      // Buscar el contenedor scroll/clipping más cercano
+      let clippingParentBottom = viewportHeight;
+      let parent = containerRef.current.parentElement;
+      while (parent && parent !== document.body && parent !== document.documentElement) {
+        const style = window.getComputedStyle(parent);
+        const overflow = (style.overflow || '') + (style.overflowY || '') + (style.overflowX || '');
+        if (/auto|scroll|hidden/.test(overflow)) {
+          clippingParentBottom = Math.min(clippingParentBottom, parent.getBoundingClientRect().bottom);
+          break;
+        }
+        parent = parent.parentElement;
+      }
+
+      const spaceBelow = clippingParentBottom - rect.bottom;
+      if (spaceBelow < 240) {
+        setOpenUpward(true);
+      } else {
+        setOpenUpward(false);
+      }
     }
   }, [isOpen]);
 
@@ -174,7 +203,8 @@ export const AccountSelector: React.FC<AccountSelectorProps> = ({
         <div 
           style={{
             position: 'absolute',
-            top: 'calc(100% + 4px)',
+            top: openUpward ? 'auto' : 'calc(100% + 4px)',
+            bottom: openUpward ? 'calc(100% + 4px)' : 'auto',
             left: 0,
             right: 0,
             zIndex: 9999,
