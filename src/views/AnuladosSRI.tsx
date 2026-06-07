@@ -32,21 +32,39 @@ interface DocAnulado {
 
 const ITEMS_PER_PAGE = 15;
 
+// Parsea el concepto [ANULADO] para extraer motivo, fecha, concepto original y valores originales
 const parseConceptoAnulado = (concepto: string) => {
-    const regex = /^\[ANULADO\]\s*Motivo:\s*(.*?)\s*\|\s*Fecha:\s*(.*?)\s*\|\s*(.*)$/;
+    // Regex con ValoresOriginales opcionales al final
+    const regex = /^\[ANULADO\]\s*Motivo:\s*(.*?)\s*\|\s*Fecha:\s*(.*?)\s*\|\s*(.*?)(?:\s*\|\s*ValoresOriginales:\s*(.*))?$/;
     const match = concepto.match(regex);
     if (match) {
+        let valoresOriginales = null;
+        if (match[4]) {
+            try { valoresOriginales = JSON.parse(match[4]); } catch {}
+        }
         return {
             motivo: match[1],
             fechaAnulacion: match[2],
-            conceptoOriginal: match[3]
+            conceptoOriginal: match[3],
+            valoresOriginales
         };
     }
     return {
         motivo: null,
         fechaAnulacion: null,
-        conceptoOriginal: concepto.replace(/^\[ANULADO\]\s*/, '')
+        conceptoOriginal: concepto.replace(/^\[ANULADO\]\s*/, ''),
+        valoresOriginales: null
     };
+};
+
+// Extrae el número SRI del concepto, numero_comprobante o clave_acceso_xml
+const extractXmlNumero = (concepto: string, numComp: string, clave: string): string | null => {
+    const sriRegex = /\d{3}-\d{3}-\d{9}/;
+    const m = concepto.match(sriRegex);
+    if (m) return m[0];
+    if (sriRegex.test(numComp.trim())) return numComp.trim();
+    if (clave.length >= 39) return `${clave.substring(24,27)}-${clave.substring(27,30)}-${clave.substring(30,39)}`;
+    return null;
 };
 
 interface AnuladoDetailModalProps {
@@ -56,6 +74,12 @@ interface AnuladoDetailModalProps {
 
 const AnuladoDetailModal: React.FC<AnuladoDetailModalProps> = ({ doc, onClose }) => {
     const parsedConcepto = parseConceptoAnulado(doc.transacciones?.concepto || '');
+    const xmlNumero = extractXmlNumero(
+        parsedConcepto.conceptoOriginal,
+        doc.transacciones?.numero_comprobante || '',
+        doc.clave_acceso_xml || ''
+    );
+    const valOrig = parsedConcepto.valoresOriginales;
 
     const formatDate = (dateStr: string) =>
         dateStr ? new Date(dateStr).toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
@@ -67,7 +91,7 @@ const AnuladoDetailModal: React.FC<AnuladoDetailModalProps> = ({ doc, onClose })
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 className="glass-card"
-                style={{ padding: '32px', width: '90%', maxWidth: '600px', maxHeight: '85vh', overflowY: 'auto' }}
+                style={{ padding: '32px', width: '90%', maxWidth: '620px', maxHeight: '88vh', overflowY: 'auto' }}
             >
                 <div className="flex-between" style={{ marginBottom: '24px' }}>
                     <h3 className="h1" style={{ fontSize: '1.4rem', margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: '#6b7280' }}>
@@ -79,7 +103,7 @@ const AnuladoDetailModal: React.FC<AnuladoDetailModalProps> = ({ doc, onClose })
                 {/* Info banner */}
                 <div style={{ background: 'rgba(107,114,128,0.1)', border: '1px solid rgba(107,114,128,0.2)', borderRadius: 12, padding: '12px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.85rem', color: '#9ca3af' }}>
                     <Ban size={16} />
-                    Este comprobante fue anulado. Sus valores contables están en cero y no afecta el libro diario ni el ATS.
+                    Este comprobante fue anulado. Sus valores contables están en cero y <strong style={{ color: '#f59e0b' }}>&nbsp;NO afectan&nbsp;</strong> el libro diario, ATS ni ningún análisis.
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -92,8 +116,15 @@ const AnuladoDetailModal: React.FC<AnuladoDetailModalProps> = ({ doc, onClose })
                         </div>
                         <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
                             <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Comprobante Contable</div>
-                            <div style={{ fontWeight: 800, fontSize: '1.1rem', fontFamily: 'monospace' }}>#{doc.transacciones?.numero_comprobante || '—'}</div>
-                            <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: 2 }}>Anulado</div>
+                            <div style={{ fontWeight: 800, fontSize: '1.1rem', fontFamily: 'monospace', color: '#6b7280', textDecoration: 'line-through' }}>
+                                #{doc.transacciones?.numero_comprobante || '—'}
+                            </div>
+                            {xmlNumero && (
+                                <div style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--text-sec)', marginTop: 4 }}>{xmlNumero}</div>
+                            )}
+                            <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <Ban size={11} /> Anulado
+                            </div>
                         </div>
                     </div>
 
@@ -111,7 +142,7 @@ const AnuladoDetailModal: React.FC<AnuladoDetailModalProps> = ({ doc, onClose })
                         </div>
                     </div>
 
-                    {/* Concepto */}
+                    {/* Concepto original */}
                     <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Concepto Original</div>
                         <div style={{ fontSize: '0.9rem', color: 'var(--text-sec)', fontStyle: 'italic' }}>
@@ -141,22 +172,68 @@ const AnuladoDetailModal: React.FC<AnuladoDetailModalProps> = ({ doc, onClose })
                         </div>
                     )}
 
-                    {/* Valores (todos en cero al estar anulado) */}
-                    <div style={{ background: 'rgba(107,114,128,0.05)', border: '1px dashed rgba(107,114,128,0.2)', borderRadius: 10, padding: '14px' }}>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 10 }}>Valores Tributarios (Anulados)</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                            {[
-                                { label: 'Base Gravada 12/15/5%', val: doc.base_12 },
-                                { label: 'Base Gravada 0%', val: doc.base_0 },
-                                { label: 'Base No Objeto', val: doc.base_no_objeto },
-                                { label: 'IVA', val: doc.monto_iva },
-                            ].map(item => (
-                                <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                    <span style={{ color: 'var(--text-sec)' }}>{item.label}</span>
-                                    <span style={{ fontWeight: 700, color: '#6b7280', textDecoration: 'line-through' }}>${(item.val || 0).toFixed(2)}</span>
-                                </div>
-                            ))}
+                    {/* Valores Originales del documento (solo referencia) */}
+                    <div style={{ background: valOrig ? 'rgba(16,185,129,0.04)' : 'rgba(107,114,128,0.05)', border: `1px dashed ${valOrig ? 'rgba(16,185,129,0.25)' : 'rgba(107,114,128,0.2)'}`, borderRadius: 10, padding: '14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                            <div style={{ fontSize: '0.72rem', color: valOrig ? '#10b981' : 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase' }}>
+                                Valores Originales de la Factura
+                            </div>
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', padding: '2px 8px', borderRadius: 20, fontWeight: 700 }}>
+                                Solo referencia · No afecta reportes
+                            </span>
                         </div>
+
+                        {valOrig ? (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                                {[
+                                    { label: 'Base Gravada 12/15/5%', val: valOrig.base_12 },
+                                    { label: 'Base Gravada 0%', val: valOrig.base_0 },
+                                    { label: 'Base No Objeto', val: valOrig.base_no_objeto },
+                                    { label: 'IVA', val: valOrig.monto_iva },
+                                ].map(item => (
+                                    <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                        <span style={{ color: 'var(--text-sec)' }}>{item.label}</span>
+                                        <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>${(item.val || 0).toFixed(2)}</span>
+                                    </div>
+                                ))}
+                                {/* Total */}
+                                <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', padding: '8px 0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 4 }}>
+                                    <span style={{ fontWeight: 700 }}>Total Original</span>
+                                    <span style={{ fontWeight: 800, color: '#10b981' }}>
+                                        ${((valOrig.base_12||0) + (valOrig.base_0||0) + (valOrig.base_no_objeto||0) + (valOrig.monto_iva||0)).toFixed(2)}
+                                    </span>
+                                </div>
+                                {/* Retenciones */}
+                                {valOrig.retenciones_aplicadas && valOrig.retenciones_aplicadas.length > 0 && (
+                                    <div style={{ gridColumn: '1 / -1', marginTop: 8 }}>
+                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Retenciones Originales</div>
+                                        {valOrig.retenciones_aplicadas.map((r: any, i: number) => (
+                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '4px 0' }}>
+                                                <span style={{ color: 'var(--text-sec)' }}>{r.tipo} {r.porcentaje ? `(${r.porcentaje}%)` : ''}</span>
+                                                <span style={{ fontWeight: 700 }}>${(r.valor || 0).toFixed(2)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                                {[
+                                    { label: 'Base Gravada 12/15/5%', val: doc.base_12 },
+                                    { label: 'Base Gravada 0%', val: doc.base_0 },
+                                    { label: 'Base No Objeto', val: doc.base_no_objeto },
+                                    { label: 'IVA', val: doc.monto_iva },
+                                ].map(item => (
+                                    <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                        <span style={{ color: 'var(--text-sec)' }}>{item.label}</span>
+                                        <span style={{ fontWeight: 700, color: '#6b7280', textDecoration: 'line-through' }}>${(item.val || 0).toFixed(2)}</span>
+                                    </div>
+                                ))}
+                                <div style={{ gridColumn: '1 / -1', fontSize: '0.72rem', color: '#6b7280', marginTop: 8, fontStyle: 'italic' }}>
+                                    * Los valores originales no están disponibles para este documento (anulado antes de la actualización).
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -198,13 +275,11 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
 
             if (error) throw error;
 
-            // Supabase devuelve transacciones como array; tomamos el primer elemento
             const normalized = (data || []).map((d: any) => ({
                 ...d,
                 transacciones: Array.isArray(d.transacciones) ? d.transacciones[0] ?? null : d.transacciones
             }));
 
-            // Filtrar solo los que tienen transacción con tipo_comprobante === 'Anulado'
             const anulados = normalized.filter(
                 (d: any) => d.transacciones?.tipo_comprobante === 'Anulado'
             ) as DocAnulado[];
@@ -221,7 +296,6 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
         fetchAnulados();
     }, [fetchAnulados]);
 
-    // Bloqueo scroll cuando modal abierto
     useEffect(() => {
         if (viewingDoc) {
             document.body.style.overflow = 'hidden';
@@ -231,9 +305,6 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
         return () => { document.body.style.overflow = ''; };
     }, [viewingDoc]);
 
-
-
-    // Filtrado
     const filtered = documentos.filter(doc => {
         const concepto = doc.transacciones?.concepto?.toLowerCase() || '';
         const numero = doc.transacciones?.numero_comprobante?.toLowerCase() || '';
@@ -357,12 +428,31 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
                                     <tbody>
                                         {paginated.map((doc, idx) => {
                                             const concepto = doc.transacciones?.concepto || '';
+                                            const parsedC = parseConceptoAnulado(concepto);
+                                            const conceptoOrig = parsedC.conceptoOriginal;
+
                                             // Detectar tipo original por el concepto
-                                            const isRet = concepto.toLowerCase().includes('retención') || concepto.toLowerCase().includes('retencion');
-                                            const isNC = concepto.toLowerCase().includes('nc:') || concepto.toLowerCase().includes('nota de crédito') || concepto.toLowerCase().includes('nota de credito');
+                                            const isRet = conceptoOrig.toLowerCase().includes('retención') || conceptoOrig.toLowerCase().includes('retencion');
+                                            const isNC = conceptoOrig.toLowerCase().includes('nc:') || conceptoOrig.toLowerCase().includes('nota de crédito') || conceptoOrig.toLowerCase().includes('nota de credito');
                                             const tipoOriginal = isRet ? 'Retención' : isNC ? 'Nota de Crédito' : 'Factura';
                                             const tipoIcon = isRet ? <Receipt size={13} /> : isNC ? <FileMinus size={13} /> : <FileText size={13} />;
                                             const origen = doc.es_compra === true ? 'Compras' : doc.es_compra === false ? 'Ventas' : '—';
+
+                                            // Número SRI del XML
+                                            const numComp = (doc.transacciones?.numero_comprobante || '').trim();
+                                            const xmlNumero = extractXmlNumero(conceptoOrig, numComp, doc.clave_acceso_xml || '');
+                                            const isSRIFormat = /\d{3}-\d{3}-\d{9}/.test(numComp);
+
+                                            // Número secuencial (comprobante contable)
+                                            const secuencialDisplay = isSRIFormat
+                                                ? String(filtered.length - ((currentPage - 1) * ITEMS_PER_PAGE + idx))
+                                                : numComp || String(filtered.length - ((currentPage - 1) * ITEMS_PER_PAGE + idx));
+
+                                            // Valores originales para mostrar total en tabla
+                                            const valOrig = parsedC.valoresOriginales;
+                                            const totalOrig = valOrig
+                                                ? (valOrig.base_12||0) + (valOrig.base_0||0) + (valOrig.base_no_objeto||0) + (valOrig.monto_iva||0)
+                                                : null;
 
                                             return (
                                                 <motion.tr
@@ -370,27 +460,39 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
                                                     initial={{ opacity: 0, y: 8 }}
                                                     animate={{ opacity: 1, y: 0 }}
                                                     transition={{ delay: idx * 0.03 }}
-                                                    style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s', opacity: 0.75 }}
+                                                    style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s', opacity: 0.8 }}
                                                     onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
                                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                                 >
-                                                    {/* Tipo */}
+                                                    {/* TIPO + número de factura debajo */}
                                                     <td style={{ padding: '12px 12px' }}>
-                                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 700, color: '#6b7280', background: 'rgba(107,114,128,0.1)', padding: '4px 10px', borderRadius: 20, whiteSpace: 'nowrap', textDecoration: 'line-through' }}>
-                                                            {tipoIcon} {tipoOriginal}
-                                                        </span>
-                                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', fontWeight: 700, color: '#6b7280', marginLeft: 6 }}>
-                                                            <Ban size={11} /> Anulado
-                                                        </span>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 700, color: '#6b7280', background: 'rgba(107,114,128,0.1)', padding: '4px 10px', borderRadius: 20, whiteSpace: 'nowrap', textDecoration: 'line-through' }}>
+                                                                {tipoIcon} {tipoOriginal}
+                                                            </span>
+                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', fontWeight: 700, color: '#ef4444' }}>
+                                                                <Ban size={11} /> Anulado
+                                                            </span>
+                                                        </div>
+                                                        {xmlNumero && (
+                                                            <div style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'var(--text-sec)', marginTop: 5, letterSpacing: '0.3px', whiteSpace: 'nowrap' }}>
+                                                                {xmlNumero}
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     {/* Entidad */}
                                                     <td style={{ padding: '12px', fontSize: '0.85rem', fontWeight: 600, maxWidth: 180 }}>
                                                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.transacciones?.entidades?.nombre || '—'}</div>
                                                         <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', marginTop: 2 }}>{doc.transacciones?.entidades?.ruc_cedula || ''}</div>
                                                     </td>
-                                                    {/* Comprobante */}
-                                                    <td style={{ padding: '12px', fontSize: '0.82rem', fontWeight: 600, fontFamily: 'monospace', color: '#6b7280' }}>
-                                                        #{doc.transacciones?.numero_comprobante || '—'}
+                                                    {/* Comprobante secuencial */}
+                                                    <td style={{ padding: '12px', fontSize: '0.82rem', fontWeight: 700, fontFamily: 'monospace', textAlign: 'center', color: '#6b7280' }}>
+                                                        {secuencialDisplay}
+                                                        {totalOrig !== null && (
+                                                            <div style={{ fontSize: '0.7rem', color: '#6b7280', textDecoration: 'line-through', marginTop: 2, fontWeight: 400 }}>
+                                                                ${totalOrig.toFixed(2)}
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     {/* Fecha */}
                                                     <td style={{ padding: '12px', fontSize: '0.82rem', color: 'var(--text-sec)', whiteSpace: 'nowrap' }}>
@@ -410,15 +512,13 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
                                                     </td>
                                                     {/* Acciones */}
                                                     <td style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                                                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                                                            <button
-                                                                onClick={() => setViewingDoc(doc)}
-                                                                title="Ver detalle"
-                                                                style={{ background: 'rgba(59,130,246,0.1)', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '6px 12px', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', fontWeight: 700 }}
-                                                            >
-                                                                <Eye size={14} /> Ver
-                                                            </button>
-                                                        </div>
+                                                        <button
+                                                            onClick={() => setViewingDoc(doc)}
+                                                            title="Ver detalle"
+                                                            style={{ background: 'rgba(59,130,246,0.1)', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '6px 12px', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', fontWeight: 700 }}
+                                                        >
+                                                            <Eye size={14} /> Ver
+                                                        </button>
                                                     </td>
                                                 </motion.tr>
                                             );
