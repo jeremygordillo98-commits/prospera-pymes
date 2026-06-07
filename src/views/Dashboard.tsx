@@ -211,7 +211,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ empresaId }) => {
                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
                                 <XAxis dataKey="name" stroke="var(--text-sec)" fontSize={12} tickLine={false} axisLine={false} />
                                 <YAxis stroke="var(--text-sec)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value: number) => `$${value}`} />
-                                <Tooltip cursor={{ fill: 'var(--bg-sec)' }} contentStyle={{ borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)' }} />
+                                <Tooltip cursor={{ fill: 'var(--bg-sec)' }} content={({ active, payload, label }: any) => {
+                                    if (!active || !payload || !payload.length) return null;
+                                    return (
+                                        <div style={{ borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', padding: '10px 14px', fontSize: '0.85rem' }}>
+                                            <p style={{ marginBottom: '6px', fontWeight: 700, color: 'var(--text-main)' }}>{label}</p>
+                                            {payload.map((entry: any, i: number) => (
+                                                <p key={i} style={{ color: entry.color, margin: '2px 0' }}>{entry.name}: <strong>${Number(entry.value).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></p>
+                                            ))}
+                                        </div>
+                                    );
+                                }} />
                                 <Legend />
                                 <Bar dataKey="Ingresos" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={40} />
                                 <Bar dataKey="Egresos" fill="#EF4444" radius={[4, 4, 0, 0]} maxBarSize={40} />
@@ -232,7 +242,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ empresaId }) => {
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                         ))}
                                     </Pie>
-                                    <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)' }} formatter={(value: any) => [`$${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, '']} />
+                                    <Tooltip content={({ active, payload }: any) => {
+                                        if (!active || !payload || !payload.length) return null;
+                                        const entry = payload[0];
+                                        return (
+                                            <div style={{ borderRadius: '12px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', padding: '10px 14px', fontSize: '0.85rem' }}>
+                                                <p style={{ color: entry.payload?.fill || entry.color, fontWeight: 700 }}>{entry.name}</p>
+                                                <p style={{ color: 'var(--text-main)', marginTop: '4px' }}><strong>${Number(entry.value).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></p>
+                                            </div>
+                                        );
+                                    }} />
                                     <Legend layout="vertical" verticalAlign="bottom" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
                                 </PieChart>
                             </ResponsiveContainer>
