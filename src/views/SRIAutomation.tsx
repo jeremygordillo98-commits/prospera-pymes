@@ -506,17 +506,42 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
                                                     let total = 0;
 
                                                     if (isRet) {
-                                                        // Para retenciones: base = suma de bases retenidas, IVA = retenciones de IVA, total = total retenido
                                                         const rets = doc.retenciones_aplicadas || [];
                                                         baseGrav = rets.reduce((sum, r) => sum + (r.base || 0), 0);
                                                         ivaDisplay = rets.filter(r => r.tipo === 'IVA').reduce((sum, r) => sum + (r.valor || 0), 0);
                                                         total = rets.reduce((sum, r) => sum + (r.valor || 0), 0);
                                                     } else {
-                                                        // Para facturas y NC: base gravada = todas las bases, total = base + IVA
                                                         baseGrav = (doc.base_12 || 0) + (doc.base_0 || 0) + (doc.base_no_objeto || 0);
                                                         ivaDisplay = doc.monto_iva || 0;
                                                         total = baseGrav + ivaDisplay;
                                                     }
+
+                                                    // --- Extraer número SRI del XML (para mostrar debajo del badge) ---
+                                                    // Buscamos en concepto primero (más confiable) luego en clave_acceso_xml
+                                                    const concepto = doc.transacciones?.concepto || '';
+                                                    const numComp = (doc.transacciones?.numero_comprobante || '').trim();
+                                                    const sriRegex = /\d{3}-\d{3}-\d{9}/;
+                                                    const matchConcepto = concepto.match(sriRegex);
+                                                    const isSRIFormat = sriRegex.test(numComp);
+                                                    let xmlNumero: string | null = null;
+                                                    if (matchConcepto) {
+                                                        xmlNumero = matchConcepto[0];
+                                                    } else if (isSRIFormat) {
+                                                        xmlNumero = numComp;
+                                                    } else {
+                                                        const clave = doc.clave_acceso_xml || '';
+                                                        if (clave.length >= 39) {
+                                                            xmlNumero = `${clave.substring(24,27)}-${clave.substring(27,30)}-${clave.substring(30,39)}`;
+                                                        }
+                                                    }
+
+                                                    // --- Número secuencial del comprobante (orden en libro diario) ---
+                                                    // Si numero_comprobante es un entero simple, es el secuencial del sistema
+                                                    // Si tiene formato SRI, el secuencial es la posición en el listado ordenado
+                                                    const secuencialDisplay = isSRIFormat
+                                                        ? String(filtered.length - ((currentPage - 1) * ITEMS_PER_PAGE + idx))
+                                                        : numComp || String(filtered.length - ((currentPage - 1) * ITEMS_PER_PAGE + idx));
+
                                                     return (
                                                         <motion.tr
                                                             key={doc.id}
@@ -527,36 +552,25 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
                                                             onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
                                                             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                                         >
+                                                            {/* TIPO + número de factura/NC debajo */}
                                                             <td style={{ padding: '12px 12px' }}>
                                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 700, color: getTipoColor(tc), background: `${getTipoColor(tc)}18`, padding: '4px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>
                                                                     {getTipoIcon(tc)} {tc || '—'}
                                                                 </span>
-                                                                {(() => {
-                                                                    const numComp = doc.transacciones?.numero_comprobante || '';
-                                                                    const concepto = doc.transacciones?.concepto || '';
-                                                                    // Prioridad 1: ya tiene formato SRI 001-001-XXXXXXXXX
-                                                                    if (/^\d{3}-\d{3}-\d{9}$/.test(numComp)) {
-                                                                        return <div style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'var(--text-sec)', marginTop: 4, letterSpacing: '0.3px' }}>{numComp}</div>;
-                                                                    }
-                                                                    // Prioridad 2: extraer del concepto
-                                                                    const m = concepto.match(/(\d{3}-\d{3}-\d{9})/);
-                                                                    if (m) {
-                                                                        return <div style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'var(--text-sec)', marginTop: 4, letterSpacing: '0.3px' }}>{m[1]}</div>;
-                                                                    }
-                                                                    // Prioridad 3: extraer de clave_acceso_xml
-                                                                    const clave = doc.clave_acceso_xml || '';
-                                                                    if (clave.length >= 39) {
-                                                                        return <div style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'var(--text-sec)', marginTop: 4, letterSpacing: '0.3px' }}>{clave.substring(24,27)}-{clave.substring(27,30)}-{clave.substring(30,39)}</div>;
-                                                                    }
-                                                                    return null;
-                                                                })()}
+                                                                {xmlNumero && (
+                                                                    <div style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'var(--text-sec)', marginTop: 5, letterSpacing: '0.3px', whiteSpace: 'nowrap' }}>
+                                                                        {xmlNumero}
+                                                                    </div>
+                                                                )}
                                                             </td>
+                                                            {/* ENTIDAD */}
                                                             <td style={{ padding: '12px', fontSize: '0.85rem', fontWeight: 600, maxWidth: 180 }}>
                                                                 <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.transacciones?.entidades?.nombre || '—'}</div>
                                                                 <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', marginTop: 2 }}>{doc.transacciones?.entidades?.ruc_cedula || ''}</div>
                                                             </td>
+                                                            {/* COMPROBANTE secuencial */}
                                                             <td style={{ padding: '12px', fontSize: '0.82rem', fontWeight: 700, fontFamily: 'monospace', textAlign: 'center' }}>
-                                                                {doc.transacciones?.numero_comprobante || '—'}
+                                                                {secuencialDisplay}
                                                             </td>
                                                             <td style={{ padding: '12px', fontSize: '0.82rem', color: 'var(--text-sec)', whiteSpace: 'nowrap' }}>
                                                                 {doc.transacciones?.fecha ? new Date(doc.transacciones.fecha).toLocaleDateString('es-EC') : '—'}
