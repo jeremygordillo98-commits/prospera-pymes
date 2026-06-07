@@ -275,11 +275,21 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
                         const oldConcepto = doc.transacciones?.concepto || '';
                         const cleanConcept = oldConcepto.startsWith('[ANULADO]') ? oldConcepto.replace(/^\[ANULADO\]\s*/, '') : oldConcepto;
                         const newConcepto = `[ANULADO] Motivo: ${reason} | Fecha: ${ahora} | ${cleanConcept}`;
+                        
+                        const valoresOriginales = JSON.stringify({
+                            base_12: doc.base_12 || 0,
+                            base_0: doc.base_0 || 0,
+                            base_no_objeto: doc.base_no_objeto || 0,
+                            monto_iva: doc.monto_iva || 0,
+                            retenciones_aplicadas: doc.retenciones_aplicadas || []
+                        });
+                        
+                        const conceptoConValores = `${newConcepto} | ValoresOriginales: ${valoresOriginales}`;
                 
                         await supabase
                             .from('transacciones')
                             .update({ 
-                                concepto: newConcepto,
+                                concepto: conceptoConValores,
                                 tipo_comprobante: 'Anulado'
                             })
                             .eq('id', idTransaccion);
@@ -291,25 +301,7 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
                             .eq('id_transaccion', idTransaccion);
                     }
 
-                    // 3. Modificar documentos_sri a valores cero (guardando originales en concepto)
-                    // Los valores originales ya están en el concepto via newConcepto
-                    const valoresOriginales = JSON.stringify({
-                        base_12: doc.base_12 || 0,
-                        base_0: doc.base_0 || 0,
-                        base_no_objeto: doc.base_no_objeto || 0,
-                        monto_iva: doc.monto_iva || 0,
-                        retenciones_aplicadas: doc.retenciones_aplicadas || []
-                    });
-
-                    // Actualizar concepto con valores originales embebidos
-                    if (idTransaccion) {
-                        const conceptoConValores = `${newConcepto} | ValoresOriginales: ${valoresOriginales}`;
-                        await supabase
-                            .from('transacciones')
-                            .update({ concepto: conceptoConValores })
-                            .eq('id', idTransaccion);
-                    }
-
+                    // 3. Modificar documentos_sri a valores cero (los originales ya están en el concepto)
                     await supabase
                         .from('documentos_sri')
                         .update({ 
