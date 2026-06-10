@@ -86,6 +86,8 @@ export const Comunicados: React.FC<ComunicadosProps> = ({ empresaId }) => {
   const [previewHtml, setPreviewHtml] = useState<string>('');
   const [sending, setSending] = useState(false);
   const [sendingProgress, setSendingProgress] = useState<{ current: number; total: number } | null>(null);
+  const [selectedCampanaRecipients, setSelectedCampanaRecipients] = useState<CampanaPymes | null>(null);
+  const [customAlert, setCustomAlert] = useState<{ type: 'success' | 'error' | 'info'; title: string; message: string; onClose?: () => void } | null>(null);
 
   // Form State
   const [form, setForm] = useState({
@@ -127,7 +129,39 @@ export const Comunicados: React.FC<ComunicadosProps> = ({ empresaId }) => {
         console.error("Error cargando comunicados:", error);
         return [];
       }
-      return data as CampanaPymes[];
+      
+      const list = (data || []) as CampanaPymes[];
+      const now = new Date();
+      
+      // Sincronizar automáticamente en la base de datos los comunicados programados cuyo tiempo ya pasó
+      const updatedList = await Promise.all(
+        list.map(async (camp) => {
+          if (camp.estado === 'Programado' && camp.scheduled_at && new Date(camp.scheduled_at) <= now) {
+            const { error: updateError } = await supabase
+              .from('comunicados_pymes')
+              .update({
+                estado: 'Enviado',
+                sent_at: camp.scheduled_at,
+                updated_at: now.toISOString()
+              })
+              .eq('id', camp.id);
+            
+            if (updateError) {
+              console.error(`Error al actualizar comunicado programado ${camp.id} a Enviado:`, updateError);
+              return camp;
+            }
+            
+            return {
+              ...camp,
+              estado: 'Enviado',
+              sent_at: camp.scheduled_at
+            } as CampanaPymes;
+          }
+          return camp;
+        })
+      );
+      
+      return updatedList;
     }
   });
 
@@ -268,7 +302,11 @@ export const Comunicados: React.FC<ComunicadosProps> = ({ empresaId }) => {
       const results = await Promise.all(encodedPromises);
       setFilesBase64(prev => [...prev, ...results]);
     } catch (err) {
-      alert("Error al procesar los archivos adjuntos.");
+      setCustomAlert({
+        type: 'error',
+        title: 'Error de Adjuntos',
+        message: 'Error al procesar los archivos adjuntos.'
+      });
     }
 
     e.target.value = ''; // Reset input
@@ -299,22 +337,38 @@ export const Comunicados: React.FC<ComunicadosProps> = ({ empresaId }) => {
   // Main Dispatcher using send-campaign edge function
   const handleSend = async (esBorrador: boolean = false) => {
     if (!form.titulo || !form.asunto || !form.cuerpoMsg) {
-      alert("Por favor rellena el título, asunto y mensaje del comunicado.");
+      setCustomAlert({
+        type: 'error',
+        title: 'Campos Incompletos',
+        message: 'Por favor rellena el título, asunto y mensaje del comunicado.'
+      });
       return;
     }
 
     if (form.destinatarios === 'prueba' && !form.testEmail) {
-      alert("Por favor ingresa el correo de prueba.");
+      setCustomAlert({
+        type: 'error',
+        title: 'Correo de Prueba Requerido',
+        message: 'Por favor ingresa el correo de prueba.'
+      });
       return;
     }
 
     if (form.destinatarios === 'manual' && !form.manualEmails) {
-      alert("Por favor ingresa los correos manuales.");
+      setCustomAlert({
+        type: 'error',
+        title: 'Correos Manuales Requeridos',
+        message: 'Por favor ingresa los correos manuales.'
+      });
       return;
     }
 
     if (sizeLimitExceeded) {
-      alert("La suma de todos los archivos adjuntos no puede exceder el límite de 5MB.");
+      setCustomAlert({
+        type: 'error',
+        title: 'Límite de Peso Excedido',
+        message: 'La suma de todos los archivos adjuntos no puede exceder el límite de 5MB.'
+      });
       return;
     }
 
@@ -436,20 +490,48 @@ export const Comunicados: React.FC<ComunicadosProps> = ({ empresaId }) => {
               titulo: `${form.titulo} (${listadoDest.length - errorsCount}/${listadoDest.length} despachados)`
             })
             .eq('id', recordId);
-          alert(`Despacho completado. Se enviaron con éxito ${listadoDest.length - errorsCount} de ${listadoDest.length} correos.`);
+          
+          setCustomAlert({
+            type: 'success',
+            title: 'Despacho Completado',
+            message: `Despacho completado. Se enviaron con éxito ${listadoDest.length - errorsCount} de ${listadoDest.length} correos.`,
+            onClose: () => {
+              refetch();
+              setIsWorkspaceOpen(false);
+              resetForm();
+            }
+          });
         } else {
-          alert(`¡Comunicado despachado con éxito total a los ${listadoDest.length} destinatarios!`);
+          setCustomAlert({
+            type: 'success',
+            title: '¡Envío Exitoso!',
+            message: `¡Comunicado despachado con éxito total a los ${listadoDest.length} destinatarios!`,
+            onClose: () => {
+              refetch();
+              setIsWorkspaceOpen(false);
+              resetForm();
+            }
+          });
         }
       } else {
-        alert("Borrador guardado correctamente.");
+        setCustomAlert({
+          type: 'success',
+          title: 'Borrador Guardado',
+          message: 'Borrador guardado correctamente.',
+          onClose: () => {
+            refetch();
+            setIsWorkspaceOpen(false);
+            resetForm();
+          }
+        });
       }
-
-      refetch();
-      setIsWorkspaceOpen(false);
-      resetForm();
     } catch (err: any) {
       console.error(err);
-      alert(`Error al procesar el comunicado: ${err.message || 'Error desconocido.'}`);
+      setCustomAlert({
+        type: 'error',
+        title: 'Error al Procesar',
+        message: `Error al procesar el comunicado: ${err.message || 'Error desconocido.'}`
+      });
     } finally {
       setSending(false);
       setSendingProgress(null);
@@ -667,6 +749,9 @@ export const Comunicados: React.FC<ComunicadosProps> = ({ empresaId }) => {
                                 </button>
                               </>
                             )}
+                            <button onClick={() => setSelectedCampanaRecipients(camp)} className="btn" title="Ver Destinatarios" style={{ ...btnStyle, padding: 6, borderRadius: 8 }}>
+                              <Eye size={14} />
+                            </button>
                             <button onClick={() => deleteRecord(camp)} className="btn hover:text-error" title="Eliminar Registro" style={{ ...btnStyle, padding: 6, borderRadius: 8, color: 'var(--error)' }}>
                               <Trash2 size={14} />
                             </button>
@@ -1002,6 +1087,195 @@ export const Comunicados: React.FC<ComunicadosProps> = ({ empresaId }) => {
         )}
       </AnimatePresence>
 
+
+      {/* MODAL DE NOTIFICACIÓN PREMIUM */}
+      {customAlert && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 999999999,
+          padding: 16
+        }}>
+          <div style={{
+            background: 'var(--bg-main)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 20,
+            width: '100%',
+            maxWidth: 400,
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
+            overflow: 'hidden',
+            textAlign: 'center',
+            padding: '32px 24px',
+            color: 'var(--text-main)'
+          }}>
+            <div style={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              background: customAlert.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+              color: customAlert.type === 'success' ? 'var(--success)' : 'rgb(239, 68, 68)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              fontSize: '1.8rem',
+              fontWeight: 'bold'
+            }}>
+              {customAlert.type === 'success' ? '✓' : '✗'}
+            </div>
+            
+            <h4 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 900 }}>
+              {customAlert.title}
+            </h4>
+            
+            <p style={{ margin: '0 0 24px', fontSize: '0.9rem', color: 'var(--text-sec)', lineHeight: 1.5 }}>
+              {customAlert.message}
+            </p>
+            
+            <button 
+              onClick={() => {
+                setCustomAlert(null);
+                if (customAlert.onClose) customAlert.onClose();
+              }}
+              style={{
+                background: customAlert.type === 'success' ? 'var(--primary)' : 'rgb(239, 68, 68)',
+                color: '#fff',
+                border: 'none',
+                width: '100%',
+                padding: '12px',
+                borderRadius: 12,
+                cursor: 'pointer',
+                fontWeight: 800,
+                fontSize: '0.95rem'
+              }}
+            >
+              Aceptar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL VISOR DE DESTINATARIOS */}
+      {selectedCampanaRecipients && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999999,
+          padding: 16
+        }}>
+          <div style={{
+            background: 'var(--bg-main)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 20,
+            width: '100%',
+            maxWidth: 500,
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
+            overflow: 'hidden',
+            color: 'var(--text-main)'
+          }}>
+            <header style={{
+              padding: '20px 24px',
+              borderBottom: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'rgba(255,255,255,0.01)'
+            }}>
+              <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 900 }}>Destinatarios del Comunicado</h4>
+              <button 
+                onClick={() => setSelectedCampanaRecipients(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-sec)',
+                  fontSize: '1.2rem',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </header>
+            <div style={{ padding: '24px', maxHeight: 300, overflowY: 'auto' }}>
+              <div style={{ marginBottom: 16 }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>
+                  Tipo de Destinatario
+                </span>
+                <span style={{
+                  background: 'var(--input-bg)',
+                  color: 'var(--text-main)',
+                  padding: '4px 10px',
+                  borderRadius: 8,
+                  fontSize: '0.75rem',
+                  fontWeight: 800,
+                  display: 'inline-block'
+                }}>
+                  {selectedCampanaRecipients.destinatarios === 'clientes' && '👥 Todos los Clientes'}
+                  {selectedCampanaRecipients.destinatarios === 'proveedores' && '👥 Todos los Proveedores'}
+                  {selectedCampanaRecipients.destinatarios === 'manual' && '✏️ Manual'}
+                  {selectedCampanaRecipients.destinatarios === 'prueba' && '🧪 Prueba'}
+                </span>
+              </div>
+              
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-sec)', display: 'block', marginBottom: 6 }}>
+                  Lista de Correos
+                </span>
+                {selectedCampanaRecipients.destinatarios === 'manual' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {(selectedCampanaRecipients.manual_emails || '').split(/[\n,;]/).map((email: string) => email.trim()).filter(Boolean).map((email: string, i: number) => (
+                      <div key={i} style={{ fontSize: '0.85rem', fontWeight: 600, padding: '8px 12px', background: 'var(--input-bg)', borderRadius: 8 }}>
+                        {email}
+                      </div>
+                    ))}
+                  </div>
+                ) : selectedCampanaRecipients.destinatarios === 'prueba' ? (
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, padding: '8px 12px', background: 'var(--input-bg)', borderRadius: 8 }}>
+                    {selectedCampanaRecipients.asunto.includes('TEST') ? 'test-contador@prosperafinanzas.com (Enviado a destinatario de prueba)' : 'test-contador@prosperafinanzas.com'}
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-sec)', fontStyle: 'italic' }}>
+                    Este comunicado fue enviado de forma masiva a todo el grupo seleccionado ({selectedCampanaRecipients.destinatarios === 'clientes' ? 'Clientes' : 'Proveedores'}).
+                  </p>
+                )}
+              </div>
+            </div>
+            <footer style={{
+              padding: '16px 24px',
+              borderTop: '1px solid var(--border-color)',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              background: 'rgba(255,255,255,0.01)'
+            }}>
+              <button 
+                onClick={() => setSelectedCampanaRecipients(null)}
+                style={{
+                  background: 'var(--primary)',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '10px 20px',
+                  borderRadius: 10,
+                  cursor: 'pointer',
+                  fontWeight: 800,
+                  fontSize: '0.85rem'
+                }}
+              >
+                Entendido
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
