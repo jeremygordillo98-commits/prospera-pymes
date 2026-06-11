@@ -36,6 +36,7 @@ export const useXMLUpload = (
   const [parsing, setParsing] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
+  const [rucEmpresa, setRucEmpresa] = useState<string>('');
   const [batchSaving, setBatchSaving] = useState(false);
   const [batchProgress, setBatchProgress] = useState(0);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -69,6 +70,17 @@ export const useXMLUpload = (
   useEffect(() => {
     if (isOpen && empresaId) {
       fetchAccounts();
+      // Cargar RUC de la empresa
+      supabase
+        .from('empresas_gestionadas')
+        .select('ruc_empresa')
+        .eq('id', empresaId)
+        .single()
+        .then(({ data }) => {
+          if (data?.ruc_empresa) {
+            setRucEmpresa(data.ruc_empresa);
+          }
+        });
     }
   }, [isOpen, empresaId]);
 
@@ -182,17 +194,120 @@ export const useXMLUpload = (
 
     const newItems: BatchItem[] = [];
 
+    let currentRuc = rucEmpresa;
+    if (!currentRuc && empresaId) {
+      try {
+        const { data } = await supabase
+          .from('empresas_gestionadas')
+          .select('ruc_empresa')
+          .eq('id', empresaId)
+          .single();
+        if (data?.ruc_empresa) {
+          currentRuc = data.ruc_empresa;
+          setRucEmpresa(currentRuc);
+        }
+      } catch (e) {
+        console.error("Error fetching company RUC:", e);
+      }
+    }
+
     for (const f of selectedFiles) {
       try {
         const text = await f.text();
         const parsed = await parseSRIXML(text);
         if (parsed) {
+          // Validar el tipo de documento contra la sección (RUC Check)
+          if (tipo === 'Ventas' && currentRuc && parsed.rucEmisor !== currentRuc) {
+            newItems.push({
+              fileName: f.name,
+              fileSize: f.size,
+              parsed: null,
+              entidadId: null,
+              status: 'error',
+              errorMsg: `Este documento fue emitido por ${parsed.razonSocialEmisor} (RUC ${parsed.rucEmisor}). No corresponde a una venta de tu empresa. Por favor súbelo en XML Compras.`,
+              idCuentaDebe: '',
+              idCuentaHaber: '',
+              idCuentaIva: '',
+              idCuentaRetencion: '',
+              retencionCodigo: ''
+            });
+            continue;
+          }
+
+          if (tipo === 'Compras' && currentRuc && parsed.rucReceptor !== currentRuc) {
+            newItems.push({
+              fileName: f.name,
+              fileSize: f.size,
+              parsed: null,
+              entidadId: null,
+              status: 'error',
+              errorMsg: `Este documento no fue emitido a tu RUC. Fue emitido a RUC ${parsed.rucReceptor}. Por favor súbelo en la empresa correspondiente.`,
+              idCuentaDebe: '',
+              idCuentaHaber: '',
+              idCuentaIva: '',
+              idCuentaRetencion: '',
+              retencionCodigo: ''
+            });
+            continue;
+          }
+
+          const targetRuc = tipo === 'Ventas' ? parsed.rucReceptor : parsed.rucEmisor;
+
           const { data: entidadData } = await supabase
             .from('entidades')
             .select('id')
-            .eq('ruc_cedula', parsed.rucEmisor)
+            .eq('ruc_cedula', targetRuc)
             .eq('id_empresa', empresaId)
             .maybeSingle();
+
+          // Defaults contables según tipo
+          const isFact = parsed.tipoDocumento === 'FACTURA';
+          const isNC = parsed.tipoDocumento === 'NOTA_CREDITO';
+          const isRet = parsed.tipoDocumento === 'COM_RETENCION';
+
+          let debeAccount = '';
+          let haberAccount = '';
+          let ivaAccount = '';
+
+          if (tipo === 'Ventas') {
+            // Ventas:
+            // Para Factura: Debe = Clientes (1.1.2), Haber = Ingresos (4)
+            // Para NC: Debe = Devoluciones/Ventas (4), Haber = Clientes (1.1.2)
+            // Para Retención: Debe = Anticipos (1.1.3), Haber = Clientes (1.1.2)
+            const clientAcc = accounts.find(a => a.codigo_cuenta.startsWith('1.1.2') || a.nombre.toLowerCase().includes('cliente'))?.id || defaultPago?.id || '';
+            const revenueAcc = accounts.find(a => a.codigo_cuenta.startsWith('4'))?.id || defaultGasto?.id || '';
+            const anticipoAcc = accounts.find(a => a.codigo_cuenta.startsWith('1.1.3') || a.nombre.toLowerCase().includes('anticipo'))?.id || defaultGasto?.id || '';
+
+            if (isFact) {
+              debeAccount = clientAcc;
+              haberAccount = revenueAcc;
+            } else if (isNC) {
+              debeAccount = revenueAcc;
+              haberAccount = clientAcc;
+            } else if (isRet) {
+              debeAccount = anticipoAcc;
+              haberAccount = clientAcc;
+            }
+
+            ivaAccount = accounts.find(a => a.codigo_cuenta.startsWith('2') && (a.nombre.toLowerCase().includes('cobrado') || a.nombre.toLowerCase().includes('ventas') || a.nombre.toLowerCase().includes('por pagar')))?.id || defaultIva?.id || '';
+          } else {
+            // Compras:
+            // Para Factura: Debe = Gastos (5), Haber = Proveedores (2.1.3)
+            // Para NC: Debe = Proveedores (2.1.3), Haber = Gastos (5)
+            // Para Retención: Debe = Proveedores (2.1.3), Haber = Retenciones por Pagar (2.1.4)
+            if (isFact) {
+              debeAccount = defaultGasto?.id || '';
+              haberAccount = defaultPago?.id || '';
+            } else if (isNC) {
+              debeAccount = defaultPago?.id || '';
+              haberAccount = accounts.find(a => a.codigo_cuenta.startsWith('1.1.2') || a.nombre.toLowerCase().includes('cliente'))?.id || defaultPago?.id || '';
+            } else if (isRet) {
+              debeAccount = accounts.find(a => a.codigo_cuenta.startsWith('1.1.3') || a.nombre.toLowerCase().includes('anticipo'))?.id || defaultGasto?.id || '';
+              haberAccount = defaultPago?.id || '';
+            }
+
+            ivaAccount = defaultIva?.id || '';
+          }
 
           newItems.push({
             file: f,
@@ -201,13 +316,9 @@ export const useXMLUpload = (
             parsed,
             entidadId: entidadData?.id || null,
             status: entidadData?.id ? 'ready' : 'missing_entity',
-            idCuentaDebe: parsed.tipoDocumento === 'COM_RETENCION' 
-              ? (accounts.find(a => a.codigo_cuenta.startsWith('1.1.3') || a.nombre.toLowerCase().includes('anticipo'))?.id || defaultGasto?.id || '') 
-              : (parsed.tipoDocumento === 'NOTA_CREDITO' ? (accounts.find(a => a.codigo_cuenta.startsWith('4'))?.id || defaultGasto?.id || '') : defaultGasto?.id || ''),
-            idCuentaHaber: parsed.tipoDocumento === 'COM_RETENCION' || parsed.tipoDocumento === 'NOTA_CREDITO'
-              ? (accounts.find(a => a.codigo_cuenta.startsWith('1.1.2') || a.nombre.toLowerCase().includes('cliente'))?.id || defaultPago?.id || '')
-              : defaultPago?.id || '',
-            idCuentaIva: defaultIva?.id || '',
+            idCuentaDebe: debeAccount,
+            idCuentaHaber: haberAccount,
+            idCuentaIva: ivaAccount,
             idCuentaRetencion: defaultRetencion?.id || '',
             retencionCodigo: CATALOGO_RETENCIONES_RENTA[0].codigo,
           });
@@ -254,14 +365,18 @@ export const useXMLUpload = (
       const item = updated[i];
       if (item.status === 'missing_entity' && item.parsed) {
         try {
+          const targetRuc = tipo === 'Ventas' ? item.parsed.rucReceptor : item.parsed.rucEmisor;
+          const targetName = tipo === 'Ventas' ? (item.parsed.razonSocialReceptor || 'Cliente Desconocido') : item.parsed.razonSocialEmisor;
+          const targetTipo = tipo === 'Ventas' ? 'Cliente' : 'Proveedor';
+
           const { data, error } = await supabase
             .from('entidades')
             .insert({
-              ruc_cedula: item.parsed.rucEmisor,
-              razon_social: item.parsed.razonSocialEmisor,
-              nombre: item.parsed.razonSocialEmisor,
-              tipo_entidad: 'Proveedor',
-              persona_tipo: item.parsed.rucEmisor.length === 10 ? 'Natural' : 'Jurídica',
+              ruc_cedula: targetRuc,
+              razon_social: targetName,
+              nombre: targetName,
+              tipo_entidad: targetTipo,
+              persona_tipo: targetRuc.length === 10 ? 'Natural' : 'Jurídica',
               id_empresa: empresaId
             })
             .select()

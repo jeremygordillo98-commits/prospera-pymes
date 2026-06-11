@@ -82,7 +82,7 @@ const AnuladoDetailModal: React.FC<AnuladoDetailModalProps> = ({ doc, onClose })
     const valOrig = parsedConcepto.valoresOriginales;
 
     const formatDate = (dateStr: string) =>
-        dateStr ? new Date(dateStr).toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+        dateStr ? new Date(dateStr + 'T12:00:00').toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 
     return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(5,8,16,0.85)', backdropFilter: 'blur(12px)', padding: '20px', boxSizing: 'border-box' }}>
@@ -325,7 +325,7 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
     const paginated = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
     const formatDate = (dateStr: string) =>
-        dateStr ? new Date(dateStr).toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+        dateStr ? new Date(dateStr + 'T12:00:00').toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 
     return (
         <div className="sri-automation-container">

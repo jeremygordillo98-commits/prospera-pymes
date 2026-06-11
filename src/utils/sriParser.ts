@@ -9,6 +9,7 @@ export interface SRIDocumentoBase {
   claveAcceso: string;
   fechaEmision: string;
   numeroComprobante: string;
+  razonSocialReceptor?: string;
 }
 
 // ─── FACTURA ────────────────────────────────────────────────
@@ -188,6 +189,7 @@ export const parseSRIXML = async (xmlContent: string): Promise<SRIParsedData | n
         tipoDocumento: 'FACTURA',
         fechaEmision: infoF.fechaEmision || '',
         rucReceptor: infoF.identificacionComprador?.toString() || '',
+        razonSocialReceptor: infoF.razonSocialComprador || '',
         tipoIdentificacionReceptor: tipoIdReceptor,
         base12,
         base15,
@@ -257,6 +259,7 @@ export const parseSRIXML = async (xmlContent: string): Promise<SRIParsedData | n
         tipoDocumento: 'COM_RETENCION',
         fechaEmision: infoCompR.fechaEmision || '',
         rucReceptor: infoCompR.identificacionSujetoRetenido?.toString() || '',
+        razonSocialReceptor: infoCompR.razonSocialSujetoRetenido || '',
         periodoFiscal: infoCompR.periodoFiscal || '',
         documentosSustento: docsSustentoFinal,
         totalRetenido: parseFloat(totalRetenido.toFixed(2)),
@@ -276,6 +279,7 @@ export const parseSRIXML = async (xmlContent: string): Promise<SRIParsedData | n
         tipoDocumento: 'NOTA_CREDITO',
         fechaEmision: infoNC.fechaEmision || '',
         rucReceptor: infoNC.identificacionComprador?.toString() || '',
+        razonSocialReceptor: infoNC.razonSocialComprador || '',
         tipoIdentificacionReceptor: tipoIdReceptor,
         numDocModificado: infoNC.numDocModificado?.toString() || '',
         motivo: infoNC.motivo || '',

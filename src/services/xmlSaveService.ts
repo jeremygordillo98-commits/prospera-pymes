@@ -98,22 +98,56 @@ export const saveXMLBatchToSupabase = async (
     // 2. Insertar Movimientos de Partida Doble
     let batchMovimientos: any[] = [];
     const ivaMonto = (isFact || isNC) ? (parsed.iva || 0) : 0;
+    const esVenta = tipo === 'Ventas';
 
     if (isFact) {
       const subtotalMonto = parseFloat((totalComprobante - ivaMonto).toFixed(2));
 
-      batchMovimientos = [
-        { id_transaccion: transaccion.id, id_cuenta: item.idCuentaDebe, debe: subtotalMonto, haber: 0, id_empresa: empresaId },
-        ...(ivaMonto > 0 ? [{ id_transaccion: transaccion.id, id_cuenta: item.idCuentaIva, debe: ivaMonto, haber: 0, id_empresa: empresaId }] : []),
-        { id_transaccion: transaccion.id, id_cuenta: item.idCuentaHaber, debe: 0, haber: totalComprobante, id_empresa: empresaId }
-      ];
+      if (esVenta) {
+        // Venta Factura:
+        // Debe: Clientes (totalComprobante)
+        // Haber: Ingresos (subtotalMonto)
+        // Haber: IVA Cobrado (ivaMonto)
+        batchMovimientos = [
+          { id_transaccion: transaccion.id, id_cuenta: item.idCuentaDebe, debe: totalComprobante, haber: 0, id_empresa: empresaId },
+          { id_transaccion: transaccion.id, id_cuenta: item.idCuentaHaber, debe: 0, haber: subtotalMonto, id_empresa: empresaId },
+          ...(ivaMonto > 0 ? [{ id_transaccion: transaccion.id, id_cuenta: item.idCuentaIva, debe: 0, haber: ivaMonto, id_empresa: empresaId }] : [])
+        ];
+      } else {
+        // Compra Factura:
+        // Debe: Gastos (subtotalMonto)
+        // Debe: IVA Pagado (ivaMonto)
+        // Haber: Proveedores (totalComprobante)
+        batchMovimientos = [
+          { id_transaccion: transaccion.id, id_cuenta: item.idCuentaDebe, debe: subtotalMonto, haber: 0, id_empresa: empresaId },
+          ...(ivaMonto > 0 ? [{ id_transaccion: transaccion.id, id_cuenta: item.idCuentaIva, debe: ivaMonto, haber: 0, id_empresa: empresaId }] : []),
+          { id_transaccion: transaccion.id, id_cuenta: item.idCuentaHaber, debe: 0, haber: totalComprobante, id_empresa: empresaId }
+        ];
+      }
     } else if (isNC) {
       const subtotalMonto = parseFloat((totalComprobante - ivaMonto).toFixed(2));
-      batchMovimientos = [
-        { id_transaccion: transaccion.id, id_cuenta: item.idCuentaDebe, debe: subtotalMonto, haber: 0, id_empresa: empresaId },
-        ...(ivaMonto > 0 ? [{ id_transaccion: transaccion.id, id_cuenta: item.idCuentaIva, debe: ivaMonto, haber: 0, id_empresa: empresaId }] : []),
-        { id_transaccion: transaccion.id, id_cuenta: item.idCuentaHaber, debe: 0, haber: totalComprobante, id_empresa: empresaId }
-      ];
+      
+      if (esVenta) {
+        // Nota de Crédito de Venta:
+        // Debe: Devoluciones/Ventas (subtotalMonto)
+        // Debe: IVA Cobrado (ivaMonto)
+        // Haber: Clientes (totalComprobante)
+        batchMovimientos = [
+          { id_transaccion: transaccion.id, id_cuenta: item.idCuentaDebe, debe: subtotalMonto, haber: 0, id_empresa: empresaId },
+          ...(ivaMonto > 0 ? [{ id_transaccion: transaccion.id, id_cuenta: item.idCuentaIva, debe: ivaMonto, haber: 0, id_empresa: empresaId }] : []),
+          { id_transaccion: transaccion.id, id_cuenta: item.idCuentaHaber, debe: 0, haber: totalComprobante, id_empresa: empresaId }
+        ];
+      } else {
+        // Nota de Crédito de Compra:
+        // Debe: Proveedores (totalComprobante)
+        // Haber: Gastos (subtotalMonto)
+        // Haber: IVA Pagado (ivaMonto)
+        batchMovimientos = [
+          { id_transaccion: transaccion.id, id_cuenta: item.idCuentaDebe, debe: totalComprobante, haber: 0, id_empresa: empresaId },
+          { id_transaccion: transaccion.id, id_cuenta: item.idCuentaHaber, debe: 0, haber: subtotalMonto, id_empresa: empresaId },
+          ...(ivaMonto > 0 ? [{ id_transaccion: transaccion.id, id_cuenta: item.idCuentaIva, debe: 0, haber: ivaMonto, id_empresa: empresaId }] : [])
+        ];
+      }
     } else {
       batchMovimientos = [
         { id_transaccion: transaccion.id, id_cuenta: item.idCuentaDebe, debe: totalComprobante, haber: 0, id_empresa: empresaId },
@@ -178,8 +212,8 @@ export const saveXMLBatchToSupabase = async (
       const { data: empData } = await supabase.from('empresas_gestionadas').select('ruc_empresa').eq('id', empresaId).single();
       const rucEmpresa = empData?.ruc_empresa || '';
 
-      const esVenta = rucEmpresa === parsed.rucEmisor;
-      const tipoTesoreria = esVenta ? 'Cuenta por cobrar' : 'Cuenta por pagar';
+      const esVentaFact = tipo === 'Ventas' || rucEmpresa === parsed.rucEmisor;
+      const tipoTesoreria = esVentaFact ? 'Cuenta por cobrar' : 'Cuenta por pagar';
 
       await supabase.from('tesoreria_documentos').insert({
         id_empresa: empresaId,

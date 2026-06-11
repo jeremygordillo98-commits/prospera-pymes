@@ -106,16 +106,31 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
     setPage(1);
   }, [selected, desde, hasta]);
 
+  // Calcular saldo inicial histórico (antes de la fecha 'desde')
+  const saldoInicial = useMemo(() => {
+    if (!desde || !selected) return 0;
+    const esDeudora = ['Activo', 'Gasto'].includes(selected.tipo);
+    let initial = 0;
+    lines.forEach(l => {
+      const f = l.transacciones?.fecha || '';
+      if (f < desde) {
+        if (esDeudora) initial += l.debe - l.haber;
+        else initial += l.haber - l.debe;
+      }
+    });
+    return initial;
+  }, [lines, desde, selected]);
+
   // Calcular saldo acumulado
   const linesConSaldo = useMemo(() => {
-    let saldo = 0;
+    let saldo = saldoInicial;
     const esDeudora = selected && ['Activo', 'Gasto'].includes(selected.tipo);
     return filteredLines.map(l => {
       if (esDeudora) saldo += l.debe - l.haber;
       else saldo += l.haber - l.debe;
       return { ...l, saldoAcum: saldo };
     });
-  }, [filteredLines, selected]);
+  }, [filteredLines, selected, saldoInicial]);
 
   const totalDebe = filteredLines.reduce((s, l) => s + l.debe, 0);
   const totalHaber = filteredLines.reduce((s, l) => s + l.haber, 0);
@@ -143,6 +158,17 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
   const exportCSV = () => {
     if (!selected) return;
     const rows = [['Fecha', 'Concepto', 'Comprobante', 'Tercero', 'Debe', 'Haber', 'Saldo']];
+    if (desde) {
+      rows.push([
+        desde,
+        'SALDO INICIAL AL PERÍODO',
+        '—',
+        '—',
+        '0.00',
+        '0.00',
+        saldoInicial.toFixed(2)
+      ]);
+    }
     linesConSaldo.forEach(l => {
       rows.push([
         l.transacciones?.fecha || '',
@@ -163,20 +189,33 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
   const exportPDF = async () => {
     if (!selected) return;
     const columns = ['Fecha', 'Concepto / Tercero', 'Comprobante', 'Debe', 'Haber', 'Saldo Acum.'];
-    const rows = linesConSaldo.map(l => [
-      l.transacciones?.fecha ? new Date(l.transacciones.fecha).toLocaleDateString('es-EC') : '—',
-      `${l.transacciones?.concepto || '—'} ${l.transacciones?.entidades?.razon_social ? ' - ' + l.transacciones.entidades.razon_social : ''}`,
-      `${l.transacciones?.tipo_comprobante || ''} ${l.transacciones?.numero_comprobante || ''}`.trim() || '—',
-      `$${l.debe.toFixed(2)}`,
-      `$${l.haber.toFixed(2)}`,
-      `$${l.saldoAcum.toFixed(2)}`
-    ]);
+    const rows = [];
+    if (desde) {
+      rows.push([
+        new Date(desde + 'T12:00:00').toLocaleDateString('es-EC'),
+        'SALDO INICIAL AL PERÍODO',
+        '—',
+        '—',
+        '—',
+        `$${saldoInicial.toFixed(2)}`
+      ]);
+    }
+    linesConSaldo.forEach(l => {
+      rows.push([
+        l.transacciones?.fecha ? new Date(l.transacciones.fecha + 'T12:00:00').toLocaleDateString('es-EC') : '—',
+        `${l.transacciones?.concepto || '—'} ${l.transacciones?.entidades?.razon_social ? ' - ' + l.transacciones.entidades.razon_social : ''}`,
+        `${l.transacciones?.tipo_comprobante || ''} ${l.transacciones?.numero_comprobante || ''}`.trim() || '—',
+        `$${l.debe.toFixed(2)}`,
+        `$${l.haber.toFixed(2)}`,
+        `$${l.saldoAcum.toFixed(2)}`
+      ]);
+    });
 
     const foot = [[
       '', 'TOTALES', '',
       `$${totalDebe.toFixed(2)}`,
       `$${totalHaber.toFixed(2)}`,
-      `$${(linesConSaldo[linesConSaldo.length - 1]?.saldoAcum || 0).toFixed(2)}`
+      `$${(linesConSaldo[linesConSaldo.length - 1]?.saldoAcum ?? saldoInicial).toFixed(2)}`
     ]];
 
     let subtitle = `Cuenta: ${selected.codigo_cuenta} - ${selected.nombre}`;
@@ -302,6 +341,24 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
                       </tr>
                     </thead>
                     <tbody>
+                      {page === 1 && desde && (
+                        <tr style={{ borderBottom: '1px dashed var(--border-color)', background: 'rgba(255,255,255,0.02)', fontWeight: 600 }}>
+                          <td style={{ padding: '11px 14px', fontSize: '0.83rem', whiteSpace: 'nowrap', color: 'var(--text-sec)' }}>
+                            {new Date(desde + 'T12:00:00').toLocaleDateString('es-EC')}
+                          </td>
+                          <td style={{ padding: '11px 14px' }}>
+                            <div style={{ fontSize: '0.87rem', color: 'var(--primary)' }}>
+                              SALDO INICIAL AL PERÍODO
+                            </div>
+                          </td>
+                          <td style={{ padding: '11px 14px', fontSize: '0.78rem', color: 'var(--text-sec)', fontFamily: 'monospace' }}>—</td>
+                          <td style={{ padding: '11px 14px', textAlign: 'right', fontSize: '0.88rem', color: 'var(--text-sec)' }}>—</td>
+                          <td style={{ padding: '11px 14px', textAlign: 'right', fontSize: '0.88rem', color: 'var(--text-sec)' }}>—</td>
+                          <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 900, fontSize: '0.9rem', color: saldoInicial >= 0 ? 'var(--primary)' : 'var(--error)', whiteSpace: 'nowrap' }}>
+                            ${saldoInicial.toFixed(2)}
+                          </td>
+                        </tr>
+                      )}
                       {paginatedLines.map((l, i) => (
                         <tr key={l.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
                           <td style={{ padding: '11px 14px', fontSize: '0.83rem', whiteSpace: 'nowrap', color: 'var(--text-sec)' }}>
