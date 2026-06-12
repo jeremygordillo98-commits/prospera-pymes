@@ -250,7 +250,20 @@ export const useLibroDiario = ({ empresaId, activeView }: UseLibroDiarioProps) =
             })
             .eq('id_transaccion', tx.id);
 
-          if (tx.numero_comprobante) {
+          // Eliminar en Tesorería: la referencia es el número SRI (ej. 001-001-000001234),
+          // no el número secuencial interno de la transacción.
+          const conceptoForTeso = tx.concepto || '';
+          const matchSriNum = conceptoForTeso.match(/(\d{3}-\d{3}-\d{9})/);
+          const sriRefNum = matchSriNum ? matchSriNum[1] : null;
+
+          if (sriRefNum) {
+            await supabase
+              .from('tesoreria_documentos')
+              .delete()
+              .eq('id_empresa', empresaId)
+              .eq('referencia', sriRefNum);
+          } else if (tx.numero_comprobante) {
+            // Fallback: intentar con el número interno
             await supabase
               .from('tesoreria_documentos')
               .delete()
@@ -327,7 +340,18 @@ export const useLibroDiario = ({ empresaId, activeView }: UseLibroDiarioProps) =
                 })
                 .eq('id', tx.id);
 
-              if (tx.numero_comprobante) {
+              // Eliminar en Tesorería: la referencia es el número SRI (ej. 001-001-000001234),
+              // no el número secuencial interno.
+              const matchSriNumBulk = (tx.concepto || '').match(/(\d{3}-\d{3}-\d{9})/);
+              const sriRefNumBulk = matchSriNumBulk ? matchSriNumBulk[1] : null;
+
+              if (sriRefNumBulk) {
+                await supabase
+                  .from('tesoreria_documentos')
+                  .delete()
+                  .eq('id_empresa', empresaId)
+                  .eq('referencia', sriRefNumBulk);
+              } else if (tx.numero_comprobante) {
                 await supabase
                   .from('tesoreria_documentos')
                   .delete()
