@@ -1,7 +1,51 @@
 import React, { useMemo, useState } from 'react';
-import { Wallet, Landmark, ArrowDownCircle, ArrowUpCircle, Repeat, Loader2, CheckCircle2 } from 'lucide-react';
+import { Wallet, Landmark, ArrowDownCircle, ArrowUpCircle, Repeat, Loader2, CheckCircle2, Building2, PiggyBank, Banknote, X } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+
+const BANCOS_ECUADOR = [
+  // Bancos Privados
+  'Banco Pichincha',
+  'Banco Guayaquil',
+  'Banco del Pacífico',
+  'Banco Internacional',
+  'Banco del Austro',
+  'Banco Solidario',
+  'Banco ProCredit',
+  'Banco General Rumiñahui',
+  'Banco de Machala',
+  'Banco Bolivariano',
+  'Banco Capital',
+  'Produbanco',
+  'Diners Club del Ecuador',
+  'Banco D-MIRO',
+  'Banco Desarrollo',
+  // Mutualistas
+  'Mutualista Pichincha',
+  'Mutualista Imbabura',
+  'Mutualista Azuay',
+  // Cooperativas principales
+  'Cooperativa JEP',
+  'Cooperativa Oscus',
+  'Cooperativa Cooprogreso',
+  'Cooperativa Andalucía',
+  'Cooperativa 29 de Octubre',
+  'Cooperativa Atuntaqui',
+  'Cooperativa Mego',
+  'Cooperativa Riobamba',
+  'Cooperativa San Francisco',
+  'Cooperativa Tulcán',
+  'Cooperativa Mushuc Runa',
+  'Cooperativa Alianza del Valle',
+  'Cooperativa Policía Nacional',
+  'Cooperativa Cámara de Comercio de Ambato',
+  // Bancos Públicos
+  'BanEcuador',
+  'Banco del Estado (BDE)',
+  'CFN (Corporación Financiera Nacional)',
+  // Otro
+  'Otro (nombre personalizado)',
+];
 
 interface Props { empresaId: string; mode?: 'resumen' | 'cobros' | 'pagos' | 'conciliacion'; }
 
@@ -17,7 +61,15 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
   const [message, setMessage] = useState('');
   const [showCuentaForm, setShowCuentaForm] = useState(false);
 
-  const [cuentaForm, setCuentaForm] = useState({ nombre: '', tipo: 'Banco', saldo_inicial: '0', moneda: 'USD', numero_referencia: '' });
+  const [cuentaForm, setCuentaForm] = useState({
+    banco_seleccionado: 'Banco Pichincha',
+    nombre: '',            // solo si es 'Otro (nombre personalizado)' o Caja
+    tipo: 'Banco',         // 'Banco' | 'Caja'
+    tipo_cuenta: 'Ahorro', // 'Ahorro' | 'Corriente' (solo para Banco)
+    saldo_inicial: '0',
+    moneda: 'USD',
+    numero_referencia: ''  // número de cuenta bancaria
+  });
   const [movForm, setMovForm] = useState({
     fecha: new Date().toISOString().slice(0, 10),
     tipo_movimiento: mode === 'pagos' ? 'Pago' : 'Cobro',
@@ -105,21 +157,29 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
     setSaving(true);
     setMessage('');
     try {
+      // Construir el nombre y tipo final según la selección
+      const esCaja = cuentaForm.tipo === 'Caja';
+      const esOtro = cuentaForm.banco_seleccionado === 'Otro (nombre personalizado)';
+      const nombreFinal = esCaja
+        ? (cuentaForm.nombre || 'Caja')
+        : (esOtro ? cuentaForm.nombre : cuentaForm.banco_seleccionado);
+      const tipoFinal = esCaja ? 'Caja' : `Banco ${cuentaForm.tipo_cuenta}`;
+
       const { error } = await supabase.from('cuentas_financieras').insert({
         id_empresa: empresaId,
-        nombre: cuentaForm.nombre,
-        tipo: cuentaForm.tipo,
+        nombre: nombreFinal,
+        tipo: tipoFinal,
         saldo_inicial: parseFloat(cuentaForm.saldo_inicial) || 0,
         moneda: cuentaForm.moneda,
         numero_referencia: cuentaForm.numero_referencia || null,
       });
       if (error) throw error;
-      setCuentaForm({ nombre: '', tipo: 'Banco', saldo_inicial: '0', moneda: 'USD', numero_referencia: '' });
+      setCuentaForm({ banco_seleccionado: 'Banco Pichincha', nombre: '', tipo: 'Banco', tipo_cuenta: 'Ahorro', saldo_inicial: '0', moneda: 'USD', numero_referencia: '' });
       setShowCuentaForm(false);
-      setMessage('Cuenta financiera registrada.');
+      setMessage('Cuenta bancaria registrada exitosamente.');
       await queryClient.invalidateQueries({ queryKey: ['tesoreria', empresaId] });
     } catch (error: any) {
-      setMessage(error.message || 'No se pudo crear la cuenta financiera.');
+      setMessage(error.message || 'No se pudo crear la cuenta.');
     } finally { setSaving(false); }
   };
 
@@ -262,41 +322,159 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
       </section>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24 }}>
-          {/* Cuentas Financieras Totales */}
+          {/* Cuentas Bancarias */}
           <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: 20, borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0 }}>Cuentas Registradas</h3>
-              <button 
-                  style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 800, cursor: 'pointer', fontSize: '0.85rem' }}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0 }}>Cuentas Bancarias</h3>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', marginTop: 2 }}>Bancos, cajas y cooperativas</div>
+              </div>
+              <button
+                  style={{ background: showCuentaForm ? 'var(--error)' : 'var(--primary)', border: 'none', color: '#000', fontWeight: 800, cursor: 'pointer', fontSize: '0.78rem', padding: '6px 14px', borderRadius: 8 }}
                   onClick={() => setShowCuentaForm(v => !v)}
               >
-                  + Nueva
+                  {showCuentaForm ? '✕ Cancelar' : '+ Nueva Cuenta'}
               </button>
             </div>
-            
+
             {showCuentaForm && (
-                <form onSubmit={handleCrearCuenta} style={{ padding: 20, background: 'var(--primary-light)' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <input value={cuentaForm.nombre} onChange={e => setCuentaForm({...cuentaForm, nombre: e.target.value})} style={inputStyle} placeholder="Nombre (Ej. Banco Pichincha, Caja)" required />
-                        <select value={cuentaForm.tipo} onChange={e => setCuentaForm({...cuentaForm, tipo: e.target.value})} style={inputStyle}>
-                            <option>Banco</option><option>Caja</option>
+              <form onSubmit={handleCrearCuenta} style={{ padding: 20, background: 'var(--primary-light)', borderBottom: '1px solid var(--border-color)' }}>
+                <div style={{ marginBottom: 14, fontWeight: 800, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Building2 size={16} color="var(--primary)" /> Nueva Cuenta Financiera
+                </div>
+
+                {/* Tipo principal: Banco o Caja */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  {['Banco', 'Caja'].map(t => (
+                    <button key={t} type="button"
+                      onClick={() => setCuentaForm({...cuentaForm, tipo: t})}
+                      style={{ flex: 1, padding: '10px', borderRadius: 10, border: `2px solid ${cuentaForm.tipo === t ? 'var(--primary)' : 'var(--border-color)'}`, background: cuentaForm.tipo === t ? 'var(--primary)' : 'transparent', color: cuentaForm.tipo === t ? '#000' : 'var(--text-sec)', fontWeight: 800, cursor: 'pointer', fontSize: '0.85rem' }}
+                    >
+                      {t === 'Banco' ? '🏦 Banco / Cooperativa' : '💵 Caja / Efectivo'}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {cuentaForm.tipo === 'Banco' ? (
+                    <>
+                      {/* Seleccionar banco de Ecuador */}
+                      <div>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Institución Financiera</label>
+                        <select
+                          value={cuentaForm.banco_seleccionado}
+                          onChange={e => setCuentaForm({...cuentaForm, banco_seleccionado: e.target.value, nombre: ''})}
+                          style={inputStyle}
+                        >
+                          {BANCOS_ECUADOR.map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
-                        <input value={cuentaForm.saldo_inicial} onChange={e => setCuentaForm({...cuentaForm, saldo_inicial: e.target.value})} style={inputStyle} placeholder="Saldo Inicial" required />
-                        <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Guardar</button>
+                      </div>
+
+                      {/* Nombre personalizado si eligió Otro */}
+                      {cuentaForm.banco_seleccionado === 'Otro (nombre personalizado)' && (
+                        <input
+                          value={cuentaForm.nombre}
+                          onChange={e => setCuentaForm({...cuentaForm, nombre: e.target.value})}
+                          style={inputStyle}
+                          placeholder="Nombre del banco o cooperativa"
+                          required
+                        />
+                      )}
+
+                      {/* Tipo de cuenta */}
+                      <div>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Tipo de Cuenta</label>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          {['Ahorro', 'Corriente'].map(tc => (
+                            <button key={tc} type="button"
+                              onClick={() => setCuentaForm({...cuentaForm, tipo_cuenta: tc})}
+                              style={{ flex: 1, padding: '9px', borderRadius: 8, border: `2px solid ${cuentaForm.tipo_cuenta === tc ? 'var(--primary)' : 'var(--border-color)'}`, background: cuentaForm.tipo_cuenta === tc ? 'var(--primary)' : 'transparent', color: cuentaForm.tipo_cuenta === tc ? '#000' : 'var(--text-sec)', fontWeight: 700, cursor: 'pointer', fontSize: '0.82rem' }}
+                            >
+                              {tc === 'Ahorro' ? '🏷 Ahorro' : '💳 Corriente'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Número de cuenta */}
+                      <div>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Número de Cuenta</label>
+                        <input
+                          value={cuentaForm.numero_referencia}
+                          onChange={e => setCuentaForm({...cuentaForm, numero_referencia: e.target.value})}
+                          style={inputStyle}
+                          placeholder="Ej. 2200123456"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <label style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Nombre de la Caja</label>
+                      <input
+                        value={cuentaForm.nombre}
+                        onChange={e => setCuentaForm({...cuentaForm, nombre: e.target.value})}
+                        style={inputStyle}
+                        placeholder="Ej. Caja Principal, Caja Chica"
+                        required
+                      />
                     </div>
-                </form>
+                  )}
+
+                  {/* Saldo inicial */}
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Saldo Inicial ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={cuentaForm.saldo_inicial}
+                      onChange={e => setCuentaForm({...cuentaForm, saldo_inicial: e.target.value})}
+                      style={{...inputStyle, fontWeight: 800}}
+                      placeholder="0.00"
+                      required
+                    />
+                  </div>
+
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 4 }} disabled={saving}>
+                    {saving ? 'Guardando...' : '✓ Registrar Cuenta'}
+                  </button>
+                </div>
+              </form>
             )}
 
-            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {cuentas.map(c => (
-                    <div key={c.id} className="flex-between" style={{ paddingBottom: 12, borderBottom: '1px dashed var(--border-color)' }}>
-                        <div>
-                            <div style={{ fontWeight: 800 }}>{c.nombre}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-sec)' }}>{c.tipo}</div>
-                        </div>
-                        <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>${Number(c.saldo_inicial).toFixed(2)}</div>
+            {/* Lista de cuentas registradas */}
+            <div style={{ padding: cuentas.length === 0 ? 24 : '12px 0' }}>
+              {cuentas.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-sec)', fontSize: '0.85rem' }}>
+                  <Building2 size={32} style={{ opacity: 0.3, display: 'block', margin: '0 auto 8px' }} />
+                  Sin cuentas registradas.<br />
+                  <span style={{ fontSize: '0.75rem' }}>Haz clic en "+ Nueva Cuenta" para agregar tu banco.</span>
+                </div>
+              ) : cuentas.map((c: any) => {
+                const esCaja = c.tipo === 'Caja';
+                const tipoBadge = c.tipo?.replace('Banco ', '') || c.tipo;
+                const numCta = c.numero_referencia;
+                const numMask = numCta && numCta.length > 4 ? '···' + numCta.slice(-4) : numCta;
+                return (
+                  <div key={c.id} style={{ padding: '14px 20px', borderBottom: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 12, background: esCaja ? 'rgba(16,185,129,0.12)' : 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {esCaja ? <Banknote size={18} color="var(--success)" /> : <Building2 size={18} color="var(--primary)" />}
                     </div>
-                ))}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.nombre}</div>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 7px', borderRadius: 6, background: esCaja ? 'rgba(16,185,129,0.12)' : 'var(--primary-light)', color: esCaja ? 'var(--success)' : 'var(--primary)', textTransform: 'uppercase' }}>
+                          {tipoBadge}
+                        </span>
+                        {numMask && <span style={{ fontSize: '0.7rem', color: 'var(--text-sec)', fontFamily: 'monospace' }}>{numMask}</span>}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontWeight: 900, fontSize: '1rem' }}>${Number(c.saldo_inicial).toFixed(2)}</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-sec)' }}>saldo inicial</div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
