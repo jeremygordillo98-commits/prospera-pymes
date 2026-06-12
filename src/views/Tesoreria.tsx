@@ -31,17 +31,30 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
   const { data, isLoading: loading } = useQuery({
     queryKey: ['tesoreria', empresaId],
     queryFn: async () => {
-      const [cuentasRes, docsRes, movRes, entRes, pcRes] = await Promise.all([
+      const [cuentasRes, docsRes, movRes, entRes, pcRes, txAnuladasRes] = await Promise.all([
         supabase.from('cuentas_financieras').select('*').eq('id_empresa', empresaId).order('nombre'),
         supabase.from('tesoreria_documentos').select('id,fecha_emision,fecha_vencimiento,tipo_documento,referencia,concepto,saldo_pendiente,total,estado,entidades(id,razon_social)').eq('id_empresa', empresaId).order('fecha_emision', { ascending: false }),
         supabase.from('tesoreria_movimientos').select('id,fecha,tipo_movimiento,concepto,monto,estado,referencia,cuenta_financiera:cuentas_financieras(nombre),entidades(id,razon_social),documento:tesoreria_documentos(referencia,concepto)').eq('id_empresa', empresaId).order('fecha', { ascending: false }).limit(30),
         supabase.from('entidades').select('id,razon_social,tipo_entidad').eq('id_empresa', empresaId).order('razon_social'),
-        supabase.from('plan_cuentas').select('id, codigo_cuenta, nombre').eq('id_empresa', empresaId).order('codigo_cuenta')
+        supabase.from('plan_cuentas').select('id, codigo_cuenta, nombre').eq('id_empresa', empresaId).order('codigo_cuenta'),
+        // Traer todas las transacciones anuladas para poder excluir sus facturas de tesorería
+        supabase.from('transacciones').select('concepto').eq('id_empresa', empresaId).eq('tipo_comprobante', 'Anulado')
       ]);
+
+      // Extraer los números SRI (ej. 001-001-000001234) de las transacciones anuladas
+      const refsAnuladas = new Set<string>();
+      (txAnuladasRes.data || []).forEach((tx: any) => {
+        const match = (tx.concepto || '').match(/(\d{3}-\d{3}-\d{9})/);
+        if (match) refsAnuladas.add(match[1]);
+      });
+
+      // Mapear y filtrar documentos: excluir los que correspondan a facturas anuladas
+      const todosDocumentos = (docsRes.data || []).map((item: any) => ({ ...item, entidades: Array.isArray(item.entidades) ? item.entidades[0] : item.entidades }));
+      const documentosSinAnulados = todosDocumentos.filter((d: any) => !refsAnuladas.has(d.referencia));
 
       return {
         cuentas: cuentasRes.data || [],
-        documentos: (docsRes.data || []).map((item: any) => ({ ...item, entidades: Array.isArray(item.entidades) ? item.entidades[0] : item.entidades })),
+        documentos: documentosSinAnulados,
         movimientos: (movRes.data || []).map((item: any) => ({
           ...item,
           cuenta_financiera: Array.isArray(item.cuenta_financiera) ? item.cuenta_financiera[0] : item.cuenta_financiera,
@@ -52,7 +65,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
         cuentasContables: pcRes?.data || []
       };
     },
-    staleTime: 1000 * 60 * 5, // Cache for 5 mins
+    staleTime: 0, // Sin caché: siempre datos frescos para reflejar anulaciones
   });
 
   const cuentas = data?.cuentas || [];
