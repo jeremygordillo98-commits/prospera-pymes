@@ -278,7 +278,20 @@ export const useSRIAutomation = ({ tipo, empresaId }: UseSRIAutomationProps) => 
             })
             .eq('id', doc.id);
 
-          if (doc.transacciones?.numero_comprobante) {
+          // Eliminar en Tesorería: la referencia es el número SRI (ej. 001-001-000001234),
+          // no el número secuencial interno. Extraemos el número de factura SRI del concepto.
+          const conceptoTx = doc.transacciones?.concepto || '';
+          const matchSriNum = conceptoTx.match(/(\d{3}-\d{3}-\d{9})/);
+          const sriInvoiceNum = matchSriNum ? matchSriNum[1] : null;
+
+          if (sriInvoiceNum) {
+            await supabase
+              .from('tesoreria_documentos')
+              .delete()
+              .eq('id_empresa', empresaId)
+              .eq('referencia', sriInvoiceNum);
+          } else if (doc.transacciones?.numero_comprobante) {
+            // Fallback: intentar con el número interno
             await supabase
               .from('tesoreria_documentos')
               .delete()

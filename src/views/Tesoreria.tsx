@@ -80,9 +80,11 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
   }, [cuentas, documentos, movimientos]);
 
   const docsFiltrados = useMemo(() => {
-    if (mode === 'cobros') return documentos.filter((d) => d.tipo_documento === 'Cuenta por cobrar');
-    if (mode === 'pagos') return documentos.filter((d) => d.tipo_documento === 'Cuenta por pagar');
-    return documentos;
+    // Nunca mostrar documentos anulados en las vistas de cobros/pagos
+    const activos = documentos.filter((d) => d.estado !== 'Anulado');
+    if (mode === 'cobros') return activos.filter((d) => d.tipo_documento === 'Cuenta por cobrar');
+    if (mode === 'pagos') return activos.filter((d) => d.tipo_documento === 'Cuenta por pagar');
+    return activos;
   }, [documentos, mode]);
 
   const handleCrearCuenta = async (e: React.FormEvent) => {
