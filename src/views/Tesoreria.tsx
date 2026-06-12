@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Wallet, Landmark, ArrowDownCircle, ArrowUpCircle, Repeat, Loader2, CheckCircle2, Building2, PiggyBank, Banknote, X } from 'lucide-react';
+import { Wallet, Landmark, ArrowDownCircle, ArrowUpCircle, Repeat, Loader2, CheckCircle2, Building2, Banknote } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 

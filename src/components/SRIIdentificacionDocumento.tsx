@@ -17,8 +17,22 @@ export const SRIIdentificacionDocumento: React.FC<Props> = ({ doc, showAlert }) 
           <span style={{ fontWeight: 'bold', color: '#ffffff' }}>{doc.transacciones?.tipo_comprobante}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '6px' }}>
-          <span style={{ color: 'var(--text-sec)' }}>Número:</span>
+          <span style={{ color: 'var(--text-sec)' }}>Número de Asiento:</span>
           <span style={{ fontWeight: 'bold', color: '#ffffff', fontFamily: 'monospace' }}>{doc.transacciones?.numero_comprobante}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '6px' }}>
+          <span style={{ color: 'var(--text-sec)' }}>Número de Factura:</span>
+          <span style={{ fontWeight: 'bold', color: '#ffffff', fontFamily: 'monospace' }}>
+            {(() => {
+              if (doc.clave_acceso_xml && doc.clave_acceso_xml.length >= 39) {
+                return `${doc.clave_acceso_xml.substring(24, 27)}-${doc.clave_acceso_xml.substring(27, 30)}-${doc.clave_acceso_xml.substring(30, 39)}`;
+              }
+              const sriRegex = /\d{3}-\d{3}-\d{9}/;
+              const match = doc.transacciones?.concepto?.match(sriRegex);
+              if (match) return match[0];
+              return '—';
+            })()}
+          </span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '6px' }}>
           <span style={{ color: 'var(--text-sec)' }}>Fecha Emisión:</span>

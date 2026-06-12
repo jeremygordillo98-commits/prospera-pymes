@@ -1,11 +1,12 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { X, FileText } from 'lucide-react';
+import { X, FileText, Download } from 'lucide-react';
 import { useDocumentDetailsSRI } from '../hooks/useDocumentDetailsSRI';
 import { SRIIdentificacionDocumento } from './SRIIdentificacionDocumento';
 import { SRIValoresFactura } from './SRIValoresFactura';
 import { SRIAsientoContable } from './SRIAsientoContable';
 import { SRIRetencionAplicada } from './SRIRetencionAplicada';
+import { generateSingleSRIDocumentPDF } from '../utils/pdfGenerator';
 
 interface DocumentDetailsSRIModalProps {
   viewingDoc: any;
@@ -175,8 +176,35 @@ export const DocumentDetailsSRIModal: React.FC<DocumentDetailsSRIModalProps> = (
           borderTop: '1px solid var(--border-color)', 
           display: 'flex', 
           justifyContent: 'flex-end',
+          gap: '12px',
           backgroundColor: '#0c101b'
         }}>
+          <button 
+            onClick={async () => {
+              try {
+                await generateSingleSRIDocumentPDF(empresaId, doc, viewingMovements, getAccountLabel);
+                showAlert("PDF generado exitosamente.", "success");
+              } catch (err) {
+                console.error("Error generating PDF:", err);
+                showAlert("Error al generar el PDF.", "error");
+              }
+            }}
+            className="btn btn-secondary" 
+            style={{ 
+              padding: '12px 28px', 
+              fontSize: '0.95rem', 
+              fontWeight: 800, 
+              borderRadius: '12px', 
+              background: 'rgba(255,255,255,0.05)', 
+              border: '1px solid rgba(255,255,255,0.1)', 
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <Download size={16} /> Descargar PDF
+          </button>
           <button 
             onClick={onClose} 
             className="btn btn-primary" 
