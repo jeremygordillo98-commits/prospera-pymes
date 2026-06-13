@@ -44,6 +44,7 @@ export interface SRIRetencionDetalle {
 export interface SRIRetencionDocSustento {
   numDocSustento: string;
   codDocSustento: string;        // Tipo de documento sustento (01=Factura, etc.)
+  codSustento: string;           // Código de sustento tributario (01, 02, etc.)
   fechaEmisionDocSustento: string;
   retenciones: SRIRetencionDetalle[];
 }
@@ -249,6 +250,7 @@ export const parseSRIXML = async (xmlContent: string): Promise<SRIParsedData | n
         return {
           numDocSustento: doc.numDocSustento?.toString() || '',
           codDocSustento: doc.codDocSustento?.toString() || '01',
+          codSustento: doc.codSustento?.toString() || '01',
           fechaEmisionDocSustento: doc.fechaEmisionDocSustento || '',
           retenciones: retencionesFinal,
         };

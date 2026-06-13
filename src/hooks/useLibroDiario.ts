@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../services/supabase';
-import { generatePDFReport } from '../utils/pdfGenerator';
+import { generatePDFReport, generateLibroDiarioPDF } from '../utils/pdfGenerator';
 
 export interface Movement {
   id: string;
@@ -445,6 +445,16 @@ export const useLibroDiario = ({ empresaId, activeView }: UseLibroDiarioProps) =
     await generatePDFReport(empresaId, 'Detalle de Asiento Contable', subtitle, columns, rows, foot);
   };
 
+  const exportLibroDiarioPDF = async () => {
+    let subtitle = 'Movimientos Contables Registrados';
+    if (filterDate) {
+      subtitle += ` | Período: ${filterDate}`;
+    } else {
+      subtitle += ' | Histórico Completo';
+    }
+    await generateLibroDiarioPDF(empresaId, 'Libro Diario General', subtitle, filteredTransactions);
+  };
+
   return {
     loading,
     expandedTxs,
@@ -465,6 +475,7 @@ export const useLibroDiario = ({ empresaId, activeView }: UseLibroDiarioProps) =
     handleBulkAnular,
     exportToExcel,
     handleExportTxPDF,
+    exportLibroDiarioPDF,
     showAlert
   };
 };

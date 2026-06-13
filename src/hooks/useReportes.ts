@@ -14,6 +14,7 @@ export interface Movement {
   debe: number; 
   haber: number; 
   fecha?: string; 
+  entidad?: { id: string; ruc_cedula: string; razon_social: string } | null;
 }
 
 export interface CarteraDoc {
@@ -80,6 +81,7 @@ export const useReportes = (empresaId: string) => {
   const [sriDocs, setSriDocs] = useState<SriDoc[]>([]);
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [entityFilter, setEntityFilter] = useState('');
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
   const [soloConMov, setSoloConMov] = useState(false);
@@ -91,7 +93,7 @@ export const useReportes = (empresaId: string) => {
       try {
         const [accRes, movRes, carteraRes, tesoRes, sriRes] = await Promise.all([
           supabase.from('plan_cuentas').select('id,codigo_cuenta,nombre,tipo').eq('id_empresa', empresaId).order('codigo_cuenta'),
-          supabase.from('movimientos').select('id_cuenta,debe,haber,transacciones(fecha)').eq('id_empresa', empresaId),
+          supabase.from('movimientos').select('id_cuenta,debe,haber,transacciones(fecha, entidades(id, ruc_cedula, razon_social))').eq('id_empresa', empresaId),
           supabase.from('tesoreria_documentos').select('id,fecha_emision,fecha_vencimiento,tipo_documento,referencia,concepto,saldo_pendiente,total,estado,entidades(id,razon_social,tipo_entidad,ruc_cedula)').eq('id_empresa', empresaId),
           supabase.from('tesoreria_movimientos').select('id,fecha,tipo_movimiento,concepto,monto,estado,referencia,cuentas_financieras(nombre),entidades(razon_social)').eq('id_empresa', empresaId),
           supabase.from('documentos_sri').select('id, es_compra, base_12, base_0, monto_iva, retenciones_aplicadas, transacciones(fecha, concepto, tipo_comprobante, numero_comprobante, entidades(ruc_cedula, razon_social))').eq('id_empresa', empresaId)
@@ -99,12 +101,16 @@ export const useReportes = (empresaId: string) => {
 
         if (!accRes.error) setAccounts(accRes.data || []);
         if (!movRes.error) {
-          setMovements((movRes.data || []).map((m: any) => ({
-            ...m,
-            debe: Number(m.debe || 0),
-            haber: Number(m.haber || 0),
-            fecha: Array.isArray(m.transacciones) ? m.transacciones[0]?.fecha : m.transacciones?.fecha
-          })));
+          setMovements((movRes.data || []).map((m: any) => {
+            const tx = Array.isArray(m.transacciones) ? m.transacciones[0] : m.transacciones;
+            return {
+              id_cuenta: m.id_cuenta,
+              debe: Number(m.debe || 0),
+              haber: Number(m.haber || 0),
+              fecha: tx?.fecha,
+              entidad: tx?.entidades
+            };
+          }));
         }
         if (!carteraRes.error) setCarteraDocs(carteraRes.data as any || []);
         if (!tesoRes.error) setTesoMovs(tesoRes.data as any || []);
@@ -119,7 +125,7 @@ export const useReportes = (empresaId: string) => {
     load();
   }, [empresaId]);
 
-  // Filtrado de movimientos por fecha
+  // Filtrado de movimientos por fecha y entidad
   const rawAccountMap = useMemo(() => {
     const map = new Map<string, { debeIni: number; haberIni: number; debePer: number; haberPer: number }>();
     accounts.forEach(acc => {
@@ -127,6 +133,15 @@ export const useReportes = (empresaId: string) => {
     });
 
     movements.forEach(m => {
+      // Filtrar por entidad si está configurado
+      if (entityFilter) {
+        const ent = m.entidad;
+        if (!ent) return;
+        const nameMatch = ent.razon_social?.toLowerCase().includes(entityFilter.toLowerCase());
+        const rucMatch = ent.ruc_cedula?.toLowerCase().includes(entityFilter.toLowerCase());
+        if (!nameMatch && !rucMatch) return;
+      }
+
       const accData = map.get(m.id_cuenta);
       if (accData) {
         const f = m.fecha || '';
@@ -142,7 +157,7 @@ export const useReportes = (empresaId: string) => {
       }
     });
     return map;
-  }, [movements, accounts, desde, hasta]);
+  }, [movements, accounts, desde, hasta, entityFilter]);
 
   // Generar Balance Acumulado y Flujos Jerárquicos
   const ledger = useMemo(() => {
@@ -268,21 +283,31 @@ export const useReportes = (empresaId: string) => {
   }, [tesoMovs, desde, hasta]);
 
   const retencionesAgrupadas = useMemo(() => {
-    const emitidas = new Map<string, { base: number; valor: number; count: number }>();
-    const recibidas = new Map<string, { base: number; valor: number; count: number }>();
+    const emitidasRenta = new Map<string, { base: number; valor: number; count: number }>();
+    const emitidasIva = new Map<string, { base: number; valor: number; count: number }>();
+    const recibidasRenta = new Map<string, { base: number; valor: number; count: number }>();
+    const recibidasIva = new Map<string, { base: number; valor: number; count: number }>();
 
     sriDocs.forEach(doc => {
       const rets = doc.retenciones_aplicadas || [];
       if (!Array.isArray(rets)) return;
 
       rets.forEach((r: any) => {
-        const cod = r.codigo || 'OTRO';
+        if (r.tipo === 'METADATA') return;
+        
+        const isRenta = r.tipo === 'RENTA' || !r.tipo;
+        const cod = r.codigo || (r.tipo === 'IVA' ? `${r.porcentaje || 0}%` : 'OTRO');
         const base = Number(r.base || 0);
         const valor = Number(r.valor || 0);
 
-        const targetMap = doc.es_compra ? emitidas : recibidas;
-        const current = targetMap.get(cod) || { base: 0, valor: 0, count: 0 };
+        let targetMap;
+        if (doc.es_compra) {
+          targetMap = isRenta ? emitidasRenta : emitidasIva;
+        } else {
+          targetMap = isRenta ? recibidasRenta : recibidasIva;
+        }
         
+        const current = targetMap.get(cod) || { base: 0, valor: 0, count: 0 };
         current.base += base;
         current.valor += valor;
         current.count++;
@@ -291,10 +316,14 @@ export const useReportes = (empresaId: string) => {
     });
 
     return { 
-      emitidas: Array.from(emitidas.entries()).map(([codigo, val]) => ({ codigo, ...val })),
-      recibidas: Array.from(recibidas.entries()).map(([codigo, val]) => ({ codigo, ...val }))
+      emitidasRenta: Array.from(emitidasRenta.entries()).map(([codigo, val]) => ({ codigo, ...val })),
+      emitidasIva: Array.from(emitidasIva.entries()).map(([codigo, val]) => ({ codigo, ...val })),
+      recibidasRenta: Array.from(recibidasRenta.entries()).map(([codigo, val]) => ({ codigo, ...val })),
+      recibidasIva: Array.from(recibidasIva.entries()).map(([codigo, val]) => ({ codigo, ...val }))
     };
   }, [sriDocs]);
+
+
 
   const totalDebe = ledger.filter(i => !i.isParent).reduce((s, i) => s + i.debe, 0);
   const totalHaber = ledger.filter(i => !i.isParent).reduce((s, i) => s + i.haber, 0);
@@ -373,6 +402,8 @@ export const useReportes = (empresaId: string) => {
     sriDocs,
     searchTerm,
     setSearchTerm,
+    entityFilter,
+    setEntityFilter,
     desde,
     setDesde,
     hasta,

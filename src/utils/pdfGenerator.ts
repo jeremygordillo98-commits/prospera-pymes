@@ -371,3 +371,144 @@ export const generateSingleSRIDocumentPDF = async (
     const cleanTitle = `Detalle_Comprobante_${xmlNumero}`;
     pdf.save(`${cleanTitle}.pdf`);
 };
+
+export const generateLibroDiarioPDF = async (
+    empresaId: string,
+    title: string,
+    subtitle: string,
+    transactions: any[]
+) => {
+    // 1. Fetch metadata
+    const { data: { user } } = await supabase.auth.getUser();
+    let contadorLogo = null;
+    if (user) {
+        const { data: perfil } = await supabase.from('perfiles').select('logo_url').eq('id_usuario', user.id).single();
+        if (perfil?.logo_url) contadorLogo = await getBase64ImageFromUrl(perfil.logo_url);
+    }
+
+    const { data: empresa } = await supabase.from('empresas_gestionadas').select('nombre_empresa, ruc_empresa, logo_url').eq('id', empresaId).single();
+    let empresaLogo = null;
+    let empresaNombre = 'Empresa';
+    let empresaRuc = '';
+    if (empresa) {
+        empresaNombre = empresa.nombre_empresa;
+        empresaRuc = empresa.ruc_empresa || '';
+        if (empresa.logo_url) empresaLogo = await getBase64ImageFromUrl(empresa.logo_url);
+    }
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+
+    const drawHeader = () => {
+        if (empresaLogo) {
+            doc.addImage(empresaLogo, 'PNG', 14, 10, 20, 20, undefined, 'FAST');
+        }
+        if (contadorLogo) {
+            doc.addImage(contadorLogo, 'PNG', pageWidth - 14 - 20, 10, 20, 20, undefined, 'FAST');
+        }
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(30, 30, 30);
+        doc.text(empresaNombre, pageWidth / 2, 16, { align: 'center' });
+
+        if (empresaRuc) {
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 100, 100);
+            doc.text(`RUC: ${empresaRuc}`, pageWidth / 2, 21, { align: 'center' });
+        }
+
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(60, 60, 60);
+        doc.text(title, pageWidth / 2, 27, { align: 'center' });
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(120, 120, 120);
+        doc.text(subtitle, pageWidth / 2, 32, { align: 'center' });
+    };
+
+    const drawFooter = (data: any) => {
+        const str = `Página ${data.pageNumber}`;
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(150, 150, 150);
+        doc.text('Generado con la tecnología de Prospera Pymes', 14, doc.internal.pageSize.height - 10);
+        doc.text(str, pageWidth - 14, doc.internal.pageSize.height - 10, { align: 'right' });
+    };
+
+    const columns = ['Código / Cuenta', 'Concepto / Glosa', 'Debe', 'Haber'];
+    const rows: any[] = [];
+    let totalLibroDebe = 0;
+    let totalLibroHaber = 0;
+
+    transactions.forEach(tx => {
+        const isAnulado = tx.tipo_comprobante === 'Anulado';
+        const dateStr = tx.fecha ? new Date(tx.fecha + 'T12:00:00').toLocaleDateString('es-EC') : '—';
+        const docNum = tx.numero_comprobante || '—';
+        const razonSocial = tx.entidades?.razon_social || 'Consumidor Final';
+        
+        // Asiento Contable Spanning Row
+        rows.push([
+            {
+                content: `ASIENTO #${docNum} | FECHA: ${dateStr} | TERCERO: ${razonSocial}${isAnulado ? ' [ANULADO]' : ''}`,
+                colSpan: 4,
+                styles: { fillColor: isAnulado ? [254, 242, 242] : [243, 244, 246], fontStyle: 'bold', textColor: isAnulado ? [220, 38, 38] : [31, 41, 55] }
+            }
+        ]);
+
+        tx.movimientos.forEach((m: any) => {
+            const code = m.plan_cuentas?.codigo_cuenta || '';
+            const name = m.plan_cuentas?.nombre || '';
+            const debeVal = Number(m.debe || 0);
+            const haberVal = Number(m.haber || 0);
+
+            rows.push([
+                `${code} - ${name}`,
+                tx.concepto || '',
+                debeVal > 0 ? `$${debeVal.toFixed(2)}` : '—',
+                haberVal > 0 ? `$${haberVal.toFixed(2)}` : '—'
+            ]);
+
+            if (!isAnulado) {
+                totalLibroDebe += debeVal;
+                totalLibroHaber += haberVal;
+            }
+        });
+    });
+
+    const foot = [[
+        'TOTAL GENERAL LIBRO DIARIO',
+        '',
+        `$${totalLibroDebe.toFixed(2)}`,
+        `$${totalLibroHaber.toFixed(2)}`
+    ]];
+
+    autoTable(doc, {
+        head: [columns],
+        body: rows,
+        foot: foot,
+        startY: 40,
+        margin: { top: 40, bottom: 20 },
+        styles: { fontSize: 8, cellPadding: 3, textColor: [50, 50, 50] },
+        headStyles: { fillColor: [99, 102, 241], textColor: 255, fontStyle: 'bold', halign: 'left' },
+        footStyles: { fillColor: [240, 245, 250], textColor: [0, 0, 0], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [255, 255, 255] },
+        columnStyles: {
+            0: { cellWidth: 70 },
+            1: { cellWidth: 'auto' },
+            2: { cellWidth: 30, halign: 'right' },
+            3: { cellWidth: 30, halign: 'right' }
+        },
+        didDrawPage: (data) => {
+            drawHeader();
+            drawFooter(data);
+        }
+    });
+
+    const fileName = `Libro_Diario_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+};
+
+
