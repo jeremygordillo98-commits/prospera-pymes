@@ -33,6 +33,10 @@ export const useDocumentDetailsSRI = ({
   const [verRetIva, setVerRetIva] = useState('');
   const [selectedWithholdingRentaAccount, setSelectedWithholdingRentaAccount] = useState<string>('');
   const [selectedWithholdingIvaAccount, setSelectedWithholdingIvaAccount] = useState<string>('');
+  const [codSustento, setCodSustento] = useState('01');
+  const [manualNumRet, setManualNumRet] = useState('');
+  const [manualAutRet, setManualAutRet] = useState('');
+  const [manualFechaRet, setManualFechaRet] = useState(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     setDoc(viewingDoc);
@@ -68,14 +72,31 @@ export const useDocumentDetailsSRI = ({
     if (doc) {
       let retRenta = '';
       let retIva = '';
+      let sust = '01';
+      let num = '';
+      let aut = '';
+      let date = new Date().toISOString().split('T')[0];
+
       if (doc.retenciones_aplicadas && doc.retenciones_aplicadas.length > 0) {
         const rR = doc.retenciones_aplicadas.find((r: any) => r.tipo === 'RENTA');
         if (rR) retRenta = rR.codigo?.toString() || '';
         const rI = doc.retenciones_aplicadas.find((r: any) => r.tipo === 'IVA');
         if (rI) retIva = rI.codigo?.toString() || '';
+
+        const meta = doc.retenciones_aplicadas.find((r: any) => r.cod_sustento || r.numero_retencion);
+        if (meta) {
+          sust = meta.cod_sustento || '01';
+          num = meta.numero_retencion !== 'Manual' ? meta.numero_retencion || '' : '';
+          aut = meta.clave_retencion || '';
+          date = meta.fecha_retencion ? meta.fecha_retencion.split('T')[0] : date;
+        }
       }
       setVerRetRenta(retRenta);
       setVerRetIva(retIva);
+      setCodSustento(sust);
+      setManualNumRet(num);
+      setManualAutRet(aut);
+      setManualFechaRet(date);
 
       if (accounts && accounts.length > 0) {
         if (tipo === 'Compras') {
@@ -141,6 +162,7 @@ export const useDocumentDetailsSRI = ({
         tipo: ret.tipo,
         desc_doc: docSust.numDocSustento,
         cod_doc_sustento: docSust.codDocSustento,
+        cod_sustento: docSust.codSustento || '01',
         clave_retencion: parsedData.claveAcceso,
         numero_retencion: parsedData.numeroComprobante,
         fecha_retencion: parsedData.fechaEmision
@@ -241,7 +263,17 @@ export const useDocumentDetailsSRI = ({
     return retencionesFinal;
   };
 
-  const applyManualWithholding = async (targetDoc: any, retRentaCod: string, retIvaCod: string, rentaAccountId: string, ivaAccountId: string) => {
+  const applyManualWithholding = async (
+    targetDoc: any,
+    retRentaCod: string,
+    retIvaCod: string,
+    rentaAccountId: string,
+    ivaAccountId: string,
+    codSustentoVal: string,
+    manualNumRetVal: string,
+    manualAutRetVal: string,
+    manualFechaRetVal: string
+  ) => {
     const idTransaccion = targetDoc.transacciones?.id;
     if (!idTransaccion) {
       throw new Error("La factura seleccionada no posee una transacción contable asociada.");
@@ -257,7 +289,7 @@ export const useDocumentDetailsSRI = ({
 
     const baseImponibleForRenta = targetDoc.base_12 || baseGravada;
 
-    if (retRentaCod) {
+    if (retRentaCod && retRentaCod !== '000') {
       const retSel = CATALOGO_RETENCIONES_RENTA.find(r => r.codigo === retRentaCod);
       if (retSel) {
         const valRetCalculado = parseFloat(((baseImponibleForRenta * retSel.porcentaje) / 100).toFixed(2));
@@ -268,16 +300,13 @@ export const useDocumentDetailsSRI = ({
             base: baseImponibleForRenta,
             valor: valRetCalculado,
             tipo: 'RENTA',
-            clave_retencion: '',
-            numero_retencion: 'Manual',
-            fecha_retencion: new Date().toISOString().split('T')[0]
           });
           totalRetenidoRenta = valRetCalculado;
         }
       }
     }
 
-    if (retIvaCod) {
+    if (retIvaCod && retIvaCod !== '729') {
       const retSelIva = CATALOGO_RETENCIONES_IVA.find(r => r.codigo === retIvaCod);
       if (retSelIva && retSelIva.porcentaje > 0) {
         const valRetCalculado = parseFloat(((ivaMonto * retSelIva.porcentaje) / 100).toFixed(2));
@@ -288,13 +317,33 @@ export const useDocumentDetailsSRI = ({
             base: ivaMonto,
             valor: valRetCalculado,
             tipo: 'IVA',
-            clave_retencion: '',
-            numero_retencion: 'Manual',
-            fecha_retencion: new Date().toISOString().split('T')[0]
           });
           totalRetenidoIVA = valRetCalculado;
         }
       }
+    }
+
+    // Inyectar metadatos fiscales a cada retención, o crear objeto dummy si no hay retenciones
+    if (retencionesFinal.length === 0) {
+      retencionesFinal.push({
+        codigo: '000',
+        porcentaje: 0,
+        base: 0,
+        valor: 0,
+        tipo: 'METADATA',
+        cod_sustento: codSustentoVal,
+        clave_retencion: '',
+        numero_retencion: '',
+        fecha_retencion: new Date().toISOString().split('T')[0]
+      });
+    } else {
+      retencionesFinal = retencionesFinal.map(r => ({
+        ...r,
+        cod_sustento: codSustentoVal,
+        clave_retencion: manualAutRetVal,
+        numero_retencion: manualNumRetVal,
+        fecha_retencion: manualFechaRetVal
+      }));
     }
 
     const totalRetenido = totalRetenidoRenta + totalRetenidoIVA;
@@ -395,7 +444,11 @@ export const useDocumentDetailsSRI = ({
         verRetRenta,
         verRetIva,
         selectedWithholdingRentaAccount,
-        selectedWithholdingIvaAccount
+        selectedWithholdingIvaAccount,
+        codSustento,
+        manualNumRet,
+        manualAutRet,
+        manualFechaRet
       );
       showAlert("Retención manual registrada y contabilidad sincronizada exitosamente.", "success");
       setDoc((prev: any) => prev ? { ...prev, retenciones_aplicadas: rets } : null);
@@ -566,6 +619,14 @@ export const useDocumentDetailsSRI = ({
     baseGrav,
     totalVal,
     calculatedBase12,
-    handleApplyWithholdingFromXML
+    handleApplyWithholdingFromXML,
+    codSustento,
+    setCodSustento,
+    manualNumRet,
+    setManualNumRet,
+    manualAutRet,
+    setManualAutRet,
+    manualFechaRet,
+    setManualFechaRet
   };
 };

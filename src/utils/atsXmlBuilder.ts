@@ -74,17 +74,27 @@ const formatDateForSRI = (dateString: string | undefined): string => {
 export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, docs: DocSRI[]): string => {
   const mesStr = String(mes).padStart(2, '0');
   
-  const compras = docs.filter(d => d.transacciones?.tipo_comprobante === 'Factura' && d.es_compra);
-  const ventas = docs.filter(d => d.transacciones?.tipo_comprobante === 'Factura' && !d.es_compra);
+  const compras = docs.filter(d => (d.transacciones?.tipo_comprobante === 'Factura' || d.transacciones?.tipo_comprobante === 'Nota de Crédito') && d.es_compra);
+  const ventas = docs.filter(d => (d.transacciones?.tipo_comprobante === 'Factura' || d.transacciones?.tipo_comprobante === 'Nota de Crédito') && !d.es_compra);
   const retencionesRecibidas = docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retención' && !d.es_compra);
   const anulados = docs.filter(d => 
     d.transacciones?.concepto?.toLowerCase().includes('anulado') || 
     d.transacciones?.tipo_comprobante === 'Anulado'
   );
 
-  const totalBase12Ventas = ventas.reduce((s, d) => s + (d.base_12 || 0), 0);
-  const totalBase0Ventas = ventas.reduce((s, d) => s + (d.base_0 || 0), 0);
-  const totalBaseNoObjetoVentas = ventas.reduce((s, d) => s + (d.base_no_objeto || 0), 0);
+  // totalVentasSRI debe deducir Notas de Crédito de Ventas
+  const totalBase12Ventas = ventas.reduce((s, d) => {
+    const isNC = d.transacciones?.tipo_comprobante === 'Nota de Crédito';
+    return s + (isNC ? -(d.base_12 || 0) : (d.base_12 || 0));
+  }, 0);
+  const totalBase0Ventas = ventas.reduce((s, d) => {
+    const isNC = d.transacciones?.tipo_comprobante === 'Nota de Crédito';
+    return s + (isNC ? -(d.base_0 || 0) : (d.base_0 || 0));
+  }, 0);
+  const totalBaseNoObjetoVentas = ventas.reduce((s, d) => {
+    const isNC = d.transacciones?.tipo_comprobante === 'Nota de Crédito';
+    return s + (isNC ? -(d.base_no_objeto || 0) : (d.base_no_objeto || 0));
+  }, 0);
   const totalVentasSRI = (totalBase12Ventas + totalBase0Ventas + totalBaseNoObjetoVentas).toFixed(2);
 
   const estabsUnicos = [...new Set(docs.map(d => {
@@ -94,16 +104,21 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
   }))];
   const numEstabs = String(estabsUnicos.length).padStart(3, '0');
 
-  // Agrupamiento de Ventas por Cliente
-  const ventasAgrupadasPorCliente = Object.values(
+  // Agrupamiento de Ventas por Cliente y Tipo de Comprobante para el ATS
+  const ventasAgrupadasPorClienteYComp = Object.values(
     ventas.reduce((acc, v) => {
       const ent = v.transacciones?.entidades;
       const idCliente = ent?.ruc_cedula || '9999999999999';
-      if (!acc[idCliente]) {
-        acc[idCliente] = {
+      const isNC = v.transacciones?.tipo_comprobante === 'Nota de Crédito';
+      const tipoComp = isNC ? '04' : '01';
+      const key = `${idCliente}_${tipoComp}`;
+
+      if (!acc[key]) {
+        acc[key] = {
           ruc: idCliente,
           razonSocial: ent?.razon_social || ent?.nombre || 'Consumidor Final',
           tipoId: ent?.tipo_identificacion || '07',
+          tipoComprobante: tipoComp,
           numeroComprobantes: 0,
           base0: 0,
           base12: 0,
@@ -111,15 +126,16 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
           iva: 0,
           total: 0,
           retIva: 0,
-          retRenta: 0
+          retRenta: 0,
+          formaPago: v.forma_pago || '20'
         };
       }
-      acc[idCliente].numeroComprobantes += 1;
-      acc[idCliente].base0 += v.base_0 || 0;
-      acc[idCliente].base12 += v.base_12 || 0;
-      acc[idCliente].baseNoObjeto += v.base_no_objeto || 0;
-      acc[idCliente].iva += v.monto_iva || 0;
-      acc[idCliente].total += (v.base_12 || 0) + (v.base_0 || 0) + (v.base_no_objeto || 0) + (v.monto_iva || 0);
+      acc[key].numeroComprobantes += 1;
+      acc[key].base0 += v.base_0 || 0;
+      acc[key].base12 += v.base_12 || 0;
+      acc[key].baseNoObjeto += v.base_no_objeto || 0;
+      acc[key].iva += v.monto_iva || 0;
+      acc[key].total += (v.base_12 || 0) + (v.base_0 || 0) + (v.base_no_objeto || 0) + (v.monto_iva || 0);
       return acc;
     }, {} as Record<string, any>)
   ).map((v: any) => {
@@ -140,8 +156,8 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
     
     return {
       ...v,
-      retIva: totalRetIva,
-      retRenta: totalRetRenta
+      retIva: v.tipoComprobante === '04' ? 0 : totalRetIva,
+      retRenta: v.tipoComprobante === '04' ? 0 : totalRetRenta
     };
   });
 
@@ -172,6 +188,13 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
     const retRenta = rets.filter((r: any) => r.tipo === 'RENTA' || !r.tipo);
     const retIVA = rets.filter((r: any) => r.tipo === 'IVA');
 
+    // Extraer metadata del primer objeto si existe (cod_sustento, numero_retencion, etc.)
+    const metadataObj = rets.find((r: any) => r.cod_sustento || r.numero_retencion);
+    const codSustento = metadataObj?.cod_sustento || '01';
+
+    const isNC = d.transacciones?.tipo_comprobante === 'Nota de Crédito';
+    const tipoComp = isNC ? '04' : '01';
+
     const ret10 = retIVA.filter(r => r.porcentaje === 10).reduce((s, r) => s + r.valor, 0);
     const ret20 = retIVA.filter(r => r.porcentaje === 20).reduce((s, r) => s + r.valor, 0);
     const ret30 = retIVA.filter(r => r.porcentaje === 30).reduce((s, r) => s + r.valor, 0);
@@ -180,10 +203,10 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
     const ret100 = retIVA.filter(r => r.porcentaje === 100).reduce((s, r) => s + r.valor, 0);
 
     xml += `    <detalleCompras>\n`;
-    xml += `      <codSustento>01</codSustento>\n`;
+    xml += `      <codSustento>${codSustento}</codSustento>\n`;
     xml += `      <tpIdProv>${mapIdProv(ent?.tipo_identificacion)}</tpIdProv>\n`;
     xml += `      <idProv>${ent?.ruc_cedula || ''}</idProv>\n`;
-    xml += `      <tipoComprobante>01</tipoComprobante>\n`;
+    xml += `      <tipoComprobante>${tipoComp}</tipoComprobante>\n`;
     xml += `      <parteRel>NO</parteRel>\n`;
     xml += `      <fechaRegistro>${fechaFormat}</fechaRegistro>\n`;
     xml += `      <establecimiento>${estab}</establecimiento>\n`;
@@ -207,29 +230,76 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
     xml += `      <formasDePago>\n        <formaPago>${fp}</formaPago>\n      </formasDePago>\n`;
     
     if (retRenta.length > 0) {
-      xml += `      <air>\n`;
-      retRenta.forEach((r: any) => {
-        xml += `        <detalleAir>\n`;
-        xml += `          <codRetAir>${r.codigo || '332'}</codRetAir>\n`;
-        xml += `          <baseImpAir>${(r.base || d.base_12 || 0).toFixed(2)}</baseImpAir>\n`;
-        xml += `          <porcentajeAir>${r.porcentaje || 0}</porcentajeAir>\n`;
-        xml += `          <valRetAir>${(r.valor || 0).toFixed(2)}</valRetAir>\n`;
-        xml += `        </detalleAir>\n`;
-      });
-      xml += `      </air>\n`;
+      const activeRenta = retRenta.filter(r => r.valor > 0 || r.porcentaje > 0);
+      if (activeRenta.length > 0) {
+        xml += `      <air>\n`;
+        activeRenta.forEach((r: any) => {
+          xml += `        <detalleAir>\n`;
+          xml += `          <codRetAir>${r.codigo || '332'}</codRetAir>\n`;
+          xml += `          <baseImpAir>${(r.base || d.base_12 || 0).toFixed(2)}</baseImpAir>\n`;
+          xml += `          <porcentajeAir>${r.porcentaje || 0}</porcentajeAir>\n`;
+          xml += `          <valRetAir>${(r.valor || 0).toFixed(2)}</valRetAir>\n`;
+          xml += `        </detalleAir>\n`;
+        });
+        xml += `      </air>\n`;
+      }
     }
+
+    // Inyección de referencias del comprobante de retención emitido en compra
+    const tieneRetencion = retRenta.some(r => r.valor > 0) || retIVA.some(r => r.valor > 0);
+    const numRet = metadataObj?.numero_retencion;
+    const autRet = metadataObj?.clave_retencion;
+    const fechaRet = metadataObj?.fecha_retencion;
+
+    if (tieneRetencion && numRet && numRet !== 'Manual') {
+      const partesRet = numRet.split('-');
+      if (partesRet.length === 3) {
+        const estabRet = partesRet[0].padStart(3, '0');
+        const ptoEmiRet = partesRet[1].padStart(3, '0');
+        const secRet = partesRet[2].padStart(9, '0');
+        const fechaRetFormat = formatDateForSRI(fechaRet);
+
+        xml += `      <estabRetencion1>${estabRet}</estabRetencion1>\n`;
+        xml += `      <ptoEmiRetencion1>${ptoEmiRet}</ptoEmiRetencion1>\n`;
+        xml += `      <secRetencion1>${secRet}</secRetencion1>\n`;
+        xml += `      <autRetencion1>${autRet || '9999999999999999999999999999999999999999999999999'}</autRetencion1>\n`;
+        xml += `      <fechaEmiRet1>${fechaRetFormat}</fechaEmiRet1>\n`;
+      }
+    }
+
+    // Inyección de referencias de documento original modificado en Nota de Crédito
+    if (isNC) {
+      const concepto = d.transacciones?.concepto || '';
+      const regexMod = /(\d{3})-(\d{3})-(\d{9})/;
+      const matchMod = concepto.match(regexMod);
+      let estabMod = '001';
+      let ptoEmiMod = '001';
+      let secMod = '000000001';
+      if (matchMod) {
+        estabMod = matchMod[1];
+        ptoEmiMod = matchMod[2];
+        secMod = matchMod[3];
+      }
+
+      xml += `      <docModificado>01</docModificado>\n`;
+      xml += `      <estabModificado>${estabMod}</estabModificado>\n`;
+      xml += `      <ptoEmiModificado>${ptoEmiMod}</ptoEmiModificado>\n`;
+      xml += `      <secModificado>${secMod}</secModificado>\n`;
+      xml += `      <autModificado>${d.clave_acceso_xml || '9999999999999999999999999999999999999999999999999'}</autModificado>\n`;
+    }
+
     xml += `    </detalleCompras>\n`;
   });
   xml += `  </compras>\n`;
 
   // 2. Módulo Ventas
   xml += `  <ventas>\n`;
-  ventasAgrupadasPorCliente.forEach((v: any) => {
+  ventasAgrupadasPorClienteYComp.forEach((v: any) => {
     xml += `    <detalleVentas>\n`;
     xml += `      <tpIdCliente>${v.tipoId}</tpIdCliente>\n`;
     xml += `      <idCliente>${v.ruc}</idCliente>\n`;
     xml += `      <parteRelVentas>NO</parteRelVentas>\n`;
-    xml += `      <tipoComprobante>01</tipoComprobante>\n`;
+    xml += `      <tipoComprobante>${v.tipoComprobante}</tipoComprobante>\n`;
     xml += `      <numeroComprobantes>${v.numeroComprobantes}</numeroComprobantes>\n`;
     xml += `      <baseNoGraIva>${v.baseNoObjeto.toFixed(2)}</baseNoGraIva>\n`;
     xml += `      <baseImponible>${v.base0.toFixed(2)}</baseImponible>\n`;
@@ -238,7 +308,7 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
     xml += `      <montoIce>0.00</montoIce>\n`;
     xml += `      <valorRetIva>${v.retIva.toFixed(2)}</valorRetIva>\n`;
     xml += `      <valorRetRenta>${v.retRenta.toFixed(2)}</valorRetRenta>\n`;
-    xml += `      <formasDePago>\n        <formaPago>20</formaPago>\n      </formasDePago>\n`;
+    xml += `      <formasDePago>\n        <formaPago>${v.formaPago}</formaPago>\n      </formasDePago>\n`;
     xml += `    </detalleVentas>\n`;
   });
   xml += `  </ventas>\n`;
@@ -250,7 +320,11 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
       const num = getSRIDocumentNumber(d);
       const partes = num.split('-');
       return (partes[0]?.padStart(3, '0') || '001') === est;
-    }).reduce((sum, d) => sum + (d.base_12 || 0) + (d.base_0 || 0) + (d.monto_iva || 0), 0);
+    }).reduce((sum, d) => {
+      const isNC = d.transacciones?.tipo_comprobante === 'Nota de Crédito';
+      const val = (d.base_12 || 0) + (d.base_0 || 0) + (d.monto_iva || 0);
+      return sum + (isNC ? -val : val);
+    }, 0);
 
     xml += `    <ventaEstablecimiento>\n`;
     xml += `      <codEstab>${est}</codEstab>\n`;
@@ -283,3 +357,4 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
 
   return xml;
 };
+

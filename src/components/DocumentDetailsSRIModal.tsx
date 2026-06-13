@@ -50,7 +50,15 @@ export const DocumentDetailsSRIModal: React.FC<DocumentDetailsSRIModalProps> = (
     ivaDisplay,
     totalVal,
     calculatedBase12,
-    handleApplyWithholdingFromXML
+    handleApplyWithholdingFromXML,
+    codSustento,
+    setCodSustento,
+    manualNumRet,
+    setManualNumRet,
+    manualAutRet,
+    setManualAutRet,
+    manualFechaRet,
+    setManualFechaRet
   } = useDocumentDetailsSRI({
     viewingDoc,
     accounts,
@@ -166,6 +174,14 @@ export const DocumentDetailsSRIModal: React.FC<DocumentDetailsSRIModalProps> = (
               handleSaveManualWithholding={handleSaveManualWithholding}
               handleRemoveWithholding={handleRemoveWithholding}
               handleApplyWithholdingFromXML={handleApplyWithholdingFromXML}
+              codSustento={codSustento}
+              setCodSustento={setCodSustento}
+              manualNumRet={manualNumRet}
+              setManualNumRet={setManualNumRet}
+              manualAutRet={manualAutRet}
+              setManualAutRet={setManualAutRet}
+              manualFechaRet={manualFechaRet}
+              setManualFechaRet={setManualFechaRet}
             />
           </div>
         </div>

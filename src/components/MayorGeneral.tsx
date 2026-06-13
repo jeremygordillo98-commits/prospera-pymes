@@ -21,7 +21,7 @@ interface MovLine {
     concepto: string;
     tipo_comprobante: string;
     numero_comprobante: string;
-    entidades?: { razon_social: string } | null;
+    entidades?: { id: string; razon_social: string; ruc_cedula?: string } | null;
   } | null;
 }
 
@@ -37,6 +37,7 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
   const [loadingAcc, setLoadingAcc] = useState(true);
   const [loadingLines, setLoadingLines] = useState(false);
   const [search, setSearch] = useState('');
+  const [entityFilter, setEntityFilter] = useState('');
   const [desde, setDesde] = useState('');
   const [hasta, setHasta] = useState('');
   const [onlyWithMov, setOnlyWithMov] = useState(true);
@@ -77,7 +78,7 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
       .from('movimientos')
       .select(`id, debe, haber,
         transacciones ( fecha, concepto, tipo_comprobante, numero_comprobante,
-          entidades ( razon_social ) )`)
+          entidades ( id, razon_social, ruc_cedula ) )`)
       .eq('id_cuenta', acc.id)
       .order('transacciones(fecha)', { ascending: true });
 
@@ -91,35 +92,52 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
     fetchLines(acc);
   };
 
-  // Filtrar líneas por fecha
+  // Filtrar líneas por fecha y entidad
   const filteredLines = useMemo(() => {
     return lines.filter(l => {
       const f = l.transacciones?.fecha || '';
       if (desde && f < desde) return false;
       if (hasta && f > hasta) return false;
+      
+      if (entityFilter) {
+        const ent = l.transacciones?.entidades;
+        if (!ent) return false;
+        const nameMatch = ent.razon_social?.toLowerCase().includes(entityFilter.toLowerCase());
+        const rucMatch = ent.ruc_cedula?.toLowerCase().includes(entityFilter.toLowerCase());
+        if (!nameMatch && !rucMatch) return false;
+      }
+      
       return true;
     });
-  }, [lines, desde, hasta]);
+  }, [lines, desde, hasta, entityFilter]);
 
   // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [selected, desde, hasta]);
+  }, [selected, desde, hasta, entityFilter]);
 
-  // Calcular saldo inicial histórico (antes de la fecha 'desde')
+  // Calcular saldo inicial histórico (antes de la fecha 'desde' y filtrado por entidad si aplica)
   const saldoInicial = useMemo(() => {
-    if (!desde || !selected) return 0;
+    if (!selected) return 0;
     const esDeudora = ['Activo', 'Gasto'].includes(selected.tipo);
     let initial = 0;
     lines.forEach(l => {
+      if (entityFilter) {
+        const ent = l.transacciones?.entidades;
+        if (!ent) return;
+        const nameMatch = ent.razon_social?.toLowerCase().includes(entityFilter.toLowerCase());
+        const rucMatch = ent.ruc_cedula?.toLowerCase().includes(entityFilter.toLowerCase());
+        if (!nameMatch && !rucMatch) return;
+      }
+      
       const f = l.transacciones?.fecha || '';
-      if (f < desde) {
+      if (desde && f < desde) {
         if (esDeudora) initial += l.debe - l.haber;
         else initial += l.haber - l.debe;
       }
     });
     return initial;
-  }, [lines, desde, selected]);
+  }, [lines, desde, selected, entityFilter]);
 
   // Calcular saldo acumulado
   const linesConSaldo = useMemo(() => {
@@ -170,11 +188,13 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
       ]);
     }
     linesConSaldo.forEach(l => {
+      const tercero = l.transacciones?.entidades?.razon_social || '';
+      const ruc = l.transacciones?.entidades?.ruc_cedula ? ` (${l.transacciones.entidades.ruc_cedula})` : '';
       rows.push([
         l.transacciones?.fecha || '',
         `"${(l.transacciones?.concepto || '').replace(/"/g, '""')}"`,
         `${l.transacciones?.tipo_comprobante || ''} ${l.transacciones?.numero_comprobante || ''}`,
-        `"${l.transacciones?.entidades?.razon_social || ''}"`,
+        `"${tercero}${ruc}"`,
         l.debe.toFixed(2), l.haber.toFixed(2), l.saldoAcum.toFixed(2)
       ]);
     });
@@ -201,9 +221,11 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
       ]);
     }
     linesConSaldo.forEach(l => {
+      const tercero = l.transacciones?.entidades?.razon_social ? ' - ' + l.transacciones.entidades.razon_social : '';
+      const ruc = l.transacciones?.entidades?.ruc_cedula ? ` (${l.transacciones.entidades.ruc_cedula})` : '';
       rows.push([
         l.transacciones?.fecha ? new Date(l.transacciones.fecha + 'T12:00:00').toLocaleDateString('es-EC') : '—',
-        `${l.transacciones?.concepto || '—'} ${l.transacciones?.entidades?.razon_social ? ' - ' + l.transacciones.entidades.razon_social : ''}`,
+        `${l.transacciones?.concepto || '—'}${tercero}${ruc}`,
         `${l.transacciones?.tipo_comprobante || ''} ${l.transacciones?.numero_comprobante || ''}`.trim() || '—',
         `$${l.debe.toFixed(2)}`,
         `$${l.haber.toFixed(2)}`,
@@ -220,6 +242,7 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
 
     let subtitle = `Cuenta: ${selected.codigo_cuenta} - ${selected.nombre}`;
     if (desde || hasta) subtitle += ` | ${desde || 'Inicio'} al ${hasta || 'Hoy'}`;
+    if (entityFilter) subtitle += ` | Filtrado por: ${entityFilter}`;
 
     await generatePDFReport(empresaId, 'Mayor General', subtitle, columns, rows, foot);
   };
@@ -303,13 +326,40 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
                 <span style={{ fontWeight: 900, fontSize: '1.05rem' }}>{selected.codigo_cuenta} — {selected.nombre}</span>
                 <span style={{ marginLeft: 10, fontSize: '0.75rem', background: 'var(--primary-light)', color: 'var(--primary)', padding: '2px 8px', borderRadius: 20, fontWeight: 700 }}>{selected.tipo}</span>
               </div>
-              {/* Filtros de fecha */}
+              {/* Filtros de fecha y entidad */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <Calendar size={14} style={{ color: 'var(--text-sec)' }} />
                 <input type="date" value={desde} onChange={e => setDesde(e.target.value)} style={{ ...inp, fontSize: '0.82rem' }} placeholder="Desde" />
                 <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} style={{ ...inp, fontSize: '0.82rem' }} placeholder="Hasta" />
-                {(desde || hasta) && (
-                  <button onClick={() => { setDesde(''); setHasta(''); }} style={{ background: 'none', border: 'none', color: 'var(--text-sec)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}>✕ Limpiar</button>
+                
+                <span style={{ color: 'var(--border-color)', margin: '0 4px' }}>|</span>
+                
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <Search size={13} style={{ position: 'absolute', left: 10, color: 'var(--text-sec)' }} />
+                  <input 
+                    type="text" 
+                    value={entityFilter} 
+                    onChange={e => setEntityFilter(e.target.value)} 
+                    placeholder="Filtrar Entidad/RUC..." 
+                    style={{ ...inp, paddingLeft: 28, fontSize: '0.82rem', width: 170 }} 
+                  />
+                  {entityFilter && (
+                    <button 
+                      onClick={() => setEntityFilter('')} 
+                      style={{ position: 'absolute', right: 8, background: 'none', border: 'none', color: 'var(--text-sec)', cursor: 'pointer', fontSize: '0.8rem' }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {(desde || hasta || entityFilter) && (
+                  <button 
+                    onClick={() => { setDesde(''); setHasta(''); setEntityFilter(''); }} 
+                    style={{ background: 'none', border: 'none', color: 'var(--text-sec)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}
+                  >
+                    ✕ Limpiar Todo
+                  </button>
                 )}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>

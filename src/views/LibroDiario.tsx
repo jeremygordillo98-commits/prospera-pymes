@@ -37,7 +37,8 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView 
     handleSelectAll,
     handleBulkAnular,
     exportToExcel,
-    handleExportTxPDF
+    handleExportTxPDF,
+    exportLibroDiarioPDF
   } = useLibroDiario({ empresaId, activeView });
 
   return (
@@ -51,6 +52,7 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView 
         filterDate={filterDate}
         setFilterDate={setFilterDate}
         exportToExcel={exportToExcel}
+        exportToPDF={exportLibroDiarioPDF}
       />
 
       {loading ? (

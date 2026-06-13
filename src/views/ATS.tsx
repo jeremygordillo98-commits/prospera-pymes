@@ -145,6 +145,45 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
           if (esComp && !d.forma_pago) {
             warns.push(`Compra ${numComp}: Sin forma de pago especificada. Se asignará 'Otros con sistema financiero (20)' por defecto.`);
           }
+
+          // --- NUEVAS COMPROBACIONES DE ROBUSTEZ FISCAL ---
+          const rets = d.retenciones_aplicadas || [];
+          const firstRet = rets[0];
+          
+          if (esComp) {
+            // 1. Validar existencia del sustento tributario
+            const sust = firstRet?.cod_sustento;
+            if (!sust) {
+              warns.push(`Compra ${numComp}: No se ha definido el Sustento Tributario. Se asumirá '01' (Crédito Tributario para IVA) por defecto.`);
+            }
+
+            // 2. Validar que si hay valores retenidos, el comprobante de retención esté ingresado correctamente
+            const retRenta = rets.filter((r: any) => r.tipo === 'RENTA' || !r.tipo);
+            const retIVA = rets.filter((r: any) => r.tipo === 'IVA');
+            const tieneRetencion = retRenta.some((r: any) => r.valor > 0) || retIVA.some((r: any) => r.valor > 0);
+
+            if (tieneRetencion) {
+              const numRet = firstRet?.numero_retencion;
+              const autRet = firstRet?.clave_retencion;
+              const fechaRet = firstRet?.fecha_retencion;
+
+              if (!numRet || numRet === 'Manual') {
+                criticals.push(`Compra ${numComp}: Tiene retenciones calculadas pero falta ingresar el Número de la Retención emitida.`);
+              } else if (!/^\d{3}-\d{3}-\d{9}$/.test(numRet)) {
+                criticals.push(`Compra ${numComp}: El Número de Retención emitido (${numRet}) tiene un formato inválido.`);
+              }
+
+              if (!autRet) {
+                criticals.push(`Compra ${numComp}: Falta ingresar el número de autorización de la retención emitida.`);
+              } else if (autRet.length !== 10 && autRet.length !== 49) {
+                criticals.push(`Compra ${numComp}: La autorización de la retención debe tener 10 o 49 dígitos (actual: ${autRet.length}).`);
+              }
+
+              if (!fechaRet) {
+                criticals.push(`Compra ${numComp}: Falta ingresar la fecha de emisión del comprobante de retención.`);
+              }
+            }
+          }
         });
 
         setAlertasCriticas([...new Set(criticals)]);
@@ -162,8 +201,8 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
   }, [fetchData]);
 
   // ─── Clasificación y Filtros ──────────────────────────────────
-  const compras = docs.filter(d => d.transacciones?.tipo_comprobante === 'Factura' && d.es_compra);
-  const ventas = docs.filter(d => d.transacciones?.tipo_comprobante === 'Factura' && !d.es_compra);
+  const compras = docs.filter(d => (d.transacciones?.tipo_comprobante === 'Factura' || d.transacciones?.tipo_comprobante === 'Nota de Crédito') && d.es_compra);
+  const ventas = docs.filter(d => (d.transacciones?.tipo_comprobante === 'Factura' || d.transacciones?.tipo_comprobante === 'Nota de Crédito') && !d.es_compra);
   const retenciones = docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retención');
   const retencionesRecibidas = docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retención' && !d.es_compra);
   const anulados = docs.filter(d => 
@@ -172,7 +211,10 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
   );
 
   // ─── Agrupamientos y KPIs Contables ──────────────────────────
-  const totalIVAVentas     = ventas.reduce((s, d) => s + (d.monto_iva || 0), 0);
+  const totalIVAVentas     = ventas.reduce((s, d) => {
+    const isNC = d.transacciones?.tipo_comprobante === 'Nota de Crédito';
+    return s + (isNC ? -(d.monto_iva || 0) : (d.monto_iva || 0));
+  }, 0);
 
   const totalRetEmitido    = compras.reduce((s, d) =>
     s + (d.retenciones_aplicadas || []).reduce((a: number, r: any) => a + (r.valor || 0), 0), 0);
@@ -182,11 +224,17 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
     ventas.reduce((acc, v) => {
       const ent = v.transacciones?.entidades;
       const idCliente = ent?.ruc_cedula || '9999999999999';
-      if (!acc[idCliente]) {
-        acc[idCliente] = {
+      const isNC = v.transacciones?.tipo_comprobante === 'Nota de Crédito';
+      const tipoComp = isNC ? 'Nota de Crédito' : 'Factura';
+      const key = `${idCliente}_${tipoComp}`;
+
+      if (!acc[key]) {
+        acc[key] = {
           ruc: idCliente,
           razonSocial: ent?.razon_social || ent?.nombre || 'Consumidor Final',
           tipoId: ent?.tipo_identificacion || '07',
+          tipoDoc: tipoComp,
+          tipoComprobante: isNC ? '04' : '01',
           numeroComprobantes: 0,
           base0: 0,
           base12: 0,
@@ -197,12 +245,12 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
           retRenta: 0
         };
       }
-      acc[idCliente].numeroComprobantes += 1;
-      acc[idCliente].base0 += v.base_0 || 0;
-      acc[idCliente].base12 += v.base_12 || 0;
-      acc[idCliente].baseNoObjeto += v.base_no_objeto || 0;
-      acc[idCliente].iva += v.monto_iva || 0;
-      acc[idCliente].total += (v.base_12 || 0) + (v.base_0 || 0) + (v.base_no_objeto || 0) + (v.monto_iva || 0);
+      acc[key].numeroComprobantes += 1;
+      acc[key].base0 += v.base_0 || 0;
+      acc[key].base12 += v.base_12 || 0;
+      acc[key].baseNoObjeto += v.base_no_objeto || 0;
+      acc[key].iva += v.monto_iva || 0;
+      acc[key].total += (v.base_12 || 0) + (v.base_0 || 0) + (v.base_no_objeto || 0) + (v.monto_iva || 0);
       return acc;
     }, {} as Record<string, any>)
   ).map((v: any) => {
@@ -223,8 +271,8 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
     
     return {
       ...v,
-      retIva: totalRetIva,
-      retRenta: totalRetRenta
+      retIva: v.tipoComprobante === '04' ? 0 : totalRetIva,
+      retRenta: v.tipoComprobante === '04' ? 0 : totalRetRenta
     };
   });
 
@@ -386,7 +434,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
           compras.length === 0 ? (
             <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-sec)' }}>
               <CheckCircle2 size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
-              <p>No hay facturas de compra procesadas en este periodo.</p>
+              <p>No hay facturas o notas de crédito de compra procesadas en este periodo.</p>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -398,21 +446,31 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                 </tr>
               </thead>
               <tbody>
-                {compras.map((d) => (
-                  <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
-                    <td style={{ padding: '12px 16px' }}>
-                      <div style={{ fontWeight: 700 }}>{d.transacciones?.entidades?.razon_social || '—'}</div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)' }}>{d.transacciones?.entidades?.ruc_cedula || '—'}</div>
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace', fontSize: '0.78rem' }}>{d.transacciones?.numero_comprobante}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-sec)' }}>{d.transacciones?.fecha ? new Date(d.transacciones.fecha + 'T12:00:00').toLocaleDateString('es-EC') : '—'}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>${(d.base_0 || 0).toFixed(2)}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>${(d.base_12 || 0).toFixed(2)}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--primary)', fontWeight: 700 }}>${(d.monto_iva || 0).toFixed(2)}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800 }}>{d.forma_pago || '20'}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900 }}>${((d.base_12 || 0) + (d.base_0 || 0) + (d.monto_iva || 0)).toFixed(2)}</td>
-                  </tr>
-                ))}
+                {compras.map((d) => {
+                  const isNC = d.transacciones?.tipo_comprobante === 'Nota de Crédito';
+                  return (
+                    <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {d.transacciones?.entidades?.razon_social || '—'}
+                          {isNC && (
+                            <span style={{ fontSize: '0.65rem', background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', padding: '1px 6px', borderRadius: 4, fontWeight: 800 }}>NC</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)' }}>{d.transacciones?.entidades?.ruc_cedula || '—'}</div>
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace', fontSize: '0.78rem' }}>{d.transacciones?.numero_comprobante}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-sec)' }}>{d.transacciones?.fecha ? new Date(d.transacciones.fecha + 'T12:00:00').toLocaleDateString('es-EC') : '—'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>${(d.base_0 || 0).toFixed(2)}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>${(d.base_12 || 0).toFixed(2)}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--primary)', fontWeight: 700 }}>${(d.monto_iva || 0).toFixed(2)}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800 }}>{d.forma_pago || '20'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900 }}>
+                        {isNC ? '-' : ''}${((d.base_12 || 0) + (d.base_0 || 0) + (d.monto_iva || 0)).toFixed(2)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )
@@ -426,24 +484,38 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                  {['Cliente','Tipo ID','Comprobantes','Suma Base 0%','Suma Base 12%','Suma IVA','Total Facturado'].map(h => (
+                  {['Cliente','Tipo ID','Tipo Doc','Comprobantes','Suma Base 0%','Suma Base 12%','Suma IVA','Total Facturado'].map(h => (
                     <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Cliente' ? 'left' : 'right', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {ventasAgrupadasPorCliente.map((v: any) => (
-                  <tr key={v.ruc} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
+                  <tr key={`${v.ruc}_${v.tipoDoc}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ fontWeight: 700 }}>{v.razonSocial}</div>
                       <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)' }}>{v.ruc}</div>
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800 }}>{v.tipoId}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                      <span style={{ 
+                        fontSize: '0.75rem', 
+                        background: v.tipoDoc === 'Nota de Crédito' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)', 
+                        color: v.tipoDoc === 'Nota de Crédito' ? '#ef4444' : '#10b981', 
+                        padding: '2px 8px', 
+                        borderRadius: 6, 
+                        fontWeight: 700 
+                      }}>
+                        {v.tipoDoc}
+                      </span>
+                    </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>{v.numeroComprobantes}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>${v.base0.toFixed(2)}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>${v.base12.toFixed(2)}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--primary)', fontWeight: 700 }}>${v.iva.toFixed(2)}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900 }}>${v.total.toFixed(2)}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900 }}>
+                      {v.tipoDoc === 'Nota de Crédito' ? '-' : ''}${v.total.toFixed(2)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

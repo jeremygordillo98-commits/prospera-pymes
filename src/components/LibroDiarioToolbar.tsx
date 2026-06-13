@@ -10,6 +10,7 @@ interface Props {
   filterDate: string;
   setFilterDate: (val: string) => void;
   exportToExcel: () => void;
+  exportToPDF: () => void;
 }
 
 export const LibroDiarioToolbar: React.FC<Props> = ({
@@ -20,7 +21,8 @@ export const LibroDiarioToolbar: React.FC<Props> = ({
   handleSelectAll,
   filterDate,
   setFilterDate,
-  exportToExcel
+  exportToExcel,
+  exportToPDF
 }) => {
   return (
     <header className="flex-between" style={{ marginBottom: '40px' }}>
@@ -60,6 +62,9 @@ export const LibroDiarioToolbar: React.FC<Props> = ({
         {filterDate && (
           <button onClick={() => setFilterDate('')} className="btn glass-card" style={{ padding: '10px' }}>Limpiar</button>
         )}
+        <button className="btn" onClick={exportToPDF} disabled={filteredTransactionsLength === 0} style={{ padding: '10px 14px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 800 }}>
+          <Download size={18} /> <span className="hide-mobile">Exportar a PDF</span>
+        </button>
         <button className="btn btn-primary" onClick={exportToExcel} disabled={filteredTransactionsLength === 0}>
           <Download size={18} /> <span className="hide-mobile">Exportar a Excel</span>
         </button>
