@@ -125,3 +125,48 @@ export const CATALOGO_TIPOS_DOCUMENTO: ISRITipoDocumento[] = [
   { codigo: '07', descripcion: 'Comprobante de retención' },
   { codigo: '41', descripcion: 'Reembolso de gastos' },
 ];
+
+/**
+ * Infiere el código de Sustento Tributario del SRI basándose en el tipo,
+ * código de cuenta y nombre de la cuenta contable asociada al Debe.
+ */
+export const inferSustentoTributario = (account?: { tipo?: string; codigo_cuenta?: string; nombre?: string } | null): string => {
+  if (!account) return '01';
+  
+  const tipo = (account.tipo || '').toLowerCase();
+  const codigo = (account.codigo_cuenta || '');
+  const nombre = (account.nombre || '').toLowerCase();
+
+  // 1. Costo o Gasto (código 02): Si la cuenta es de tipo 'Gasto' o su código inicia con '5'
+  if (tipo === 'gasto' || codigo.startsWith('5')) {
+    return '02';
+  }
+
+  // 2. Activo Fijo Depreciable (código 03): Si el código empieza con '1.2'
+  // o el nombre contiene palabras clave de activos fijos
+  if (
+    codigo.startsWith('1.2') || 
+    nombre.includes('activo fijo') || 
+    nombre.includes('maquinaria') || 
+    nombre.includes('vehiculo') || 
+    nombre.includes('muebles') || 
+    nombre.includes('equipo de comput') ||
+    nombre.includes('propiedad, planta') ||
+    nombre.includes('terreno') ||
+    nombre.includes('edificio')
+  ) {
+    return '03';
+  }
+
+  // 3. Inventario (código 04): Si el código empieza con '1.1.03' o contiene 'inventario' o 'mercaderia'
+  if (
+    codigo.startsWith('1.1.03') || 
+    nombre.includes('inventario') || 
+    nombre.includes('mercaderia')
+  ) {
+    return '04';
+  }
+
+  // 4. Crédito Tributario General (código 01): Default
+  return '01';
+};

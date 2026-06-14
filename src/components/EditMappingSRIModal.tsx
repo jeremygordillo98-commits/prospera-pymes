@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Edit2, X, Loader2 } from 'lucide-react';
 import { AccountSelector } from './AccountSelector';
 import { supabase } from '../services/supabase';
-import { CATALOGO_RETENCIONES_RENTA, CATALOGO_RETENCIONES_IVA } from '../utils/sriCatalog';
+import { CATALOGO_RETENCIONES_RENTA, CATALOGO_RETENCIONES_IVA, inferSustentoTributario } from '../utils/sriCatalog';
 
 interface EditMappingSRIModalProps {
     editingDoc: any;
@@ -117,21 +117,40 @@ export const EditMappingSRIModal: React.FC<EditMappingSRIModalProps> = ({
 
             const baseImponibleForRenta = editingDoc.base_12 || baseGravada;
 
+            // 0. Inferir sustento tributario si es compra y hay cuenta del Debe
+            let inferredSustento = '01';
+            if (tipo === 'Compras' && editFormData.idCuentaDebe) {
+                try {
+                    const { data: acc } = await supabase
+                        .from('plan_cuentas')
+                        .select('codigo_cuenta, tipo, nombre')
+                        .eq('id', editFormData.idCuentaDebe)
+                        .single();
+                    if (acc) {
+                        inferredSustento = inferSustentoTributario(acc);
+                    }
+                } catch (err) {
+                    console.error("Error al inferir sustento tributario para la cuenta:", editFormData.idCuentaDebe, err);
+                }
+            }
+
             // 1. Renta Withholding
             if (tipo === 'Compras' && editFormData.retencionCodigo) {
                 const retSel = CATALOGO_RETENCIONES_RENTA.find(r => r.codigo === editFormData.retencionCodigo);
                 if (retSel) {
                     const valRetCalculado = parseFloat(((baseImponibleForRenta * retSel.porcentaje) / 100).toFixed(2));
                     if (valRetCalculado > 0) {
+                        const existingRet = editingDoc.retenciones_aplicadas?.find((r: any) => r.tipo === 'RENTA' && r.codigo === retSel.codigo);
                         retencionesFinal.push({
                             codigo: retSel.codigo,
                             porcentaje: retSel.porcentaje,
                             base: baseImponibleForRenta,
                             valor: valRetCalculado,
                             tipo: 'RENTA',
-                            clave_retencion: '',
-                            numero_retencion: '',
-                            fecha_retencion: ''
+                            clave_retencion: existingRet?.clave_retencion || '',
+                            numero_retencion: existingRet?.numero_retencion || '',
+                            fecha_retencion: existingRet?.fecha_retencion || '',
+                            cod_sustento: inferredSustento
                         });
                         totalRetenido += valRetCalculado;
                     }
@@ -144,19 +163,37 @@ export const EditMappingSRIModal: React.FC<EditMappingSRIModalProps> = ({
                 if (retSelIva && retSelIva.porcentaje > 0) {
                     const valRetCalculado = parseFloat(((ivaMonto * retSelIva.porcentaje) / 100).toFixed(2));
                     if (valRetCalculado > 0) {
+                        const existingRet = editingDoc.retenciones_aplicadas?.find((r: any) => r.tipo === 'IVA' && r.codigo === retSelIva.codigo);
                         retencionesFinal.push({
                             codigo: retSelIva.codigo,
                             porcentaje: retSelIva.porcentaje,
                             base: ivaMonto,
                             valor: valRetCalculado,
                             tipo: 'IVA',
-                            clave_retencion: '',
-                            numero_retencion: '',
-                            fecha_retencion: ''
+                            clave_retencion: existingRet?.clave_retencion || '',
+                            numero_retencion: existingRet?.numero_retencion || '',
+                            fecha_retencion: existingRet?.fecha_retencion || '',
+                            cod_sustento: inferredSustento
                         });
                         totalRetenido += valRetCalculado;
                     }
                 }
+            }
+
+            // Si es Compras y no hay retenciones activas, guardamos un objeto METADATA con el cod_sustento
+            if (tipo === 'Compras' && retencionesFinal.length === 0) {
+                const existingMeta = editingDoc.retenciones_aplicadas?.find((r: any) => r.cod_sustento);
+                retencionesFinal.push({
+                    codigo: '000',
+                    porcentaje: 0,
+                    base: 0,
+                    valor: 0,
+                    tipo: 'METADATA',
+                    cod_sustento: inferredSustento,
+                    clave_retencion: existingMeta?.clave_retencion || '',
+                    numero_retencion: existingMeta?.numero_retencion || '',
+                    fecha_retencion: existingMeta?.fecha_retencion || new Date().toISOString().split('T')[0]
+                });
             }
 
             const { error: sriErr } = await supabase

@@ -151,9 +151,9 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
           const firstRet = rets[0];
           
           if (esComp) {
-            // 1. Validar existencia del sustento tributario
+            // 1. Validar existencia del sustento tributario (solo si no hay retenciones en absoluto para evitar falsas advertencias en facturas antiguas procesadas)
             const sust = firstRet?.cod_sustento;
-            if (!sust) {
+            if (!sust && rets.length === 0) {
               warns.push(`Compra ${numComp}: No se ha definido el Sustento Tributario. Se asumirá '01' (Crédito Tributario para IVA) por defecto.`);
             }
 

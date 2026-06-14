@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../services/supabase';
 import { parseSRIXML } from '../utils/sriParser';
-import { CATALOGO_RETENCIONES_RENTA, CATALOGO_RETENCIONES_IVA } from '../utils/sriCatalog';
+import { CATALOGO_RETENCIONES_RENTA, CATALOGO_RETENCIONES_IVA, inferSustentoTributario } from '../utils/sriCatalog';
 
 interface UseDocumentDetailsSRIProps {
   viewingDoc: any;
@@ -119,6 +119,29 @@ export const useDocumentDetailsSRI = ({
       }
     }
   }, [doc, accounts, tipo]);
+
+  // Sugerir dinámicamente el Sustento Tributario según la cuenta contable del Debe
+  useEffect(() => {
+    if (doc && tipo === 'Compras' && accounts && accounts.length > 0 && viewingMovements && viewingMovements.length > 0) {
+      const hasSavedSustento = doc.retenciones_aplicadas && doc.retenciones_aplicadas.some((r: any) => r.cod_sustento);
+      if (!hasSavedSustento) {
+        const defaultIva = accounts.find(a => a.codigo_cuenta.startsWith('1.1.09') || a.nombre.toLowerCase().includes('iva'));
+        const movIva = viewingMovements.find(m => m.id_cuenta === defaultIva?.id || m.id_cuenta.toLowerCase().includes('iva') || (parseFloat(m.debe) > 0 && parseFloat(m.debe) === doc.monto_iva));
+        const idCuentaIva = movIva?.id_cuenta || '';
+        
+        const movDebe = viewingMovements.find(m => parseFloat(m.debe) > 0 && m.id_cuenta !== idCuentaIva);
+        const idCuentaDebe = movDebe?.id_cuenta || '';
+        
+        if (idCuentaDebe) {
+          const acc = accounts.find(a => a.id === idCuentaDebe);
+          if (acc) {
+            const suggestedSustento = inferSustentoTributario(acc);
+            setCodSustento(suggestedSustento);
+          }
+        }
+      }
+    }
+  }, [doc, tipo, accounts, viewingMovements]);
 
   const getAccountLabel = (idCuenta: string) => {
     const acc = accounts.find(a => a.id === idCuenta);
