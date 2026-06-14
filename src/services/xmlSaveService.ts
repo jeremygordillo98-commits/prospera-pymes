@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { inferSustentoTributario } from '../utils/sriCatalog';
 
 export interface BatchSaveItem {
   parsed: any;
@@ -161,6 +162,23 @@ export const saveXMLBatchToSupabase = async (
     // 3. Crear documento SRI para ATS
     const esCompra = tipo === 'Compras';
 
+    // Inferir sustento tributario si es compra y hay cuenta del Debe
+    let inferredSustento = '01';
+    if (esCompra && item.idCuentaDebe) {
+      try {
+        const { data: acc } = await supabase
+          .from('plan_cuentas')
+          .select('codigo_cuenta, tipo, nombre')
+          .eq('id', item.idCuentaDebe)
+          .single();
+        if (acc) {
+          inferredSustento = inferSustentoTributario(acc);
+        }
+      } catch (err) {
+        console.error("Error al inferir sustento tributario para la cuenta:", item.idCuentaDebe, err);
+      }
+    }
+
     let payloadSRI: any = {
       id_transaccion: transaccion.id,
       clave_acceso_xml: parsed.claveAcceso,
@@ -174,7 +192,7 @@ export const saveXMLBatchToSupabase = async (
       payloadSRI.monto_iva = parsed.iva;
       payloadSRI.forma_pago = parsed.formaPago;
       payloadSRI.es_compra = esCompra;
-      payloadSRI.retenciones_aplicadas = [];
+      payloadSRI.retenciones_aplicadas = [{ codigo: '000', porcentaje: 0, base: 0, valor: 0, tipo: 'METADATA', cod_sustento: inferredSustento }];
     } else if (isRet) {
       payloadSRI.base_12 = 0;
       payloadSRI.base_0 = 0;
@@ -198,7 +216,7 @@ export const saveXMLBatchToSupabase = async (
       payloadSRI.base_no_objeto = parsed.baseNoObjeto;
       payloadSRI.monto_iva = parsed.iva;
       payloadSRI.es_compra = esCompra;
-      payloadSRI.retenciones_aplicadas = [];
+      payloadSRI.retenciones_aplicadas = [{ codigo: '000', porcentaje: 0, base: 0, valor: 0, tipo: 'METADATA', cod_sustento: inferredSustento }];
     }
 
     const { error: sriError } = await supabase.from('documentos_sri').insert(payloadSRI);

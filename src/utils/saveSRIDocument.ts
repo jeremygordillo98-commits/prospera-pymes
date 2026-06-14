@@ -1,6 +1,6 @@
 import { supabase } from '../services/supabase';
 import { type SRIParsedData } from './sriParser';
-import { CATALOGO_RETENCIONES_RENTA } from './sriCatalog';
+import { CATALOGO_RETENCIONES_RENTA, inferSustentoTributario } from './sriCatalog';
 
 export interface SaveSRIParams {
   parsedData: SRIParsedData;
@@ -69,6 +69,23 @@ export async function saveSRIDocument(p: SaveSRIParams): Promise<void> {
     ? parsedData.rucEmisor === rucEmpresa
     : parsedData.rucEmisor !== rucEmpresa;
 
+  // Inferir sustento tributario si es compra y hay cuenta del Debe
+  let inferredSustento = '01';
+  if (esCompra && idCuentaDebe) {
+    try {
+      const { data: acc } = await supabase
+        .from('plan_cuentas')
+        .select('codigo_cuenta, tipo, nombre')
+        .eq('id', idCuentaDebe)
+        .single();
+      if (acc) {
+        inferredSustento = inferSustentoTributario(acc);
+      }
+    } catch (err) {
+      console.error("Error al inferir sustento tributario para la cuenta:", idCuentaDebe, err);
+    }
+  }
+
   // 4. Documento SRI
   const sri: any = { id_transaccion: tx.id, clave_acceso_xml: parsedData.claveAcceso, id_empresa: empresaId };
   if (isFactura) {
@@ -76,8 +93,8 @@ export async function saveSRIDocument(p: SaveSRIParams): Promise<void> {
       base_12: parsedData.base12, base_0: parsedData.base0, base_no_objeto: parsedData.baseNoObjeto,
       monto_iva: parsedData.iva, es_compra: esCompra,
       retenciones_aplicadas: valorRetenido > 0
-        ? [{ codigo: retencionSel.codigo, porcentaje: retencionSel.porcentaje, base: parsedData.base12, valor: valorRetenido, tipo: 'RENTA' }]
-        : [],
+        ? [{ codigo: retencionSel.codigo, porcentaje: retencionSel.porcentaje, base: parsedData.base12, valor: valorRetenido, tipo: 'RENTA', cod_sustento: inferredSustento }]
+        : [{ codigo: '000', porcentaje: 0, base: 0, valor: 0, tipo: 'METADATA', cod_sustento: inferredSustento }],
     });
   } else if (isRetencion) {
     Object.assign(sri, {
@@ -90,7 +107,7 @@ export async function saveSRIDocument(p: SaveSRIParams): Promise<void> {
     Object.assign(sri, {
       base_12: parsedData.base12, base_0: parsedData.base0, base_no_objeto: parsedData.baseNoObjeto,
       monto_iva: parsedData.iva, es_compra: esCompra,
-      retenciones_aplicadas: [],
+      retenciones_aplicadas: [{ codigo: '000', porcentaje: 0, base: 0, valor: 0, tipo: 'METADATA', cod_sustento: inferredSustento }],
     });
   }
   const { error: sriErr } = await supabase.from('documentos_sri').insert(sri);
