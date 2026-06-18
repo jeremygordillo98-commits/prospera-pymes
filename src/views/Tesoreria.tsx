@@ -84,6 +84,14 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
     fecha_emision: new Date().toISOString().slice(0, 10), fecha_vencimiento: '', id_entidad: '', concepto: '', referencia: '', total: ''
   });
 
+  const [editingMov, setEditingMov] = useState<any | null>(null);
+  const [searchEditBank, setSearchEditBank] = useState('');
+  const [searchEditContra, setSearchEditContra] = useState('');
+  const [isEditBankOpen, setIsEditBankOpen] = useState(false);
+  const [isEditContraOpen, setIsEditContraOpen] = useState(false);
+  const editBankRef = useRef<HTMLDivElement>(null);
+  const editContraRef = useRef<HTMLDivElement>(null);
+
   const { data, isLoading: loading } = useQuery({
     queryKey: ['tesoreria', empresaId],
     queryFn: async () => {
@@ -165,6 +173,278 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
       c.nombre?.toLowerCase().includes(query)
     );
   }, [cuentasContables, searchAccount, selectedAccountText]);
+
+  // Synchronize edit search inputs when dropdowns are closed or editingMov changes
+  const selectedEditBankText = useMemo(() => {
+    if (!editingMov) return '';
+    const selected = cuentasContables.find((c: any) => c.id === editingMov.id_cuenta_banco_contable);
+    return selected ? `${selected.codigo_cuenta} - ${selected.nombre}` : '';
+  }, [cuentasContables, editingMov?.id_cuenta_banco_contable]);
+
+  const selectedEditContraText = useMemo(() => {
+    if (!editingMov) return '';
+    const selected = cuentasContables.find((c: any) => c.id === editingMov.id_cuenta_contrapartida_contable);
+    return selected ? `${selected.codigo_cuenta} - ${selected.nombre}` : '';
+  }, [cuentasContables, editingMov?.id_cuenta_contrapartida_contable]);
+
+  useEffect(() => {
+    if (!isEditBankOpen && editingMov) {
+      setSearchEditBank(selectedEditBankText);
+    }
+  }, [selectedEditBankText, isEditBankOpen]);
+
+  useEffect(() => {
+    if (!isEditContraOpen && editingMov) {
+      setSearchEditContra(selectedEditContraText);
+    }
+  }, [selectedEditContraText, isEditContraOpen]);
+
+  // Click outside listener for edit dropdowns
+  useEffect(() => {
+    const handleClickOutsideEdit = (event: MouseEvent) => {
+      if (editBankRef.current && !editBankRef.current.contains(event.target as Node)) {
+        setIsEditBankOpen(false);
+      }
+      if (editContraRef.current && !editContraRef.current.contains(event.target as Node)) {
+        setIsEditContraOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutsideEdit);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutsideEdit);
+    };
+  }, []);
+
+  const filteredEditBankCuentas = useMemo(() => {
+    if (!searchEditBank || searchEditBank === selectedEditBankText) {
+      return cuentasContables;
+    }
+    const query = searchEditBank.toLowerCase();
+    return cuentasContables.filter((c: any) =>
+      c.codigo_cuenta?.toLowerCase().includes(query) ||
+      c.nombre?.toLowerCase().includes(query)
+    );
+  }, [cuentasContables, searchEditBank, selectedEditBankText]);
+
+  const filteredEditContraCuentas = useMemo(() => {
+    if (!searchEditContra || searchEditContra === selectedEditContraText) {
+      return cuentasContables;
+    }
+    const query = searchEditContra.toLowerCase();
+    return cuentasContables.filter((c: any) =>
+      c.codigo_cuenta?.toLowerCase().includes(query) ||
+      c.nombre?.toLowerCase().includes(query)
+    );
+  }, [cuentasContables, searchEditContra, selectedEditContraText]);
+
+  const handleOpenEditModal = async (mov: any) => {
+    setSaving(true);
+    try {
+      let txId = null;
+      let txMovements: any[] = [];
+
+      if (mov.referencia) {
+        const { data: txs } = await supabase
+          .from('transacciones')
+          .select('id, concepto, numero_comprobante, movimientos(id, id_cuenta, debe, haber, plan_cuentas(codigo_cuenta, nombre))')
+          .eq('id_empresa', empresaId)
+          .eq('numero_comprobante', mov.referencia);
+        if (txs && txs.length > 0) {
+          txId = txs[0].id;
+          txMovements = txs[0].movimientos || [];
+        }
+      }
+
+      if (!txId) {
+        const { data: txs } = await supabase
+          .from('transacciones')
+          .select('id, concepto, numero_comprobante, movimientos(id, id_cuenta, debe, haber, plan_cuentas(codigo_cuenta, nombre))')
+          .eq('id_empresa', empresaId)
+          .eq('id_entidad', mov.id_entidad)
+          .eq('fecha', mov.fecha)
+          .in('tipo_comprobante', ['Ingreso', 'Egreso']);
+
+        if (txs) {
+          const matchedTx = txs.find(t => 
+            (t.movimientos || []).some((m: any) => m.debe === Number(mov.monto) || m.haber === Number(mov.monto))
+          );
+          if (matchedTx) {
+            txId = matchedTx.id;
+            txMovements = matchedTx.movimientos || [];
+          }
+        }
+      }
+
+      let bankAccountId = '';
+      let contrapartidaAccountId = '';
+
+      if (txMovements.length > 0) {
+        if (mov.tipo_movimiento === 'Pago') {
+          const bankMov = txMovements.find(m => Number(m.haber) > 0);
+          const supplierMov = txMovements.find(m => Number(m.debe) > 0);
+          if (bankMov) bankAccountId = bankMov.id_cuenta;
+          if (supplierMov) contrapartidaAccountId = supplierMov.id_cuenta;
+        } else {
+          const bankMov = txMovements.find(m => Number(m.debe) > 0);
+          const clientMov = txMovements.find(m => Number(m.haber) > 0);
+          if (bankMov) bankAccountId = bankMov.id_cuenta;
+          if (clientMov) contrapartidaAccountId = clientMov.id_cuenta;
+        }
+      }
+
+      setEditingMov({
+        ...mov,
+        txId,
+        txMovements,
+        fecha: mov.fecha,
+        monto: String(mov.monto),
+        montoOriginal: Number(mov.monto),
+        concepto: mov.concepto || '',
+        referencia: mov.referencia || '',
+        id_cuenta_financiera: mov.id_cuenta_financiera || '',
+        id_cuenta_banco_contable: bankAccountId || mov.id_cuenta_banco_contable || '',
+        id_cuenta_contrapartida_contable: contrapartidaAccountId || ''
+      });
+
+      const bCta = cuentasContables.find((c: any) => c.id === bankAccountId);
+      const cCta = cuentasContables.find((c: any) => c.id === contrapartidaAccountId);
+      
+      setSearchEditBank(bCta ? `${bCta.codigo_cuenta} - ${bCta.nombre}` : '');
+      setSearchEditContra(cCta ? `${cCta.codigo_cuenta} - ${cCta.nombre}` : '');
+      
+    } catch (err) {
+      console.error("Error al cargar transacción para editar:", err);
+      alert("No se pudo cargar la transacción contable asociada.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGuardarEdicionMovimiento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMov || !editingMov.id_cuenta_banco_contable || !editingMov.id_cuenta_contrapartida_contable) return;
+
+    setSaving(true);
+    setMessage('');
+    try {
+      const newMonto = parseFloat(editingMov.monto) || 0;
+      
+      // 1. UPDATE tesoreria_movimientos
+      const { error: updMovErr } = await supabase
+        .from('tesoreria_movimientos')
+        .update({
+          fecha: editingMov.fecha,
+          monto: newMonto,
+          concepto: editingMov.concepto,
+          referencia: editingMov.referencia || null,
+          id_cuenta_financiera: editingMov.id_cuenta_financiera || null
+        })
+        .eq('id', editingMov.id);
+
+      if (updMovErr) throw updMovErr;
+
+      // 2. UPDATE tesoreria_documentos
+      if (editingMov.id_documento) {
+        const originalMonto = Number(editingMov.montoOriginal !== undefined ? editingMov.montoOriginal : editingMov.monto);
+        const amountDiff = originalMonto - newMonto;
+
+        const { data: doc } = await supabase
+          .from('tesoreria_documentos')
+          .select('total, saldo_pendiente')
+          .eq('id', editingMov.id_documento)
+          .single();
+
+        if (doc) {
+          const nuevoSaldo = Math.max(0, Math.min(Number(doc.total), Number(doc.saldo_pendiente) + amountDiff));
+          const nuevoEstado = nuevoSaldo === 0 ? 'Liquidado' : (nuevoSaldo === Number(doc.total) ? 'Pendiente' : 'Parcial');
+          
+          await supabase
+            .from('tesoreria_documentos')
+            .update({ saldo_pendiente: nuevoSaldo, estado: nuevoEstado })
+            .eq('id', editingMov.id_documento);
+        }
+      }
+
+      // 3. UPDATE transacciones and movimientos
+      if (editingMov.txId) {
+        const refText = editingMov.referencia ? ` (Ref: ${editingMov.referencia})` : '';
+        const conceptoAsiento = (editingMov.concepto || `${editingMov.tipo_movimiento} de Tesorería`) + refText;
+
+        await supabase
+          .from('transacciones')
+          .update({
+            fecha: editingMov.fecha,
+            concepto: conceptoAsiento
+          })
+          .eq('id', editingMov.txId);
+
+        const { data: txMovs } = await supabase
+          .from('movimientos')
+          .select('id, debe, haber')
+          .eq('id_transaccion', editingMov.txId);
+
+        if (txMovs && txMovs.length === 2) {
+          const mov1 = txMovs[0];
+          const mov2 = txMovs[1];
+
+          if (editingMov.tipo_movimiento === 'Pago') {
+            const debitMov = mov1.debe > 0 ? mov1 : mov2;
+            const creditMov = mov1.haber > 0 ? mov1 : mov2;
+
+            await supabase
+              .from('movimientos')
+              .update({
+                id_cuenta: editingMov.id_cuenta_banco_contable,
+                debe: 0,
+                haber: newMonto
+              })
+              .eq('id', creditMov.id);
+
+            await supabase
+              .from('movimientos')
+              .update({
+                id_cuenta: editingMov.id_cuenta_contrapartida_contable,
+                debe: newMonto,
+                haber: 0
+              })
+              .eq('id', debitMov.id);
+
+          } else {
+            const debitMov = mov1.debe > 0 ? mov1 : mov2;
+            const creditMov = mov1.haber > 0 ? mov1 : mov2;
+
+            await supabase
+              .from('movimientos')
+              .update({
+                id_cuenta: editingMov.id_cuenta_banco_contable,
+                debe: newMonto,
+                haber: 0
+              })
+              .eq('id', debitMov.id);
+
+            await supabase
+              .from('movimientos')
+              .update({
+                id_cuenta: editingMov.id_cuenta_contrapartida_contable,
+                debe: 0,
+                haber: newMonto
+              })
+              .eq('id', creditMov.id);
+          }
+        }
+      }
+
+      setEditingMov(null);
+      setMessage('Movimiento actualizado y sincronizado exitosamente.');
+      await queryClient.invalidateQueries({ queryKey: ['tesoreria', empresaId] });
+
+    } catch (err: any) {
+      console.error("Error al guardar edición del movimiento:", err);
+      alert("Error al guardar: " + (err.message || err));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Filtrar de las cuentas contables solo las que son de activo corriente (Bancos/Caja/Fondos)
   const cuentasContablesBancos = cuentasContables.filter((c: any) => 
@@ -1061,26 +1341,48 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
 
                         {/* Acciones */}
                         <td style={{ padding: '16px', textAlign: 'center' }}>
-                          <button
-                            className="btn"
-                            style={{ 
-                              padding: '8px 16px', 
-                              background: 'rgba(239,68,68,0.1)', 
-                              color: 'var(--error)', 
-                              border: 'none', 
-                              borderRadius: 10, 
-                              cursor: 'pointer', 
-                              fontWeight: 'bold', 
-                              fontSize: '0.8rem',
-                              transition: 'all 0.2s'
-                            }}
-                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.2)'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
-                            onClick={() => handleAnularMovimientoTesoreria(mov.id)}
-                            disabled={saving}
-                          >
-                            Anular
-                          </button>
+                          <div style={{ display: 'inline-flex', gap: 8 }}>
+                            <button
+                              className="btn"
+                              style={{ 
+                                padding: '8px 16px', 
+                                background: 'rgba(59,130,246,0.1)', 
+                                color: '#3b82f6', 
+                                border: 'none', 
+                                borderRadius: 10, 
+                                cursor: 'pointer', 
+                                fontWeight: 'bold', 
+                                fontSize: '0.8rem',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(59,130,246,0.2)'; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(59,130,246,0.1)'; }}
+                              onClick={() => handleOpenEditModal(mov)}
+                              disabled={saving}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              className="btn"
+                              style={{ 
+                                padding: '8px 16px', 
+                                background: 'rgba(239,68,68,0.1)', 
+                                color: 'var(--error)', 
+                                border: 'none', 
+                                borderRadius: 10, 
+                                cursor: 'pointer', 
+                                fontWeight: 'bold', 
+                                fontSize: '0.8rem',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.2)'; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
+                              onClick={() => handleAnularMovimientoTesoreria(mov.id)}
+                              disabled={saving}
+                            >
+                              Anular
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1191,6 +1493,236 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
           {mode === 'resumen' && renderResumen()}
           {(mode === 'cobros' || mode === 'pagos') && renderCobrosPagos()}
           {mode === 'conciliacion' && renderConciliacion()}
+
+          {/* Edit Modal */}
+          {editingMov && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(5,8,16,0.85)', backdropFilter: 'blur(12px)', padding: '20px', boxSizing: 'border-box' }}>
+                <div className="glass-card" style={{ padding: '28px', width: '90%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto' }}>
+                    <h3 className="h1" style={{ fontSize: '1.3rem', display: 'flex', alignItems: 'center', gap: 8, marginBottom: '20px' }}>
+                        <CheckCircle2 color="var(--primary)" /> Editar {editingMov.tipo_movimiento === 'Pago' ? 'Pago a Proveedor' : 'Cobro a Cliente'}
+                    </h3>
+                    
+                    <form onSubmit={handleGuardarEdicionMovimiento} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div>
+                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Monto a aplicar ($)</label>
+                                <input 
+                                    type="number" 
+                                    step="0.01" 
+                                    value={editingMov.monto} 
+                                    onChange={e => setEditingMov({...editingMov, monto: e.target.value})} 
+                                    style={{...inputStyle, fontWeight: 900}} 
+                                    required 
+                                />
+                            </div>
+                            <div>
+                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Fecha</label>
+                                <input 
+                                    type="date" 
+                                    value={editingMov.fecha} 
+                                    onChange={e => setEditingMov({...editingMov, fecha: e.target.value})} 
+                                    style={inputStyle} 
+                                    required 
+                                />
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div>
+                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Caja / Banco de Tesorería (Opcional)</label>
+                                <select 
+                                    value={editingMov.id_cuenta_financiera} 
+                                    onChange={e => setEditingMov({...editingMov, id_cuenta_financiera: e.target.value})} 
+                                    style={inputStyle}
+                                >
+                                    <option value="">No deducir de panel</option>
+                                    {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Cuenta Contable Banco (Libro Diario)</label>
+                                <div ref={editBankRef} style={{ position: 'relative' }}>
+                                    <input 
+                                        value={searchEditBank}
+                                        onChange={e => {
+                                            setSearchEditBank(e.target.value);
+                                            setIsEditBankOpen(true);
+                                        }}
+                                        onFocus={() => {
+                                            setSearchEditBank('');
+                                            setIsEditBankOpen(true);
+                                        }}
+                                        placeholder="Buscar cuenta banco..."
+                                        style={inputStyle}
+                                        required={!editingMov.id_cuenta_banco_contable}
+                                    />
+                                    <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.6, fontSize: '0.8rem', color: 'var(--text-sec)' }}>
+                                        ▼
+                                    </span>
+                                    
+                                    {isEditBankOpen && (
+                                        <div style={{ 
+                                            position: 'absolute', 
+                                            top: '100%', 
+                                            left: 0, 
+                                            right: 0, 
+                                            maxHeight: '180px', 
+                                            overflowY: 'auto', 
+                                            background: '#0c101f', 
+                                            border: '1px solid var(--border-color)', 
+                                            borderRadius: '12px', 
+                                            marginTop: '4px', 
+                                            zIndex: 9999,
+                                            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)'
+                                        }}>
+                                            {filteredEditBankCuentas.length === 0 ? (
+                                                <div style={{ padding: '10px 12px', color: 'var(--text-sec)', fontSize: '0.85rem' }}>No se encontraron cuentas</div>
+                                            ) : (
+                                                filteredEditBankCuentas.map((c: any) => {
+                                                    const isSelected = c.id === editingMov.id_cuenta_banco_contable;
+                                                    return (
+                                                        <div 
+                                                            key={c.id}
+                                                            onClick={() => {
+                                                                setEditingMov({...editingMov, id_cuenta_banco_contable: c.id});
+                                                                setIsEditBankOpen(false);
+                                                            }}
+                                                            style={{ 
+                                                                padding: '8px 12px', 
+                                                                cursor: 'pointer', 
+                                                                background: isSelected ? 'var(--primary-light)' : 'transparent',
+                                                                color: isSelected ? 'var(--primary)' : 'var(--text-main)',
+                                                                fontSize: '0.85rem',
+                                                                borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
+                                                                textAlign: 'left'
+                                                            }}
+                                                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }}
+                                                            onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                                                        >
+                                                            {c.codigo_cuenta} - {c.nombre}
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Cuenta Contable Proveedor/Cliente (Contrapartida)</label>
+                            <div ref={editContraRef} style={{ position: 'relative' }}>
+                                <input 
+                                    value={searchEditContra}
+                                    onChange={e => {
+                                            setSearchEditContra(e.target.value);
+                                            setIsEditContraOpen(true);
+                                    }}
+                                    onFocus={() => {
+                                            setSearchEditContra('');
+                                            setIsEditContraOpen(true);
+                                    }}
+                                    placeholder="Buscar cuenta contrapartida..."
+                                    style={inputStyle}
+                                    required={!editingMov.id_cuenta_contrapartida_contable}
+                                />
+                                <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.6, fontSize: '0.8rem', color: 'var(--text-sec)' }}>
+                                    ▼
+                                </span>
+                                
+                                {isEditContraOpen && (
+                                    <div style={{ 
+                                        position: 'absolute', 
+                                        top: '100%', 
+                                        left: 0, 
+                                        right: 0, 
+                                        maxHeight: '180px', 
+                                        overflowY: 'auto', 
+                                        background: '#0c101f', 
+                                        border: '1px solid var(--border-color)', 
+                                        borderRadius: '12px', 
+                                        marginTop: '4px', 
+                                        zIndex: 9999,
+                                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)'
+                                    }}>
+                                        {filteredEditContraCuentas.length === 0 ? (
+                                            <div style={{ padding: '10px 12px', color: 'var(--text-sec)', fontSize: '0.85rem' }}>No se encontraron cuentas</div>
+                                        ) : (
+                                            filteredEditContraCuentas.map((c: any) => {
+                                                const isSelected = c.id === editingMov.id_cuenta_contrapartida_contable;
+                                                return (
+                                                    <div 
+                                                        key={c.id}
+                                                        onClick={() => {
+                                                            setEditingMov({...editingMov, id_cuenta_contrapartida_contable: c.id});
+                                                            setIsEditContraOpen(false);
+                                                        }}
+                                                        style={{ 
+                                                            padding: '8px 12px', 
+                                                            cursor: 'pointer', 
+                                                            background: isSelected ? 'var(--primary-light)' : 'transparent',
+                                                            color: isSelected ? 'var(--primary)' : 'var(--text-main)',
+                                                            fontSize: '0.85rem',
+                                                            borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
+                                                            textAlign: 'left'
+                                                        }}
+                                                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }}
+                                                        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                                                    >
+                                                        {c.codigo_cuenta} - {c.nombre}
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Concepto</label>
+                            <input 
+                                value={editingMov.concepto} 
+                                onChange={e => setEditingMov({...editingMov, concepto: e.target.value})} 
+                                placeholder="Concepto del movimiento..." 
+                                style={inputStyle} 
+                                required 
+                            />
+                        </div>
+
+                        <div>
+                            <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Referencia bancaria / Voucher</label>
+                            <input 
+                                value={editingMov.referencia} 
+                                onChange={e => setEditingMov({...editingMov, referencia: e.target.value})} 
+                                placeholder="Nº de transferencia, cheque, etc..." 
+                                style={inputStyle} 
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 10 }}>
+                            <button 
+                                type="button" 
+                                onClick={() => setEditingMov(null)} 
+                                className="btn" 
+                                style={{ padding: '10px 20px', borderRadius: 10 }}
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                type="submit" 
+                                disabled={saving || !editingMov.monto || !editingMov.id_cuenta_banco_contable || !editingMov.id_cuenta_contrapartida_contable} 
+                                className="btn btn-primary" 
+                                style={{ padding: '10px 24px', borderRadius: 10 }}
+                            >
+                                {saving ? 'Guardando...' : 'Guardar Cambios'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+          )}
       </div>
   );
 };
