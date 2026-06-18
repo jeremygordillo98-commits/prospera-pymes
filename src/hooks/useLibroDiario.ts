@@ -138,6 +138,69 @@ export const useLibroDiario = ({ empresaId, activeView }: UseLibroDiarioProps) =
         return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
       });
 
+      // Self-healing: identify any annulled transactions that still have movements
+      const invalidAnnulledTxs = sanitizedData.filter((tx: any) => 
+        tx.tipo_comprobante === 'Anulado' && tx.movimientos && tx.movimientos.length > 0
+      );
+
+      if (invalidAnnulledTxs.length > 0) {
+        console.log("Self-healing: Deleting movements for annulled transactions:", invalidAnnulledTxs.map((t: any) => t.numero_comprobante));
+        const invalidTxIds = invalidAnnulledTxs.map((tx: any) => tx.id);
+        const { error: deleteError } = await supabase
+          .from('movimientos')
+          .delete()
+          .in('id_transaccion', invalidTxIds);
+        
+        if (!deleteError) {
+          const { data: refetchedData, error: refetchError } = await supabase
+            .from('transacciones')
+            .select(`
+              id,
+              fecha,
+              concepto,
+              tipo_comprobante,
+              numero_comprobante,
+              id_entidad,
+              entidades (razon_social),
+              movimientos (
+                id,
+                id_transaccion,
+                id_cuenta,
+                debe,
+                haber,
+                plan_cuentas (nombre, codigo_cuenta)
+              )
+            `)
+            .eq('id_empresa', empresaId)
+            .order('fecha', { ascending: false });
+
+          if (!refetchError && refetchedData) {
+            const reSanitizedData = refetchedData.map((item: any) => ({
+              ...item,
+              entidades: Array.isArray(item.entidades) ? item.entidades[0] : item.entidades,
+              movimientos: (item.movimientos || []).map((m: any) => ({
+                ...m,
+                plan_cuentas: Array.isArray(m.plan_cuentas) ? m.plan_cuentas[0] : m.plan_cuentas
+              }))
+            }));
+            const reSortedData = reSanitizedData.sort((a: any, b: any) => {
+              const numA = parseInt(a.numero_comprobante?.trim() || '0', 10) || 0;
+              const numB = parseInt(b.numero_comprobante?.trim() || '0', 10) || 0;
+              if (numA !== numB) {
+                return numB - numA;
+              }
+              return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
+            });
+            setTransactions(reSortedData);
+            if (reSortedData.length > 0) {
+              setExpandedTxs(new Set(reSortedData.map((t: any) => t.id)));
+            }
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
       setTransactions(sortedData);
 
       if (sortedData.length > 0) {
@@ -460,6 +523,7 @@ export const useLibroDiario = ({ empresaId, activeView }: UseLibroDiarioProps) =
 
   const emptyTxsCount = useMemo(() => {
     return filteredTransactions.filter(tx => 
+      tx.tipo_comprobante !== 'Anulado' && 
       tx.movimientos.length === 0 && 
       (tx.concepto.includes('de Tesorería') || tx.concepto.includes('Pago CxC') || tx.tipo_comprobante === 'Egreso' || tx.tipo_comprobante === 'Ingreso')
     ).length;
@@ -467,6 +531,7 @@ export const useLibroDiario = ({ empresaId, activeView }: UseLibroDiarioProps) =
 
   const incorrectTxsCount = useMemo(() => {
     return filteredTransactions.filter(tx => {
+      if (tx.tipo_comprobante === 'Anulado') return false;
       if (tx.movimientos.length !== 2) return false;
       const codes = tx.movimientos.map(m => m.plan_cuentas?.codigo_cuenta);
       return codes.includes('1.1.1') && codes.includes('1.1.4.3');
@@ -477,11 +542,13 @@ export const useLibroDiario = ({ empresaId, activeView }: UseLibroDiarioProps) =
     setReparing(true);
     try {
       const emptyTxs = transactions.filter(tx => 
+        tx.tipo_comprobante !== 'Anulado' && 
         tx.movimientos.length === 0 && 
         (tx.concepto.includes('de Tesorería') || tx.concepto.includes('Pago CxC') || tx.tipo_comprobante === 'Egreso' || tx.tipo_comprobante === 'Ingreso')
       );
 
       const incorrectTxs = transactions.filter(tx => {
+        if (tx.tipo_comprobante === 'Anulado') return false;
         if (tx.movimientos.length !== 2) return false;
         const codes = tx.movimientos.map(m => m.plan_cuentas?.codigo_cuenta);
         return codes.includes('1.1.1') && codes.includes('1.1.4.3');
