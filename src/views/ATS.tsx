@@ -73,6 +73,13 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
   const [xmlStringPreview, setXmlStringPreview] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Paginación
+  const PAGE_SIZE = 10;
+  const [pageCompras, setPageCompras] = useState(1);
+  const [pageVentas, setPageVentas] = useState(1);
+  const [pageRetenciones, setPageRetenciones] = useState(1);
+  const [pageAnulados, setPageAnulados] = useState(1);
+
   const fetchData = useCallback(async () => {
     if (!empresaId) return;
     setLoading(true);
@@ -201,14 +208,30 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
   }, [fetchData]);
 
   // ─── Clasificación y Filtros ──────────────────────────────────
-  const compras = docs.filter(d => (d.transacciones?.tipo_comprobante === 'Factura' || d.transacciones?.tipo_comprobante === 'Nota de Crédito') && d.es_compra);
-  const ventas = docs.filter(d => (d.transacciones?.tipo_comprobante === 'Factura' || d.transacciones?.tipo_comprobante === 'Nota de Crédito') && !d.es_compra);
-  const retenciones = docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retención');
+  const sortByDate = (arr: DocSRI[]) =>
+    [...arr].sort((a, b) => {
+      const fa = a.transacciones?.fecha ?? '';
+      const fb = b.transacciones?.fecha ?? '';
+      return fb.localeCompare(fa); // más reciente primero
+    });
+
+  const compras = sortByDate(docs.filter(d => (d.transacciones?.tipo_comprobante === 'Factura' || d.transacciones?.tipo_comprobante === 'Nota de Crédito') && d.es_compra));
+  const ventas = sortByDate(docs.filter(d => (d.transacciones?.tipo_comprobante === 'Factura' || d.transacciones?.tipo_comprobante === 'Nota de Crédito') && !d.es_compra));
+  const retenciones = sortByDate(docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retención'));
   const retencionesRecibidas = docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retención' && !d.es_compra);
-  const anulados = docs.filter(d => 
+  const anulados = sortByDate(docs.filter(d => 
     d.transacciones?.concepto?.toLowerCase().includes('anulado') || 
     d.transacciones?.tipo_comprobante === 'Anulado'
-  );
+  ));
+
+  // Páginas actuales
+  const comprasPaged = compras.slice((pageCompras - 1) * PAGE_SIZE, pageCompras * PAGE_SIZE);
+  const retencionesPaged = retenciones.slice((pageRetenciones - 1) * PAGE_SIZE, pageRetenciones * PAGE_SIZE);
+  const anuladosPaged = anulados.slice((pageAnulados - 1) * PAGE_SIZE, pageAnulados * PAGE_SIZE);
+
+  const totalPagesCompras = Math.max(1, Math.ceil(compras.length / PAGE_SIZE));
+  const totalPagesRetenciones = Math.max(1, Math.ceil(retenciones.length / PAGE_SIZE));
+  const totalPagesAnulados = Math.max(1, Math.ceil(anulados.length / PAGE_SIZE));
 
   // ─── Agrupamientos y KPIs Contables ──────────────────────────
   const totalIVAVentas     = ventas.reduce((s, d) => {
@@ -319,6 +342,23 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
   };
 
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+  // ─── Componente de Paginación ─────────────────────────────────
+  const Paginacion = ({ page, total, onPrev, onNext }: { page: number; total: number; onPrev: () => void; onNext: () => void }) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, padding: '14px 20px', borderTop: '1px solid var(--border-color)', fontSize: '0.85rem', color: 'var(--text-sec)' }}>
+      <span>Página <strong style={{ color: 'var(--text-main)' }}>{page}</strong> de <strong style={{ color: 'var(--text-main)' }}>{total}</strong></span>
+      <button
+        onClick={onPrev}
+        disabled={page <= 1}
+        style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border-color)', background: page <= 1 ? 'transparent' : 'var(--glass-bg)', color: page <= 1 ? 'var(--text-sec)' : 'var(--text-main)', cursor: page <= 1 ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: page <= 1 ? 0.4 : 1 }}
+      >‹ Anterior</button>
+      <button
+        onClick={onNext}
+        disabled={page >= total}
+        style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border-color)', background: page >= total ? 'transparent' : 'var(--primary)', color: page >= total ? 'var(--text-sec)' : '#fff', cursor: page >= total ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: page >= total ? 0.4 : 1 }}
+      >Siguiente ›</button>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -446,7 +486,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                 </tr>
               </thead>
               <tbody>
-                {compras.map((d) => {
+                {comprasPaged.map((d) => {
                   const isNC = d.transacciones?.tipo_comprobante === 'Nota de Crédito';
                   return (
                     <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
@@ -473,6 +513,14 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                 })}
               </tbody>
             </table>
+            {compras.length > PAGE_SIZE && (
+              <Paginacion
+                page={pageCompras}
+                total={totalPagesCompras}
+                onPrev={() => setPageCompras(p => Math.max(1, p - 1))}
+                onNext={() => setPageCompras(p => Math.min(totalPagesCompras, p + 1))}
+              />
+            )}
           )
         ) : tab === 'ventas' ? (
           ventasAgrupadasPorCliente.length === 0 ? (
@@ -490,7 +538,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                 </tr>
               </thead>
               <tbody>
-                {ventasAgrupadasPorCliente.map((v: any) => (
+                {ventasAgrupadasPorCliente.slice((pageVentas - 1) * PAGE_SIZE, pageVentas * PAGE_SIZE).map((v: any) => (
                   <tr key={`${v.ruc}_${v.tipoDoc}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ fontWeight: 700 }}>{v.razonSocial}</div>
@@ -520,6 +568,14 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                 ))}
               </tbody>
             </table>
+            {ventasAgrupadasPorCliente.length > PAGE_SIZE && (
+              <Paginacion
+                page={pageVentas}
+                total={Math.max(1, Math.ceil(ventasAgrupadasPorCliente.length / PAGE_SIZE))}
+                onPrev={() => setPageVentas(p => Math.max(1, p - 1))}
+                onNext={() => setPageVentas(p => Math.min(Math.max(1, Math.ceil(ventasAgrupadasPorCliente.length / PAGE_SIZE)), p + 1))}
+              />
+            )}
           )
         ) : tab === 'retenciones' ? (
           retenciones.length === 0 ? (
@@ -537,7 +593,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                 </tr>
               </thead>
               <tbody>
-                {retenciones.map(d => {
+                {retencionesPaged.map(d => {
                   const totalRetDoc = (d.retenciones_aplicadas || []).reduce((a: number, r: any) => a + (r.valor || 0), 0);
                   const docsRef = [...new Set((d.retenciones_aplicadas || []).map((r: any) => r.codigo).filter(Boolean))];
                   return (
@@ -555,6 +611,14 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                 })}
               </tbody>
             </table>
+            {retenciones.length > PAGE_SIZE && (
+              <Paginacion
+                page={pageRetenciones}
+                total={totalPagesRetenciones}
+                onPrev={() => setPageRetenciones(p => Math.max(1, p - 1))}
+                onNext={() => setPageRetenciones(p => Math.min(totalPagesRetenciones, p + 1))}
+              />
+            )}
           )
         ) : (
           anulados.length === 0 ? (
@@ -572,7 +636,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                 </tr>
               </thead>
               <tbody>
-                {anulados.map(d => (
+                {anuladosPaged.map(d => (
                   <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
                     <td style={{ padding: '12px 16px', fontWeight: 800 }}>{d.transacciones?.tipo_comprobante}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace' }}>{d.transacciones?.numero_comprobante}</td>
@@ -582,6 +646,14 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                 ))}
               </tbody>
             </table>
+            {anulados.length > PAGE_SIZE && (
+              <Paginacion
+                page={pageAnulados}
+                total={totalPagesAnulados}
+                onPrev={() => setPageAnulados(p => Math.max(1, p - 1))}
+                onNext={() => setPageAnulados(p => Math.min(totalPagesAnulados, p + 1))}
+              />
+            )}
           )
         )}
       </div>
