@@ -361,8 +361,55 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
     setMessage('');
     try {
       const newMonto = parseFloat(editingMov.monto) || 0;
+      if (newMonto <= 0) {
+        alert("El monto debe ser mayor a cero.");
+        setSaving(false);
+        return;
+      }
       
-      // 1. UPDATE tesoreria_movimientos
+      // 1. Validar monto contra el total del documento y saldo_pendiente
+      if (editingMov.id_documento) {
+        const originalMonto = Number(editingMov.montoOriginal !== undefined ? editingMov.montoOriginal : editingMov.monto);
+        const amountDiff = originalMonto - newMonto;
+
+        const { data: doc, error: docError } = await supabase
+          .from('tesoreria_documentos')
+          .select('total, saldo_pendiente')
+          .eq('id', editingMov.id_documento)
+          .single();
+
+        if (docError || !doc) {
+          throw new Error("No se pudo recuperar la información del documento original para validar el monto.");
+        }
+
+        const totalDocumento = Number(doc.total || 0);
+        const saldoPendienteActual = Number(doc.saldo_pendiente || 0);
+
+        if (newMonto > totalDocumento) {
+          alert(`El monto ingresado ($${newMonto.toFixed(2)}) no puede ser superior al valor total del documento ($${totalDocumento.toFixed(2)}).`);
+          setSaving(false);
+          return;
+        }
+
+        const nuevoSaldo = saldoPendienteActual + amountDiff;
+        if (nuevoSaldo < 0) {
+          const maximoPermitido = saldoPendienteActual + originalMonto;
+          alert(`El monto ingresado excede el saldo de la factura. El monto máximo permitido para este pago es de $${maximoPermitido.toFixed(2)}.`);
+          setSaving(false);
+          return;
+        }
+
+        // Si la validación es correcta, actualizar el documento
+        const nuevoEstado = nuevoSaldo === 0 ? 'Liquidado' : (nuevoSaldo === totalDocumento ? 'Pendiente' : 'Parcial');
+        const { error: updDocErr } = await supabase
+          .from('tesoreria_documentos')
+          .update({ saldo_pendiente: nuevoSaldo, estado: nuevoEstado })
+          .eq('id', editingMov.id_documento);
+
+        if (updDocErr) throw updDocErr;
+      }
+      
+      // 2. UPDATE tesoreria_movimientos
       const { error: updMovErr } = await supabase
         .from('tesoreria_movimientos')
         .update({
@@ -375,28 +422,6 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
         .eq('id', editingMov.id);
 
       if (updMovErr) throw updMovErr;
-
-      // 2. UPDATE tesoreria_documentos
-      if (editingMov.id_documento) {
-        const originalMonto = Number(editingMov.montoOriginal !== undefined ? editingMov.montoOriginal : editingMov.monto);
-        const amountDiff = originalMonto - newMonto;
-
-        const { data: doc } = await supabase
-          .from('tesoreria_documentos')
-          .select('total, saldo_pendiente')
-          .eq('id', editingMov.id_documento)
-          .single();
-
-        if (doc) {
-          const nuevoSaldo = Math.max(0, Math.min(Number(doc.total), Number(doc.saldo_pendiente) + amountDiff));
-          const nuevoEstado = nuevoSaldo === 0 ? 'Liquidado' : (nuevoSaldo === Number(doc.total) ? 'Pendiente' : 'Parcial');
-          
-          await supabase
-            .from('tesoreria_documentos')
-            .update({ saldo_pendiente: nuevoSaldo, estado: nuevoEstado })
-            .eq('id', editingMov.id_documento);
-        }
-      }
 
       // 3. UPDATE transacciones and movimientos
       if (editingMov.txId) {
@@ -1523,6 +1548,18 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
                     )}
                     
                     <form onSubmit={handleGuardarEdicionMovimiento} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        <div>
+                            <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Documento a saldar</label>
+                            <select value={editingMov.id_documento || ''} disabled style={{...inputStyle, opacity: 0.7, cursor: 'not-allowed'}}>
+                                <option value="">Selecciona (Factura/Deuda)</option>
+                                {documentos.map(doc => (
+                                    <option key={doc.id} value={doc.id}>
+                                        {doc.entidades?.razon_social} - {doc.referencia} (${Number(doc.total).toFixed(2)})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                             <div>
                                 <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Monto a aplicar ($)</label>
@@ -1551,8 +1588,26 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
                             <div>
                                 <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Caja / Banco de Tesorería (Opcional)</label>
                                 <select 
-                                    value={editingMov.id_cuenta_financiera} 
-                                    onChange={e => setEditingMov({...editingMov, id_cuenta_financiera: e.target.value})} 
+                                    value={editingMov.id_cuenta_financiera || ''} 
+                                    onChange={e => {
+                                        const fid = e.target.value;
+                                        const selectedFinCta = cuentas.find(c => c.id === fid);
+                                        let matchedContableId = editingMov.id_cuenta_banco_contable;
+                                        if (selectedFinCta) {
+                                            const match = cuentasContables.find((cc: any) => 
+                                                cc.nombre.toLowerCase().includes(selectedFinCta.nombre.toLowerCase()) ||
+                                                selectedFinCta.nombre.toLowerCase().includes(cc.nombre.toLowerCase())
+                                            );
+                                            if (match) {
+                                                matchedContableId = match.id;
+                                            }
+                                        }
+                                        setEditingMov({
+                                            ...editingMov, 
+                                            id_cuenta_financiera: fid,
+                                            id_cuenta_banco_contable: matchedContableId
+                                        });
+                                    }} 
                                     style={inputStyle}
                                 >
                                     <option value="">No deducir de panel</option>
@@ -1560,7 +1615,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
                                 </select>
                             </div>
                             <div>
-                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Cuenta Contable Banco (Libro Diario)</label>
+                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Cuenta Contable (Libro Diario)</label>
                                 <div ref={editBankRef} style={{ position: 'relative' }}>
                                     <input 
                                         value={searchEditBank}
@@ -1572,7 +1627,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
                                             setSearchEditBank('');
                                             setIsEditBankOpen(true);
                                         }}
-                                        placeholder="Buscar cuenta banco..."
+                                        placeholder="Buscar cuenta contable..."
                                         style={inputStyle}
                                         required={!editingMov.id_cuenta_banco_contable}
                                     />
