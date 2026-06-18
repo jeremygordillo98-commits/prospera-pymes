@@ -1,12 +1,8 @@
 import React from 'react';
-import { FileText, Ban, Download } from 'lucide-react';
+import { FileText, Download } from 'lucide-react';
 
 interface Props {
-  selectedTxsSize: number;
-  handleBulkAnular: () => void;
   filteredTransactionsLength: number;
-  selectedTxsSizeEqualsFilteredLength: boolean;
-  handleSelectAll: () => void;
   filterDate: string;
   setFilterDate: (val: string) => void;
   exportToExcel: () => void;
@@ -14,11 +10,7 @@ interface Props {
 }
 
 export const LibroDiarioToolbar: React.FC<Props> = ({
-  selectedTxsSize,
-  handleBulkAnular,
   filteredTransactionsLength,
-  selectedTxsSizeEqualsFilteredLength,
-  handleSelectAll,
   filterDate,
   setFilterDate,
   exportToExcel,
@@ -35,22 +27,6 @@ export const LibroDiarioToolbar: React.FC<Props> = ({
       </div>
 
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-        {selectedTxsSize > 0 && (
-          <button className="btn" onClick={handleBulkAnular} style={{ background: 'rgba(245, 158, 11, 0.1)', color: 'var(--warning)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '10px 14px' }}>
-            <Ban size={18} /> <span className="hide-mobile">Anular ({selectedTxsSize})</span>
-          </button>
-        )}
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '10px 14px', background: 'var(--input-bg)', borderRadius: '12px', border: '1px solid var(--border-color)' }} onClick={handleSelectAll}>
-          <input
-            type="checkbox"
-            readOnly
-            checked={filteredTransactionsLength > 0 && selectedTxsSizeEqualsFilteredLength}
-            style={{ width: '16px', height: '16px', accentColor: 'var(--primary)', cursor: 'pointer' }}
-          />
-          <span style={{ fontSize: '0.85rem', fontWeight: 600 }} className="hide-mobile">Seleccionar Todo</span>
-        </div>
-
         <div style={{ position: 'relative' }}>
           <input
             type="date"

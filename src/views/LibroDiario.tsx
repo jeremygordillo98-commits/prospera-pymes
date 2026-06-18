@@ -23,7 +23,6 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView 
     expandedTxs,
     filterDate,
     setFilterDate,
-    selectedTxs,
     annulModal,
     setAnnulModal,
     annulReasonInput,
@@ -32,28 +31,56 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView 
     setAlertModal,
     filteredTransactions,
     toggleExpand,
-    handleAnular,
-    toggleSelect,
-    handleSelectAll,
-    handleBulkAnular,
     exportToExcel,
     handleExportTxPDF,
-    exportLibroDiarioPDF
+    exportLibroDiarioPDF,
+    repararAsientosTesoreria,
+    reparing,
+    emptyTxsCount,
+    incorrectTxsCount
   } = useLibroDiario({ empresaId, activeView });
 
   return (
     <div className="libro-diario-container">
       <LibroDiarioToolbar
-        selectedTxsSize={selectedTxs.size}
-        handleBulkAnular={handleBulkAnular}
         filteredTransactionsLength={filteredTransactions.length}
-        selectedTxsSizeEqualsFilteredLength={selectedTxs.size === filteredTransactions.length}
-        handleSelectAll={handleSelectAll}
         filterDate={filterDate}
         setFilterDate={setFilterDate}
         exportToExcel={exportToExcel}
         exportToPDF={exportLibroDiarioPDF}
       />
+
+      {(emptyTxsCount > 0 || incorrectTxsCount > 0) && (
+        <div className="glass-card" style={{ padding: '16px 20px', borderLeft: '6px solid var(--warning)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', background: 'rgba(245,158,11,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+            <div>
+              <strong style={{ color: 'var(--warning)', fontSize: '0.95rem' }}>
+                {emptyTxsCount > 0 && incorrectTxsCount > 0 
+                  ? 'Inconsistencias en Asientos de Tesorería' 
+                  : emptyTxsCount > 0 
+                    ? 'Asientos de Tesorería Huérfanos' 
+                    : 'Cuentas Incorrectas en Asientos de Pagos'}
+              </strong>
+              <p className="text-sec" style={{ fontSize: '0.8rem', marginTop: '4px', margin: 0 }}>
+                {emptyTxsCount > 0 && incorrectTxsCount > 0
+                  ? `Se detectaron ${emptyTxsCount} asientos vacíos (en $0.00) y ${incorrectTxsCount} asientos de pagos registrados con cuentas incorrectas (1.1.1 y 1.1.4.3).`
+                  : emptyTxsCount > 0
+                    ? `Hay ${emptyTxsCount} asientos contables de cobros o pagos que no tienen sus movimientos contables registrados (aparecen en $0.00).`
+                    : `Se detectaron ${incorrectTxsCount} asientos contables de pagos registrados con cuentas incorrectas (1.1.1 y 1.1.4.3) que deben corregirse.`}
+              </p>
+            </div>
+          </div>
+          <button 
+            className="btn" 
+            disabled={reparing}
+            onClick={repararAsientosTesoreria}
+            style={{ borderRadius: '10px', fontSize: '0.82rem', padding: '8px 16px', background: 'var(--warning)', color: '#000', fontWeight: 'bold', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            {reparing ? 'Reparando...' : '🔧 Reparar Asientos'}
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex-center" style={{ padding: '100px 0' }}>
@@ -97,14 +124,6 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView 
                   onClick={() => toggleExpand(tx.id)}
                 >
                   <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-                    <div onClick={(e) => toggleSelect(e, tx.id)} style={{ display: 'flex', alignItems: 'center', padding: '4px' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedTxs.has(tx.id)}
-                        readOnly
-                        style={{ width: '18px', height: '18px', accentColor: 'var(--primary)', cursor: 'pointer' }}
-                      />
-                    </div>
                     <div style={{ textAlign: 'center', minWidth: '60px' }}>
                       <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-sec)', fontWeight: 800 }}>{new Date(tx.fecha + 'T12:00:00').toLocaleString('es-EC', { month: 'short' })}</div>
                       <div style={{ fontSize: '1.2rem', fontWeight: 900 }}>{new Date(tx.fecha).getUTCDate()}</div>
@@ -152,16 +171,7 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView 
                     >
                       <Download size={20} />
                     </button>
-                    {!isAnulado && (
-                      <button
-                        onClick={(e) => handleAnular(e, tx)}
-                        className="p-2"
-                        style={{ background: 'transparent', border: 'none', color: 'var(--warning)', cursor: 'pointer', opacity: 0.6 }}
-                        title="Anular Asiento"
-                      >
-                        <Ban size={20} />
-                      </button>
-                    )}
+
                     {expandedTxs.has(tx.id) ? <ChevronUp size={24} className="text-primary" /> : <ChevronDown size={24} className="text-sec" />}
                   </div>
                 </div>
