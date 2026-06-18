@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FileDown, 
@@ -64,7 +64,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
   const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // Shield Diagnóstico
+  // Shield Diagn├│stico
   const [alertasCriticas, setAlertasCriticas] = useState<string[]>([]);
   const [advertencias, setAdvertencias] = useState<string[]>([]);
   
@@ -72,13 +72,6 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
   const [showXmlPreview, setShowXmlPreview] = useState(false);
   const [xmlStringPreview, setXmlStringPreview] = useState('');
   const [copied, setCopied] = useState(false);
-
-  // Paginación
-  const PAGE_SIZE = 10;
-  const [pageCompras, setPageCompras] = useState(1);
-  const [pageVentas, setPageVentas] = useState(1);
-  const [pageRetenciones, setPageRetenciones] = useState(1);
-  const [pageAnulados, setPageAnulados] = useState(1);
 
   const fetchData = useCallback(async () => {
     if (!empresaId) return;
@@ -97,7 +90,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       if (empData) setEmpresa(empData);
       
       if (docsData) {
-        // Filtrar por periodo (mes y año)
+        // Filtrar por periodo (mes y a├▒o)
         const filtered = (docsData as any[]).filter(d => {
           const fecha = d.transacciones?.fecha;
           if (!fecha) return false;
@@ -106,7 +99,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
         });
         setDocs(filtered);
 
-        // --- MOTOR DE DIAGNÓSTICO SRI-SHIELD ---
+        // --- MOTOR DE DIAGN├ôSTICO SRI-SHIELD ---
         const criticals: string[] = [];
         const warns: string[] = [];
 
@@ -116,7 +109,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
           const esComp = d.es_compra;
 
           if (!d.transacciones) {
-            criticals.push(`Comprobante sin datos de transacción enlazados.`);
+            criticals.push(`Comprobante sin datos de transacci├│n enlazados.`);
             return;
           }
 
@@ -125,32 +118,32 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
             return;
           }
 
-          // Validación de Identificaciones
+          // Validaci├│n de Identificaciones
           const idStr = ent.ruc_cedula || '';
           if (idStr === '9999999999999' && esComp) {
             criticals.push(`Proveedor "${ent.razon_social}": Consumidor Final no permitido en Compras.`);
           } else if (idStr.length !== 13 && idStr.length !== 10 && idStr !== '9999999999999') {
-            criticals.push(`Entidad "${ent.razon_social}": Identificación no válida (${idStr.length} dígitos).`);
+            criticals.push(`Entidad "${ent.razon_social}": Identificaci├│n no v├ílida (${idStr.length} d├¡gitos).`);
           }
 
-          // Tipo de Identificación SRI
+          // Tipo de Identificaci├│n SRI
           if (!ent.tipo_identificacion) {
-            criticals.push(`Entidad "${ent.razon_social}": Falta configurar el "Tipo de Identificación SRI".`);
+            criticals.push(`Entidad "${ent.razon_social}": Falta configurar el "Tipo de Identificaci├│n SRI".`);
           }
 
-          // Validación de Secuenciales (9 dígitos)
+          // Validaci├│n de Secuenciales (9 d├¡gitos)
           const partesNum = numComp.split('-');
           if (partesNum.length === 3) {
             if (partesNum[0].length !== 3 || partesNum[1].length !== 3 || partesNum[2].length !== 9) {
               warns.push(`Doc ${numComp}: Formato de secuencial inusual (Debe ser estab[3]-ptoEmi[3]-secuencial[9]).`);
             }
           } else {
-            criticals.push(`Doc "${numComp || 'Sin número'}": Formato de número de comprobante incorrecto.`);
+            criticals.push(`Doc "${numComp || 'Sin n├║mero'}": Formato de n├║mero de comprobante incorrecto.`);
           }
 
           // Forma de pago en compras
           if (esComp && !d.forma_pago) {
-            warns.push(`Compra ${numComp}: Sin forma de pago especificada. Se asignará 'Otros con sistema financiero (20)' por defecto.`);
+            warns.push(`Compra ${numComp}: Sin forma de pago especificada. Se asignar├í 'Otros con sistema financiero (20)' por defecto.`);
           }
 
           // --- NUEVAS COMPROBACIONES DE ROBUSTEZ FISCAL ---
@@ -161,10 +154,10 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
             // 1. Validar existencia del sustento tributario (solo si no hay retenciones en absoluto para evitar falsas advertencias en facturas antiguas procesadas)
             const sust = firstRet?.cod_sustento;
             if (!sust && rets.length === 0) {
-              warns.push(`Compra ${numComp}: No se ha definido el Sustento Tributario. Se asumirá '01' (Crédito Tributario para IVA) por defecto.`);
+              warns.push(`Compra ${numComp}: No se ha definido el Sustento Tributario. Se asumir├í '01' (Cr├®dito Tributario para IVA) por defecto.`);
             }
 
-            // 2. Validar que si hay valores retenidos, el comprobante de retención esté ingresado correctamente
+            // 2. Validar que si hay valores retenidos, el comprobante de retenci├│n est├® ingresado correctamente
             const retRenta = rets.filter((r: any) => r.tipo === 'RENTA' || !r.tipo);
             const retIVA = rets.filter((r: any) => r.tipo === 'IVA');
             const tieneRetencion = retRenta.some((r: any) => r.valor > 0) || retIVA.some((r: any) => r.valor > 0);
@@ -175,19 +168,19 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
               const fechaRet = firstRet?.fecha_retencion;
 
               if (!numRet || numRet === 'Manual') {
-                criticals.push(`Compra ${numComp}: Tiene retenciones calculadas pero falta ingresar el Número de la Retención emitida.`);
+                criticals.push(`Compra ${numComp}: Tiene retenciones calculadas pero falta ingresar el N├║mero de la Retenci├│n emitida.`);
               } else if (!/^\d{3}-\d{3}-\d{9}$/.test(numRet)) {
-                criticals.push(`Compra ${numComp}: El Número de Retención emitido (${numRet}) tiene un formato inválido.`);
+                criticals.push(`Compra ${numComp}: El N├║mero de Retenci├│n emitido (${numRet}) tiene un formato inv├ílido.`);
               }
 
               if (!autRet) {
-                criticals.push(`Compra ${numComp}: Falta ingresar el número de autorización de la retención emitida.`);
+                criticals.push(`Compra ${numComp}: Falta ingresar el n├║mero de autorizaci├│n de la retenci├│n emitida.`);
               } else if (autRet.length !== 10 && autRet.length !== 49) {
-                criticals.push(`Compra ${numComp}: La autorización de la retención debe tener 10 o 49 dígitos (actual: ${autRet.length}).`);
+                criticals.push(`Compra ${numComp}: La autorizaci├│n de la retenci├│n debe tener 10 o 49 d├¡gitos (actual: ${autRet.length}).`);
               }
 
               if (!fechaRet) {
-                criticals.push(`Compra ${numComp}: Falta ingresar la fecha de emisión del comprobante de retención.`);
+                criticals.push(`Compra ${numComp}: Falta ingresar la fecha de emisi├│n del comprobante de retenci├│n.`);
               }
             }
           }
@@ -207,48 +200,32 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
     fetchData();
   }, [fetchData]);
 
-  // ─── Clasificación y Filtros ──────────────────────────────────
-  const sortByDate = (arr: DocSRI[]) =>
-    [...arr].sort((a, b) => {
-      const fa = a.transacciones?.fecha ?? '';
-      const fb = b.transacciones?.fecha ?? '';
-      return fb.localeCompare(fa); // más reciente primero
-    });
-
-  const compras = sortByDate(docs.filter(d => (d.transacciones?.tipo_comprobante === 'Factura' || d.transacciones?.tipo_comprobante === 'Nota de Crédito') && d.es_compra));
-  const ventas = sortByDate(docs.filter(d => (d.transacciones?.tipo_comprobante === 'Factura' || d.transacciones?.tipo_comprobante === 'Nota de Crédito') && !d.es_compra));
-  const retenciones = sortByDate(docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retención'));
-  const retencionesRecibidas = docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retención' && !d.es_compra);
-  const anulados = sortByDate(docs.filter(d => 
+  // ÔöÇÔöÇÔöÇ Clasificaci├│n y Filtros ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  const compras = docs.filter(d => (d.transacciones?.tipo_comprobante === 'Factura' || d.transacciones?.tipo_comprobante === 'Nota de Cr├®dito') && d.es_compra);
+  const ventas = docs.filter(d => (d.transacciones?.tipo_comprobante === 'Factura' || d.transacciones?.tipo_comprobante === 'Nota de Cr├®dito') && !d.es_compra);
+  const retenciones = docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retenci├│n');
+  const retencionesRecibidas = docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retenci├│n' && !d.es_compra);
+  const anulados = docs.filter(d => 
     d.transacciones?.concepto?.toLowerCase().includes('anulado') || 
     d.transacciones?.tipo_comprobante === 'Anulado'
-  ));
+  );
 
-  // Páginas actuales
-  const comprasPaged = compras.slice((pageCompras - 1) * PAGE_SIZE, pageCompras * PAGE_SIZE);
-  const retencionesPaged = retenciones.slice((pageRetenciones - 1) * PAGE_SIZE, pageRetenciones * PAGE_SIZE);
-  const anuladosPaged = anulados.slice((pageAnulados - 1) * PAGE_SIZE, pageAnulados * PAGE_SIZE);
-
-  const totalPagesCompras = Math.max(1, Math.ceil(compras.length / PAGE_SIZE));
-  const totalPagesRetenciones = Math.max(1, Math.ceil(retenciones.length / PAGE_SIZE));
-  const totalPagesAnulados = Math.max(1, Math.ceil(anulados.length / PAGE_SIZE));
-
-  // ─── Agrupamientos y KPIs Contables ──────────────────────────
+  // ÔöÇÔöÇÔöÇ Agrupamientos y KPIs Contables ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
   const totalIVAVentas     = ventas.reduce((s, d) => {
-    const isNC = d.transacciones?.tipo_comprobante === 'Nota de Crédito';
+    const isNC = d.transacciones?.tipo_comprobante === 'Nota de Cr├®dito';
     return s + (isNC ? -(d.monto_iva || 0) : (d.monto_iva || 0));
   }, 0);
 
   const totalRetEmitido    = compras.reduce((s, d) =>
     s + (d.retenciones_aplicadas || []).reduce((a: number, r: any) => a + (r.valor || 0), 0), 0);
 
-  // Agrupamiento de Ventas por Cliente para el ATS con retenciones dinámicas
+  // Agrupamiento de Ventas por Cliente para el ATS con retenciones din├ímicas
   const ventasAgrupadasPorCliente = Object.values(
     ventas.reduce((acc, v) => {
       const ent = v.transacciones?.entidades;
       const idCliente = ent?.ruc_cedula || '9999999999999';
-      const isNC = v.transacciones?.tipo_comprobante === 'Nota de Crédito';
-      const tipoComp = isNC ? 'Nota de Crédito' : 'Factura';
+      const isNC = v.transacciones?.tipo_comprobante === 'Nota de Cr├®dito';
+      const tipoComp = isNC ? 'Nota de Cr├®dito' : 'Factura';
       const key = `${idCliente}_${tipoComp}`;
 
       if (!acc[key]) {
@@ -299,7 +276,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
     };
   });
 
-  // ─── COMPILADOR DE XML ATS (SRI COMPLIANT) ────────────────────
+  // ÔöÇÔöÇÔöÇ COMPILADOR DE XML ATS (SRI COMPLIANT) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
   const buildXMLString = (): string => {
     if (!empresa) return '';
     return buildATSXml(empresa, anio, mes, docs);
@@ -343,32 +320,15 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
 
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-  // ─── Componente de Paginación ─────────────────────────────────
-  const Paginacion = ({ page, total, onPrev, onNext }: { page: number; total: number; onPrev: () => void; onNext: () => void }) => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, padding: '14px 20px', borderTop: '1px solid var(--border-color)', fontSize: '0.85rem', color: 'var(--text-sec)' }}>
-      <span>Página <strong style={{ color: 'var(--text-main)' }}>{page}</strong> de <strong style={{ color: 'var(--text-main)' }}>{total}</strong></span>
-      <button
-        onClick={onPrev}
-        disabled={page <= 1}
-        style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border-color)', background: page <= 1 ? 'transparent' : 'var(--glass-bg)', color: page <= 1 ? 'var(--text-sec)' : 'var(--text-main)', cursor: page <= 1 ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: page <= 1 ? 0.4 : 1 }}
-      >‹ Anterior</button>
-      <button
-        onClick={onNext}
-        disabled={page >= total}
-        style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border-color)', background: page >= total ? 'transparent' : 'var(--primary)', color: page >= total ? 'var(--text-sec)' : '#fff', cursor: page >= total ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: page >= total ? 0.4 : 1 }}
-      >Siguiente ›</button>
-    </div>
-  );
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <header style={{ marginBottom: 40 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--primary)', fontWeight: 800, textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '2px', marginBottom: 8 }}>
-          <FileText size={14} /> Módulo Fiscal
+          <FileText size={14} /> M├│dulo Fiscal
         </div>
         <h1 className="h1" style={{ fontSize: '2.5rem', fontWeight: 900 }}>Anexo Transaccional (ATS)</h1>
-        <p className="text-sec" style={{ fontSize: '1.1rem' }}>Genera y pre-audita el anexo tributario XML para la declaración mensual ante el SRI.</p>
+        <p className="text-sec" style={{ fontSize: '1.1rem' }}>Genera y pre-audita el anexo tributario XML para la declaraci├│n mensual ante el SRI.</p>
       </header>
 
       {/* Selector Periodo + Acciones */}
@@ -411,27 +371,27 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
         ))}
       </div>
 
-      {/* Diagnóstico SRI-Shield */}
+      {/* Diagn├│stico SRI-Shield */}
       {(alertasCriticas.length > 0 || advertencias.length > 0) ? (
         <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: `1px solid ${alertasCriticas.length > 0 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`, borderRadius: 20, padding: '20px 24px', marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900, color: alertasCriticas.length > 0 ? '#ef4444' : 'var(--warning)', marginBottom: 12 }}>
-            <ShieldAlert size={20} /> Diagnóstico Tributario Inteligente (Pre-Auditoría)
+            <ShieldAlert size={20} /> Diagn├│stico Tributario Inteligente (Pre-Auditor├¡a)
           </div>
           
           {alertasCriticas.length > 0 && (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 800, marginBottom: 6 }}>🚨 ERRORES CRÍTICOS (Impiden la descarga):</div>
+              <div style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 800, marginBottom: 6 }}>­ƒÜ¿ ERRORES CR├ìTICOS (Impiden la descarga):</div>
               {alertasCriticas.map((err, i) => (
-                <p key={i} style={{ margin: '4px 0', fontSize: '0.82rem', color: 'var(--text-main)', paddingLeft: 12 }}>• {err}</p>
+                <p key={i} style={{ margin: '4px 0', fontSize: '0.82rem', color: 'var(--text-main)', paddingLeft: 12 }}>ÔÇó {err}</p>
               ))}
             </div>
           )}
 
           {advertencias.length > 0 && (
             <div>
-              <div style={{ color: 'var(--warning)', fontSize: '0.85rem', fontWeight: 800, marginBottom: 6 }}>⚠️ ADVERTENCIAS (Permiten descarga con cautela):</div>
+              <div style={{ color: 'var(--warning)', fontSize: '0.85rem', fontWeight: 800, marginBottom: 6 }}>ÔÜá´©Å ADVERTENCIAS (Permiten descarga con cautela):</div>
               {advertencias.map((warn, i) => (
-                <p key={i} style={{ margin: '4px 0', fontSize: '0.82rem', color: 'var(--text-sec)', paddingLeft: 12 }}>• {warn}</p>
+                <p key={i} style={{ margin: '4px 0', fontSize: '0.82rem', color: 'var(--text-sec)', paddingLeft: 12 }}>ÔÇó {warn}</p>
               ))}
             </div>
           )}
@@ -439,12 +399,12 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       ) : (
         docs.length > 0 && (
           <div style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 20, padding: '20px 24px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, color: '#10b981', fontWeight: 800 }}>
-            <CheckCircle2 size={20} /> ¡Tu ATS cumple con los requisitos iniciales del SRI para descarga!
+            <CheckCircle2 size={20} /> ┬íTu ATS cumple con los requisitos iniciales del SRI para descarga!
           </div>
         )
       )}
 
-      {/* Tabs de inspección */}
+      {/* Tabs de inspecci├│n */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         {([
           ['compras', 'Facturas Compra', compras.length], 
@@ -463,7 +423,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
         ))}
       </div>
 
-      {/* Visor de Tablas de Inspección */}
+      {/* Visor de Tablas de Inspecci├│n */}
       <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-sec)' }}>
@@ -474,33 +434,33 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
           compras.length === 0 ? (
             <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-sec)' }}>
               <CheckCircle2 size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
-              <p>No hay facturas o notas de crédito de compra procesadas en este periodo.</p>
+              <p>No hay facturas o notas de cr├®dito de compra procesadas en este periodo.</p>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                  {['Proveedor','Número Comprobante','Fecha','Base 0%','Base Imp Grav','IVA','Forma Pago','Total'].map(h => (
+                  {['Proveedor','N├║mero Comprobante','Fecha','Base 0%','Base Imp Grav','IVA','Forma Pago','Total'].map(h => (
                     <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Proveedor' ? 'left' : 'right', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {comprasPaged.map((d) => {
-                  const isNC = d.transacciones?.tipo_comprobante === 'Nota de Crédito';
+                {compras.map((d) => {
+                  const isNC = d.transacciones?.tipo_comprobante === 'Nota de Cr├®dito';
                   return (
                     <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {d.transacciones?.entidades?.razon_social || '—'}
+                          {d.transacciones?.entidades?.razon_social || 'ÔÇö'}
                           {isNC && (
                             <span style={{ fontSize: '0.65rem', background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', padding: '1px 6px', borderRadius: 4, fontWeight: 800 }}>NC</span>
                           )}
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)' }}>{d.transacciones?.entidades?.ruc_cedula || '—'}</div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)' }}>{d.transacciones?.entidades?.ruc_cedula || 'ÔÇö'}</div>
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace', fontSize: '0.78rem' }}>{d.transacciones?.numero_comprobante}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-sec)' }}>{d.transacciones?.fecha ? new Date(d.transacciones.fecha + 'T12:00:00').toLocaleDateString('es-EC') : '—'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-sec)' }}>{d.transacciones?.fecha ? new Date(d.transacciones.fecha + 'T12:00:00').toLocaleDateString('es-EC') : 'ÔÇö'}</td>
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>${(d.base_0 || 0).toFixed(2)}</td>
                       <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>${(d.base_12 || 0).toFixed(2)}</td>
                       <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--primary)', fontWeight: 700 }}>${(d.monto_iva || 0).toFixed(2)}</td>
@@ -513,14 +473,6 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                 })}
               </tbody>
             </table>
-            {compras.length > PAGE_SIZE && (
-              <Paginacion
-                page={pageCompras}
-                total={totalPagesCompras}
-                onPrev={() => setPageCompras(p => Math.max(1, p - 1))}
-                onNext={() => setPageCompras(p => Math.min(totalPagesCompras, p + 1))}
-              />
-            )}
           )
         ) : tab === 'ventas' ? (
           ventasAgrupadasPorCliente.length === 0 ? (
@@ -538,7 +490,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                 </tr>
               </thead>
               <tbody>
-                {ventasAgrupadasPorCliente.slice((pageVentas - 1) * PAGE_SIZE, pageVentas * PAGE_SIZE).map((v: any) => (
+                {ventasAgrupadasPorCliente.map((v: any) => (
                   <tr key={`${v.ruc}_${v.tipoDoc}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ fontWeight: 700 }}>{v.razonSocial}</div>
@@ -548,8 +500,8 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                       <span style={{ 
                         fontSize: '0.75rem', 
-                        background: v.tipoDoc === 'Nota de Crédito' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)', 
-                        color: v.tipoDoc === 'Nota de Crédito' ? '#ef4444' : '#10b981', 
+                        background: v.tipoDoc === 'Nota de Cr├®dito' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)', 
+                        color: v.tipoDoc === 'Nota de Cr├®dito' ? '#ef4444' : '#10b981', 
                         padding: '2px 8px', 
                         borderRadius: 6, 
                         fontWeight: 700 
@@ -562,26 +514,18 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>${v.base12.toFixed(2)}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--primary)', fontWeight: 700 }}>${v.iva.toFixed(2)}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900 }}>
-                      {v.tipoDoc === 'Nota de Crédito' ? '-' : ''}${v.total.toFixed(2)}
+                      {v.tipoDoc === 'Nota de Cr├®dito' ? '-' : ''}${v.total.toFixed(2)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {ventasAgrupadasPorCliente.length > PAGE_SIZE && (
-              <Paginacion
-                page={pageVentas}
-                total={Math.max(1, Math.ceil(ventasAgrupadasPorCliente.length / PAGE_SIZE))}
-                onPrev={() => setPageVentas(p => Math.max(1, p - 1))}
-                onNext={() => setPageVentas(p => Math.min(Math.max(1, Math.ceil(ventasAgrupadasPorCliente.length / PAGE_SIZE)), p + 1))}
-              />
-            )}
           )
         ) : tab === 'retenciones' ? (
           retenciones.length === 0 ? (
             <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-sec)' }}>
               <Receipt size={36} style={{ opacity: 0.2, marginBottom: 12 }} />
-              <p>No hay comprobantes de retención cargados.</p>
+              <p>No hay comprobantes de retenci├│n cargados.</p>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -593,32 +537,24 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                 </tr>
               </thead>
               <tbody>
-                {retencionesPaged.map(d => {
+                {retenciones.map(d => {
                   const totalRetDoc = (d.retenciones_aplicadas || []).reduce((a: number, r: any) => a + (r.valor || 0), 0);
                   const docsRef = [...new Set((d.retenciones_aplicadas || []).map((r: any) => r.codigo).filter(Boolean))];
                   return (
                     <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
                       <td style={{ padding: '12px 16px' }}>
-                        <div style={{ fontWeight: 700 }}>{d.transacciones?.entidades?.razon_social || '—'}</div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)' }}>{d.transacciones?.entidades?.ruc_cedula || '—'}</div>
+                        <div style={{ fontWeight: 700 }}>{d.transacciones?.entidades?.razon_social || 'ÔÇö'}</div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)' }}>{d.transacciones?.entidades?.ruc_cedula || 'ÔÇö'}</div>
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace', fontSize: '0.78rem' }}>{d.transacciones?.numero_comprobante}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>{d.transacciones?.fecha ? new Date(d.transacciones.fecha + 'T12:00:00').toLocaleDateString('es-EC') : '—'}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.78rem', color: 'var(--text-sec)' }}>Código: {docsRef.join(', ') || '—'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>{d.transacciones?.fecha ? new Date(d.transacciones.fecha + 'T12:00:00').toLocaleDateString('es-EC') : 'ÔÇö'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.78rem', color: 'var(--text-sec)' }}>C├│digo: {docsRef.join(', ') || 'ÔÇö'}</td>
                       <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 900, color: 'var(--warning)' }}>${totalRetDoc.toFixed(2)}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            {retenciones.length > PAGE_SIZE && (
-              <Paginacion
-                page={pageRetenciones}
-                total={totalPagesRetenciones}
-                onPrev={() => setPageRetenciones(p => Math.max(1, p - 1))}
-                onNext={() => setPageRetenciones(p => Math.min(totalPagesRetenciones, p + 1))}
-              />
-            )}
           )
         ) : (
           anulados.length === 0 ? (
@@ -630,35 +566,27 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                  {['Comprobante','Secuencial','Fecha Anulación','Autorización / Clave Acceso'].map(h => (
+                  {['Comprobante','Secuencial','Fecha Anulaci├│n','Autorizaci├│n / Clave Acceso'].map(h => (
                     <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Comprobante' ? 'left' : 'right', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {anuladosPaged.map(d => (
+                {anulados.map(d => (
                   <tr key={d.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.85rem' }}>
                     <td style={{ padding: '12px 16px', fontWeight: 800 }}>{d.transacciones?.tipo_comprobante}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace' }}>{d.transacciones?.numero_comprobante}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>{d.transacciones?.fecha ? new Date(d.transacciones.fecha + 'T12:00:00').toLocaleDateString('es-EC') : '—'}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>{d.transacciones?.fecha ? new Date(d.transacciones.fecha + 'T12:00:00').toLocaleDateString('es-EC') : 'ÔÇö'}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.78rem', color: 'var(--text-sec)', fontFamily: 'monospace' }}>{d.clave_acceso_xml}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {anulados.length > PAGE_SIZE && (
-              <Paginacion
-                page={pageAnulados}
-                total={totalPagesAnulados}
-                onPrev={() => setPageAnulados(p => Math.max(1, p - 1))}
-                onNext={() => setPageAnulados(p => Math.min(totalPagesAnulados, p + 1))}
-              />
-            )}
           )
         )}
       </div>
 
-      {/* Acordeón Previsualizador de XML ATS */}
+      {/* Acorde├│n Previsualizador de XML ATS */}
       {docs.length > 0 && (
         <div className="glass-card" style={{ padding: 0, marginTop: 32, overflow: 'hidden' }}>
           <div 
@@ -683,7 +611,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                   onClick={copyToClipboard}
                   style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', fontWeight: 700 }}
                 >
-                  <Copy size={14} /> {copied ? '¡Copiado!' : 'Copiar XML'}
+                  <Copy size={14} /> {copied ? '┬íCopiado!' : 'Copiar XML'}
                 </button>
                 <pre style={{ margin: 0, overflowX: 'auto', fontFamily: 'monospace', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.5' }}>
                   <code>{xmlStringPreview.split('\n').slice(0, 35).join('\n')}\n... [XML Completo listo para descarga]</code>
