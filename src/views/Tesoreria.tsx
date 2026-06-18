@@ -1,60 +1,15 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Wallet, Landmark, ArrowDownCircle, ArrowUpCircle, Repeat, Loader2, CheckCircle2, Building2, Banknote } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getNextNumeroComprobante } from '../services/xmlSaveService';
 
-const BANCOS_ECUADOR = [
-  // Bancos Privados
-  'Banco Pichincha',
-  'Banco Guayaquil',
-  'Banco del Pacífico',
-  'Banco Internacional',
-  'Banco del Austro',
-  'Banco Solidario',
-  'Banco ProCredit',
-  'Banco General Rumiñahui',
-  'Banco de Machala',
-  'Banco Bolivariano',
-  'Banco Capital',
-  'Produbanco',
-  'Diners Club del Ecuador',
-  'Banco D-MIRO',
-  'Banco Desarrollo',
-  // Mutualistas
-  'Mutualista Pichincha',
-  'Mutualista Imbabura',
-  'Mutualista Azuay',
-  // Cooperativas principales
-  'Cooperativa JEP',
-  'Cooperativa Oscus',
-  'Cooperativa Cooprogreso',
-  'Cooperativa Andalucía',
-  'Cooperativa 29 de Octubre',
-  'Cooperativa Atuntaqui',
-  'Cooperativa Mego',
-  'Cooperativa Riobamba',
-  'Cooperativa San Francisco',
-  'Cooperativa Tulcán',
-  'Cooperativa Mushuc Runa',
-  'Cooperativa Alianza del Valle',
-  'Cooperativa Policía Nacional',
-  'Cooperativa Cámara de Comercio de Ambato',
-  // Bancos Públicos
-  'BanEcuador',
-  'Banco del Estado (BDE)',
-  'CFN (Corporación Financiera Nacional)',
-  // Otro
-  'Otro (nombre personalizado)',
-];
+import { EditMovimientoModal } from '../components/EditMovimientoModal';
+import { TesoreriaResumen } from '../components/TesoreriaResumen';
+import { TesoreriaConciliacion } from '../components/TesoreriaConciliacion';
+import { TesoreriaCobrosPagos } from '../components/TesoreriaCobrosPagos';
 
 interface Props { empresaId: string; mode?: 'resumen' | 'cobros' | 'pagos' | 'conciliacion'; }
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', outline: 'none'
-};
-
-const cardTitle: React.CSSProperties = { fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: 1.2, color: 'var(--text-sec)', fontWeight: 800 };
 
 export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
   const queryClient = useQueryClient();
@@ -76,18 +31,12 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
     tipo_movimiento: mode === 'pagos' ? 'Pago' : 'Cobro',
     concepto: '', monto: '', id_cuenta_financiera: '', id_cuenta_banco_contable: '', id_entidad: '', id_documento: '', referencia: '', estado: 'Aplicado'
   });
-  const [searchAccount, setSearchAccount] = useState('');
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const [docForm, setDocForm] = useState({
     tipo_documento: mode === 'pagos' ? 'Cuenta por pagar' : 'Cuenta por cobrar',
     fecha_emision: new Date().toISOString().slice(0, 10), fecha_vencimiento: '', id_entidad: '', concepto: '', referencia: '', total: ''
   });
 
   const [editingMov, setEditingMov] = useState<any | null>(null);
-  const [searchEditBank, setSearchEditBank] = useState('');
-  const [isEditBankOpen, setIsEditBankOpen] = useState(false);
-  const editBankRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading: loading } = useQuery({
     queryKey: ['tesoreria', empresaId],
@@ -135,187 +84,46 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
   const entities = data?.entities || [];
   const cuentasContables = data?.cuentasContables || [];
 
-  // Synchronize search text with the selected account
-  const selectedAccountText = useMemo(() => {
-    const selected = cuentasContables.find((c: any) => c.id === movForm.id_cuenta_banco_contable);
-    return selected ? `${selected.codigo_cuenta} - ${selected.nombre}` : '';
-  }, [cuentasContables, movForm.id_cuenta_banco_contable]);
 
-  useEffect(() => {
-    if (!isDropdownOpen) {
-      setSearchAccount(selectedAccountText);
-    }
-  }, [selectedAccountText, isDropdownOpen]);
-
-  // Click outside listener for dropdown
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  const filteredCuentasContables = useMemo(() => {
-    if (!searchAccount || searchAccount === selectedAccountText) {
-      return cuentasContables;
-    }
-    const query = searchAccount.toLowerCase();
-    return cuentasContables.filter((c: any) =>
-      c.codigo_cuenta?.toLowerCase().includes(query) ||
-      c.nombre?.toLowerCase().includes(query)
-    );
-  }, [cuentasContables, searchAccount, selectedAccountText]);
-
-  // Synchronize edit search inputs when dropdowns are closed or editingMov changes
-  const selectedEditBankText = useMemo(() => {
-    if (!editingMov) return '';
-    const selected = cuentasContables.find((c: any) => c.id === editingMov.id_cuenta_banco_contable);
-    return selected ? `${selected.codigo_cuenta} - ${selected.nombre}` : '';
-  }, [cuentasContables, editingMov?.id_cuenta_banco_contable]);
-
-  useEffect(() => {
-    if (!isEditBankOpen && editingMov) {
-      setSearchEditBank(selectedEditBankText);
-    }
-  }, [selectedEditBankText, isEditBankOpen]);
-
-  // Click outside listener for edit dropdowns
-  useEffect(() => {
-    const handleClickOutsideEdit = (event: MouseEvent) => {
-      if (editBankRef.current && !editBankRef.current.contains(event.target as Node)) {
-        setIsEditBankOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutsideEdit);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutsideEdit);
-    };
-  }, []);
-
-  const filteredEditBankCuentas = useMemo(() => {
-    if (!searchEditBank || searchEditBank === selectedEditBankText) {
-      return cuentasContables;
-    }
-    const query = searchEditBank.toLowerCase();
-    return cuentasContables.filter((c: any) =>
-      c.codigo_cuenta?.toLowerCase().includes(query) ||
-      c.nombre?.toLowerCase().includes(query)
-    );
-  }, [cuentasContables, searchEditBank, selectedEditBankText]);
 
   const handleOpenEditModal = async (mov: any) => {
     setSaving(true);
     try {
       let txId = null;
       let txMovements: any[] = [];
+      const querySelect = 'id, concepto, numero_comprobante, movimientos (id, id_cuenta, debe, haber, plan_cuentas (codigo_cuenta, nombre))';
 
-      // 1. Intentar buscar por concepto que contenga la referencia (voucher) del pago
       if (mov.referencia) {
-        const { data: txs } = await supabase
-          .from('transacciones')
-          .select('id, concepto, numero_comprobante, movimientos (id, id_cuenta, debe, haber, plan_cuentas (codigo_cuenta, nombre))')
-          .eq('id_empresa', empresaId)
-          .like('concepto', `%${mov.referencia}%`);
-        
-        if (txs) {
-          const matchedTx = txs.find(t => 
-            (t.movimientos || []).some((m: any) => Number(m.debe) === Number(mov.monto) || Number(m.haber) === Number(mov.monto))
-          );
-          if (matchedTx) {
-            txId = matchedTx.id;
-            txMovements = matchedTx.movimientos || [];
-          }
-        }
+        const { data: txs } = await supabase.from('transacciones').select(querySelect).eq('id_empresa', empresaId).like('concepto', `%${mov.referencia}%`);
+        const matched = txs?.find(t => (t.movimientos || []).some((m: any) => Number(m.debe) === Number(mov.monto) || Number(m.haber) === Number(mov.monto)));
+        if (matched) { txId = matched.id; txMovements = matched.movimientos || []; }
       }
 
-      // 2. Intentar buscar por número de comprobante igual a la referencia
       if (!txId && mov.referencia) {
-        const { data: txs } = await supabase
-          .from('transacciones')
-          .select('id, concepto, numero_comprobante, movimientos (id, id_cuenta, debe, haber, plan_cuentas (codigo_cuenta, nombre))')
-          .eq('id_empresa', empresaId)
-          .eq('numero_comprobante', mov.referencia);
-        if (txs && txs.length > 0) {
-          txId = txs[0].id;
-          txMovements = txs[0].movimientos || [];
-        }
+        const { data: txs } = await supabase.from('transacciones').select(querySelect).eq('id_empresa', empresaId).eq('numero_comprobante', mov.referencia);
+        if (txs && txs.length > 0) { txId = txs[0].id; txMovements = txs[0].movimientos || []; }
       }
 
-      // 3. Intentar buscar por entidad, fecha y monto
       if (!txId) {
-        const { data: txs } = await supabase
-          .from('transacciones')
-          .select('id, concepto, numero_comprobante, movimientos (id, id_cuenta, debe, haber, plan_cuentas (codigo_cuenta, nombre))')
-          .eq('id_empresa', empresaId)
-          .eq('id_entidad', mov.id_entidad)
-          .eq('fecha', mov.fecha)
-          .in('tipo_comprobante', ['Ingreso', 'Egreso']);
-
-        if (txs) {
-          const matchedTx = txs.find(t => 
-            (t.movimientos || []).some((m: any) => Number(m.debe) === Number(mov.monto) || Number(m.haber) === Number(mov.monto))
-          );
-          if (matchedTx) {
-            txId = matchedTx.id;
-            txMovements = matchedTx.movimientos || [];
-          }
-        }
+        const { data: txs } = await supabase.from('transacciones').select(querySelect).eq('id_empresa', empresaId).eq('id_entidad', mov.id_entidad).eq('fecha', mov.fecha).in('tipo_comprobante', ['Ingreso', 'Egreso']);
+        const matched = txs?.find(t => (t.movimientos || []).some((m: any) => Number(m.debe) === Number(mov.monto) || Number(m.haber) === Number(mov.monto)));
+        if (matched) { txId = matched.id; txMovements = matched.movimientos || []; }
       }
 
-      // 4. Intentar buscar por fecha y monto (sin filtrar por entidad)
       if (!txId) {
-        const { data: txs } = await supabase
-          .from('transacciones')
-          .select('id, concepto, numero_comprobante, movimientos (id, id_cuenta, debe, haber, plan_cuentas (codigo_cuenta, nombre))')
-          .eq('id_empresa', empresaId)
-          .eq('fecha', mov.fecha)
-          .in('tipo_comprobante', ['Ingreso', 'Egreso']);
-
-        if (txs) {
-          const matchedTx = txs.find(t => 
-            (t.movimientos || []).some((m: any) => Number(m.debe) === Number(mov.monto) || Number(m.haber) === Number(mov.monto))
-          );
-          if (matchedTx) {
-            txId = matchedTx.id;
-            txMovements = matchedTx.movimientos || [];
-          }
-        }
+        const { data: txs } = await supabase.from('transacciones').select(querySelect).eq('id_empresa', empresaId).eq('fecha', mov.fecha).in('tipo_comprobante', ['Ingreso', 'Egreso']);
+        const matched = txs?.find(t => (t.movimientos || []).some((m: any) => Number(m.debe) === Number(mov.monto) || Number(m.haber) === Number(mov.monto)));
+        if (matched) { txId = matched.id; txMovements = matched.movimientos || []; }
       }
 
-      let bankAccountId = '';
-      let contrapartidaAccountId = '';
-      let bankMovId = '';
-      let contrapartidaMovId = '';
+      let bankAccountId = '', contrapartidaAccountId = '', bankMovId = '', contrapartidaMovId = '';
 
       if (txMovements.length > 0) {
-        if (mov.tipo_movimiento === 'Pago') {
-          const bankMov = txMovements.find(m => Number(m.haber) > 0);
-          const supplierMov = txMovements.find(m => Number(m.debe) > 0);
-          if (bankMov) {
-            bankAccountId = bankMov.id_cuenta;
-            bankMovId = bankMov.id;
-          }
-          if (supplierMov) {
-            contrapartidaAccountId = supplierMov.id_cuenta;
-            contrapartidaMovId = supplierMov.id;
-          }
-        } else {
-          const bankMov = txMovements.find(m => Number(m.debe) > 0);
-          const clientMov = txMovements.find(m => Number(m.haber) > 0);
-          if (bankMov) {
-            bankAccountId = bankMov.id_cuenta;
-            bankMovId = bankMov.id;
-          }
-          if (clientMov) {
-            contrapartidaAccountId = clientMov.id_cuenta;
-            contrapartidaMovId = clientMov.id;
-          }
-        }
+        const isPago = mov.tipo_movimiento === 'Pago';
+        const bankMov = txMovements.find(m => isPago ? Number(m.haber) > 0 : Number(m.debe) > 0);
+        const counterMov = txMovements.find(m => isPago ? Number(m.debe) > 0 : Number(m.haber) > 0);
+        if (bankMov) { bankAccountId = bankMov.id_cuenta; bankMovId = bankMov.id; }
+        if (counterMov) { contrapartidaAccountId = counterMov.id_cuenta; contrapartidaMovId = counterMov.id; }
       }
 
       setEditingMov({
@@ -333,9 +141,6 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
         id_cuenta_banco_contable: bankAccountId || mov.id_cuenta_banco_contable || '',
         id_cuenta_contrapartida_contable: contrapartidaAccountId || ''
       });
-
-      const bCta = cuentasContables.find((c: any) => c.id === bankAccountId);
-      setSearchEditBank(bCta ? `${bCta.codigo_cuenta} - ${bCta.nombre}` : '');
       
     } catch (err) {
       console.error("Error al cargar transacción para editar:", err);
@@ -474,16 +279,6 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
       setSaving(false);
     }
   };
-
-  // Filtrar de las cuentas contables solo las que son de activo corriente (Bancos/Caja/Fondos)
-  const cuentasContablesBancos = cuentasContables.filter((c: any) => 
-    c.codigo_cuenta?.startsWith('1.1.1') || 
-    c.nombre?.toLowerCase().includes('banco') || 
-    c.nombre?.toLowerCase().includes('caja') ||
-    c.nombre?.toLowerCase().includes('fondo')
-  );
-
-
 
   const summary = useMemo(() => {
     const saldoInicialCuentas = cuentas.reduce((acc, c) => acc + Number(c.saldo_inicial || 0), 0);
@@ -789,933 +584,63 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
     }
   };
 
-  // --- RENDERIZADO POR MODOS ---
-
-  const renderResumen = () => (
-    <div className="space-y-6" style={{ animation: 'fadeIn 0.5s ease' }}>
-      <header>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--primary)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.5, fontSize: '0.8rem', marginBottom: 8 }}>
-            <Landmark size={14} /> Panorama Financiero
-        </div>
-        <h2 className="h1" style={{ fontSize: '2.2rem' }}>Centro de Mando de Tesorería</h2>
-        <p className="text-sec">Visión general del efectivo, obligaciones y liquidez de la empresa.</p>
-      </header>
-
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 16 }}>
-        {[
-          { label: 'Efectivo Disponible', value: summary.disponible, icon: Wallet },
-          { label: 'Cuentas por Cobrar', value: summary.porCobrar, icon: ArrowDownCircle },
-          { label: 'Cuentas por Pagar', value: summary.porPagar, icon: ArrowUpCircle },
-          { label: 'Liquidez Proyectada', value: summary.proyectado, icon: Repeat },
-        ].map((item) => (
-          <div key={item.label} className="glass-card" style={{ padding: 20 }}>
-            <div className="flex-between">
-              <div>
-                <div style={cardTitle}>{item.label}</div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 900, marginTop: 8, color: item.value < 0 ? 'var(--error)' : 'var(--text-main)' }}>${item.value.toFixed(2)}</div>
-              </div>
-              <div style={{ width: 48, height: 48, borderRadius: 16, background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <item.icon size={24} />
-              </div>
-            </div>
-          </div>
-        ))}
-      </section>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24 }}>
-          {/* Cuentas Bancarias */}
-          <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ margin: 0 }}>Cuentas Bancarias</h3>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', marginTop: 2 }}>Bancos, cajas y cooperativas</div>
-              </div>
-              <button
-                  style={{ background: showCuentaForm ? 'var(--error)' : 'var(--primary)', border: 'none', color: '#000', fontWeight: 800, cursor: 'pointer', fontSize: '0.78rem', padding: '6px 14px', borderRadius: 8 }}
-                  onClick={() => setShowCuentaForm(v => !v)}
-              >
-                  {showCuentaForm ? '✕ Cancelar' : '+ Nueva Cuenta'}
-              </button>
-            </div>
-
-            {showCuentaForm && (
-              <form onSubmit={handleCrearCuenta} style={{ padding: 20, background: 'var(--primary-light)', borderBottom: '1px solid var(--border-color)' }}>
-                <div style={{ marginBottom: 14, fontWeight: 800, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Building2 size={16} color="var(--primary)" /> Nueva Cuenta Financiera
-                </div>
-
-                {/* Tipo principal: Banco o Caja */}
-                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                  {['Banco', 'Caja'].map(t => (
-                    <button key={t} type="button"
-                      onClick={() => setCuentaForm({...cuentaForm, tipo: t})}
-                      style={{ flex: 1, padding: '10px', borderRadius: 10, border: `2px solid ${cuentaForm.tipo === t ? 'var(--primary)' : 'var(--border-color)'}`, background: cuentaForm.tipo === t ? 'var(--primary)' : 'transparent', color: cuentaForm.tipo === t ? '#000' : 'var(--text-sec)', fontWeight: 800, cursor: 'pointer', fontSize: '0.85rem' }}
-                    >
-                      {t === 'Banco' ? '🏦 Banco / Cooperativa' : '💵 Caja / Efectivo'}
-                    </button>
-                  ))}
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {cuentaForm.tipo === 'Banco' ? (
-                    <>
-                      {/* Seleccionar banco de Ecuador */}
-                      <div>
-                        <label style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Institución Financiera</label>
-                        <select
-                          value={cuentaForm.banco_seleccionado}
-                          onChange={e => setCuentaForm({...cuentaForm, banco_seleccionado: e.target.value, nombre: ''})}
-                          style={inputStyle}
-                        >
-                          {BANCOS_ECUADOR.map(b => <option key={b} value={b}>{b}</option>)}
-                        </select>
-                      </div>
-
-                      {/* Nombre personalizado si eligió Otro */}
-                      {cuentaForm.banco_seleccionado === 'Otro (nombre personalizado)' && (
-                        <input
-                          value={cuentaForm.nombre}
-                          onChange={e => setCuentaForm({...cuentaForm, nombre: e.target.value})}
-                          style={inputStyle}
-                          placeholder="Nombre del banco o cooperativa"
-                          required
-                        />
-                      )}
-
-                      {/* Tipo de cuenta */}
-                      <div>
-                        <label style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Tipo de Cuenta</label>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          {['Ahorro', 'Corriente'].map(tc => (
-                            <button key={tc} type="button"
-                              onClick={() => setCuentaForm({...cuentaForm, tipo_cuenta: tc})}
-                              style={{ flex: 1, padding: '9px', borderRadius: 8, border: `2px solid ${cuentaForm.tipo_cuenta === tc ? 'var(--primary)' : 'var(--border-color)'}`, background: cuentaForm.tipo_cuenta === tc ? 'var(--primary)' : 'transparent', color: cuentaForm.tipo_cuenta === tc ? '#000' : 'var(--text-sec)', fontWeight: 700, cursor: 'pointer', fontSize: '0.82rem' }}
-                            >
-                              {tc === 'Ahorro' ? '🏷 Ahorro' : '💳 Corriente'}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Número de cuenta */}
-                      <div>
-                        <label style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Número de Cuenta</label>
-                        <input
-                          value={cuentaForm.numero_referencia}
-                          onChange={e => setCuentaForm({...cuentaForm, numero_referencia: e.target.value})}
-                          style={inputStyle}
-                          placeholder="Ej. 2200123456"
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <div>
-                      <label style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Nombre de la Caja</label>
-                      <input
-                        value={cuentaForm.nombre}
-                        onChange={e => setCuentaForm({...cuentaForm, nombre: e.target.value})}
-                        style={inputStyle}
-                        placeholder="Ej. Caja Principal, Caja Chica"
-                        required
-                      />
-                    </div>
-                  )}
-
-                  {/* Saldo inicial */}
-                  <div>
-                    <label style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-sec)', display: 'block', marginBottom: 4 }}>Saldo Inicial ($)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={cuentaForm.saldo_inicial}
-                      onChange={e => setCuentaForm({...cuentaForm, saldo_inicial: e.target.value})}
-                      style={{...inputStyle, fontWeight: 800}}
-                      placeholder="0.00"
-                      required
-                    />
-                  </div>
-
-                  <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 4 }} disabled={saving}>
-                    {saving ? 'Guardando...' : '✓ Registrar Cuenta'}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Lista de cuentas registradas */}
-            <div style={{ padding: cuentas.length === 0 ? 24 : '12px 0' }}>
-              {cuentas.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text-sec)', fontSize: '0.85rem' }}>
-                  <Building2 size={32} style={{ opacity: 0.3, display: 'block', margin: '0 auto 8px' }} />
-                  Sin cuentas registradas.<br />
-                  <span style={{ fontSize: '0.75rem' }}>Haz clic en "+ Nueva Cuenta" para agregar tu banco.</span>
-                </div>
-              ) : cuentas.map((c: any) => {
-                const esCaja = c.tipo === 'Caja';
-                const tipoBadge = c.tipo?.replace('Banco ', '') || c.tipo;
-                const numCta = c.numero_referencia;
-                const numMask = numCta && numCta.length > 4 ? '···' + numCta.slice(-4) : numCta;
-                return (
-                  <div key={c.id} style={{ padding: '14px 20px', borderBottom: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 12, background: esCaja ? 'rgba(16,185,129,0.12)' : 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {esCaja ? <Banknote size={18} color="var(--success)" /> : <Building2 size={18} color="var(--primary)" />}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 800, fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.nombre}</div>
-                      <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '2px 7px', borderRadius: 6, background: esCaja ? 'rgba(16,185,129,0.12)' : 'var(--primary-light)', color: esCaja ? 'var(--success)' : 'var(--primary)', textTransform: 'uppercase' }}>
-                          {tipoBadge}
-                        </span>
-                        {numMask && <span style={{ fontSize: '0.7rem', color: 'var(--text-sec)', fontFamily: 'monospace' }}>{numMask}</span>}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontWeight: 900, fontSize: '1rem' }}>${Number(c.saldo_inicial).toFixed(2)}</div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-sec)' }}>saldo inicial</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Últimos Movimientos Generales */}
-          <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div className="flex-between" style={{ padding: 20, borderBottom: '1px solid var(--border-color)' }}>
-              <div>
-                <h3 style={{ margin: 0 }}>Flujo de Caja Reciente</h3>
-                <p className="text-sec" style={{ margin: '6px 0 0' }}>Últimas entradas y salidas de dinero.</p>
-              </div>
-              <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>
-                  <span style={{ color: 'var(--success)', marginRight: 16 }}>Entró: ${summary.cobradoMes.toFixed(2)}</span>
-                  <span style={{ color: 'var(--warning)' }}>Salió: ${summary.pagadoMes.toFixed(2)}</span>
-              </div>
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table">
-                <thead><tr><th>Fecha</th><th>Tercero</th><th>Concepto</th><th>Importe</th></tr></thead>
-                <tbody>
-                  {movimientos.slice(0, 8).map((mov) => (
-                    <tr key={mov.id}>
-                      <td style={{ padding: '12px 16px', fontSize: '0.85rem' }}>{mov.fecha}</td>
-                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{mov.entidades?.razon_social || 'N/A'}</td>
-                      <td style={{ padding: '12px 16px' }}>{mov.concepto}</td>
-                      <td style={{ padding: '12px 16px', fontWeight: 800, color: mov.tipo_movimiento === 'Cobro' ? 'var(--success)' : 'var(--text-main)', textAlign: 'right' }}>
-                          {mov.tipo_movimiento === 'Cobro' ? '+' : '-'}${Number(mov.monto).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                  {movimientos.length === 0 && <tr><td colSpan={4} style={{ padding: 28, textAlign: 'center', color: 'var(--text-sec)' }}>Sin movimientos.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </div>
-      </div>
-    </div>
-  );
-
-  const renderCobrosPagos = () => {
-    const isCobro = mode === 'cobros';
-    const color = isCobro ? 'var(--success)' : 'var(--error)';
-    
-    return (
-    <div className="space-y-6" style={{ animation: 'fadeIn 0.5s ease' }}>
-        <header className="flex-between" style={{ alignItems: 'flex-start' }}>
-            <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--primary)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.5, fontSize: '0.8rem', marginBottom: 8 }}>
-                    {isCobro ? <ArrowDownCircle size={14} /> : <ArrowUpCircle size={14} />} 
-                    Gestión de {isCobro ? 'Cobranzas' : 'Obligaciones'}
-                </div>
-                <h2 className="h1" style={{ fontSize: '2.2rem' }}>{isCobro ? 'Cuentas x Cobrar' : 'Cuentas x Pagar'}</h2>
-                <p className="text-sec">Administra tus facturas y registra {isCobro ? 'recibos' : 'desembolsos'}.</p>
-            </div>
-            
-            <div className="glass-card" style={{ padding: '16px 24px', textAlign: 'right', border: `1px solid ${color}33`, background: `${color}11` }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 800, color, textTransform: 'uppercase' }}>Total {isCobro ? 'Por Cobrar' : 'Por Pagar'}</div>
-                <div style={{ fontSize: '2rem', fontWeight: 900 }}>${isCobro ? summary.porCobrar.toFixed(2) : summary.porPagar.toFixed(2)}</div>
-            </div>
-        </header>
-
-        <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)', gap: 24, alignItems: 'start' }}>
-            {/* Lista de Documentos Pendientes */}
-            <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ padding: 20, borderBottom: '1px solid var(--border-color)' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.2rem' }}>{isCobro ? 'Facturas de Clientes' : 'Facturas de Proveedores'}</h3>
-                    <p className="text-sec" style={{ fontSize: '0.85rem' }}>Documentos con saldos pendientes.</p>
-                </div>
-                <div style={{ overflowX: 'auto' }}>
-                    <table className="data-table">
-                    <thead><tr><th>Tercero</th><th>Referencia</th><th>Vence</th><th style={{ textAlign: 'right' }}>Saldo</th><th>Estado</th></tr></thead>
-                    <tbody>
-                        {docsFiltrados.map((doc) => (
-                        <tr key={doc.id}>
-                            <td style={{ padding: '14px 16px' }}>
-                                <div style={{ fontWeight: 800 }}>{doc.entidades?.razon_social || 'Sin tercero'}</div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-sec)' }}>{doc.concepto}</div>
-                            </td>
-                            <td style={{ padding: '14px 16px', fontWeight: 600 }}>{doc.referencia}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '0.85rem' }}>
-                                {doc.fecha_vencimiento}
-                                {doc.fecha_vencimiento && new Date(doc.fecha_vencimiento) < new Date() && doc.saldo_pendiente > 0 && 
-                                    <span style={{ color: 'var(--error)', marginLeft: 8, fontWeight: 800 }}>⚠️</span>}
-                            </td>
-                            <td style={{ padding: '14px 16px', fontWeight: 800, textAlign: 'right', color: doc.saldo_pendiente > 0 ? color : 'var(--text-main)' }}>
-                                ${Number(doc.saldo_pendiente || 0).toFixed(2)}
-                            </td>
-                            <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                                <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', padding: '4px 8px', borderRadius: 999, background: doc.estado === 'Liquidado' ? 'rgba(16,185,129,0.1)' : 'var(--primary-light)', color: doc.estado === 'Liquidado' ? 'var(--success)' : 'var(--primary)', fontWeight: 800 }}>{doc.estado}</span>
-                            </td>
-                        </tr>
-                        ))}
-                        {docsFiltrados.length === 0 && <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center', color: 'var(--text-sec)', fontWeight: 600 }}>No hay documentos pendientes aquí.</td></tr>}
-                    </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {/* Panel de Operaciones (Añadir Documento o Registrar Pago) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                
-                {/* 1. Registrar Operación */}
-                <form className="glass-card" onSubmit={handleRegistrarMovimiento} style={{ border: `1px solid var(--primary)` }}>
-                    <h3 style={{ margin: '0 0 16px', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <CheckCircle2 color="var(--primary)" /> {isCobro ? 'Aplicar Cobro' : 'Aplicar Pago'}
-                    </h3>
-                    
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        <div>
-                            <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Documento a saldar</label>
-                            <select value={movForm.id_documento} onChange={e => {
-                                const did = e.target.value;
-                                const doc = docsFiltrados.find(d => d.id === did);
-                                setMovForm({...movForm, id_documento: e.target.value, id_entidad: doc?.entidades?.id || movForm.id_entidad, monto: doc ? String(doc.saldo_pendiente) : movForm.monto});
-                            }} style={inputStyle}>
-                                <option value="">Selecciona (Factura/Deuda)</option>
-                                {docsFiltrados.filter(d => d.saldo_pendiente > 0).map(doc => <option key={doc.id} value={doc.id}>{doc.entidades?.razon_social} - {doc.referencia} (${Number(doc.saldo_pendiente).toFixed(2)})</option>)}
-                            </select>
-                        </div>
-                        
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                            <div>
-                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Monto a aplicar ($)</label>
-                                <input value={movForm.monto} onChange={e => setMovForm({...movForm, monto: e.target.value})} style={{...inputStyle, fontWeight: 900, color}} required />
-                            </div>
-                            <div>
-                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Fecha</label>
-                                <input type="date" value={movForm.fecha} onChange={e => setMovForm({...movForm, fecha: e.target.value})} style={inputStyle} required />
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                             <div>
-                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Caja / Banco de Tesorería (Opcional)</label>
-                                <select value={movForm.id_cuenta_financiera} onChange={e => {
-                                    const fid = e.target.value;
-                                    const selectedFinCta = cuentas.find(c => c.id === fid);
-                                    let matchedContableId = movForm.id_cuenta_banco_contable;
-                                    if (selectedFinCta) {
-                                        const match = cuentasContablesBancos.find((cc: any) => 
-                                            cc.nombre.toLowerCase().includes(selectedFinCta.nombre.toLowerCase()) ||
-                                            selectedFinCta.nombre.toLowerCase().includes(cc.nombre.toLowerCase())
-                                        );
-                                        if (match) {
-                                            matchedContableId = match.id;
-                                        }
-                                    }
-                                    setMovForm({
-                                        ...movForm, 
-                                        id_cuenta_financiera: fid,
-                                        id_cuenta_banco_contable: matchedContableId
-                                    });
-                                }} style={inputStyle}>
-                                    <option value="">No deducir de panel</option>
-                                    {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Cuenta Contable (Libro Diario)</label>
-                                <div ref={dropdownRef} style={{ position: 'relative' }}>
-                                    <input 
-                                        value={searchAccount}
-                                        onChange={e => {
-                                            setSearchAccount(e.target.value);
-                                            setIsDropdownOpen(true);
-                                        }}
-                                        onFocus={() => {
-                                            setSearchAccount('');
-                                            setIsDropdownOpen(true);
-                                        }}
-                                        placeholder="Buscar cuenta contable..."
-                                        style={inputStyle}
-                                        required={!movForm.id_cuenta_banco_contable}
-                                    />
-                                    <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.6, fontSize: '0.8rem', color: 'var(--text-sec)' }}>
-                                        ▼
-                                    </span>
-                                    
-                                    {isDropdownOpen && (
-                                        <div style={{ 
-                                            position: 'absolute', 
-                                            top: '100%', 
-                                            left: 0, 
-                                            right: 0, 
-                                            maxHeight: '260px', 
-                                            overflowY: 'auto', 
-                                            background: '#0c101f', 
-                                            border: '1px solid var(--border-color)', 
-                                            borderRadius: '12px', 
-                                            marginTop: '4px', 
-                                            zIndex: 9999,
-                                            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)'
-                                        }}>
-                                            {filteredCuentasContables.length === 0 ? (
-                                                <div style={{ padding: '10px 12px', color: 'var(--text-sec)', fontSize: '0.85rem' }}>No se encontraron cuentas</div>
-                                            ) : (
-                                                filteredCuentasContables.map((c: any) => {
-                                                    const isSelected = c.id === movForm.id_cuenta_banco_contable;
-                                                    return (
-                                                        <div 
-                                                            key={c.id}
-                                                            onClick={() => {
-                                                                setMovForm({...movForm, id_cuenta_banco_contable: c.id});
-                                                                setIsDropdownOpen(false);
-                                                            }}
-                                                            style={{ 
-                                                                padding: '8px 12px', 
-                                                                cursor: 'pointer', 
-                                                                background: isSelected ? 'var(--primary-light)' : 'transparent',
-                                                                color: isSelected ? 'var(--primary)' : 'var(--text-main)',
-                                                                fontSize: '0.85rem',
-                                                                borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
-                                                                transition: 'background 0.2s',
-                                                                textAlign: 'left'
-                                                            }}
-                                                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }}
-                                                            onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
-                                                        >
-                                                            {c.codigo_cuenta} - {c.nombre}
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                        <input value={movForm.referencia} onChange={e => setMovForm({...movForm, referencia: e.target.value})} placeholder="Referencia bancaria / Voucher..." style={inputStyle} />
-                        
-                        <button className="btn btn-primary" type="submit" disabled={saving || !movForm.monto || !movForm.id_cuenta_banco_contable} style={{ width: '100%', marginTop: 8 }}>
-                            Confirmar Operación
-                        </button>
-                    </div>
-                </form>
-
-                {/* 2. Añadir Documento Manual */}
-                <form className="glass-card" onSubmit={handleCrearDocumento}>
-                    <h3 style={{ margin: '0 0 16px', fontSize: '1rem', color: 'var(--text-sec)' }}>Añadir Documento Manual</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <select value={docForm.id_entidad} onChange={e => setDocForm({...docForm, id_entidad: e.target.value})} style={inputStyle} required>
-                            <option value="">Seleccionar Tercero...</option>
-                            {entities.map(e => <option key={e.id} value={e.id}>{e.razon_social}</option>)}
-                        </select>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                           <input value={docForm.referencia} onChange={e => setDocForm({...docForm, referencia: e.target.value})} placeholder="Nº Factura / Ref" style={inputStyle} required />
-                           <input value={docForm.total} onChange={e => setDocForm({...docForm, total: e.target.value})} placeholder="Total $" style={inputStyle} required />
-                        </div>
-                        <input type="date" value={docForm.fecha_vencimiento} onChange={e => setDocForm({...docForm, fecha_vencimiento: e.target.value})} style={inputStyle} />
-                        <button className="btn" type="submit" disabled={saving || !docForm.total || !docForm.id_entidad}>Registrar Deuda</button>
-                    </div>
-                </form>
-            </div>
-        </section>
-
-        {/* Historial de Movimientos de Tesorería */}
-        <div className="glass-card" style={{ padding: 0, overflow: 'hidden', marginTop: 24 }}>
-          <div style={{ padding: 20, borderBottom: '1px solid var(--border-color)' }}>
-            <h3 style={{ margin: 0, fontSize: '1.2rem' }}>
-              Historial de {isCobro ? 'Cobros' : 'Pagos'} Aplicados
-            </h3>
-            <p className="text-sec" style={{ fontSize: '0.85rem' }}>
-              Últimas operaciones registradas. Puedes anular cualquier registro erróneo aquí.
-            </p>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th style={{ padding: '12px 16px' }}>{isCobro ? 'Fecha de Cobro' : 'Fecha de Pago'}</th>
-                  <th style={{ padding: '12px 16px' }}>Tercero y Documento</th>
-                  <th style={{ padding: '12px 16px' }}>Factura Original</th>
-                  <th style={{ padding: '12px 16px' }}>Detalles del {isCobro ? 'Cobro' : 'Pago'}</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Monto Aplicado</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'center' }}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {movimientos
-                  .filter(m => m.tipo_movimiento === (isCobro ? 'Cobro' : 'Pago') && m.estado !== 'Anulado')
-                  .map(mov => {
-                    const doc = mov.documento;
-                    const ent = mov.entidades;
-                    
-                    const formatEcuadorianDate = (dateStr: string) => {
-                      if (!dateStr) return '—';
-                      try {
-                        const parts = dateStr.split('-');
-                        if (parts.length === 3) {
-                          return `${parts[2]}/${parts[1]}/${parts[0]}`;
-                        }
-                      } catch {}
-                      return dateStr;
-                    };
-
-                    return (
-                      <tr key={mov.id}>
-                        {/* Fecha del Movimiento */}
-                        <td style={{ padding: '16px', fontSize: '0.88rem', fontWeight: 600 }}>
-                          {formatEcuadorianDate(mov.fecha)}
-                        </td>
-                        
-                        {/* Tercero y Documento */}
-                        <td style={{ padding: '16px' }}>
-                          <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--text-main)' }}>
-                            {ent?.razon_social || 'N/A'}
-                          </div>
-                          <div style={{ marginTop: 4 }}>
-                            {doc ? (
-                              <span style={{ 
-                                display: 'inline-flex', 
-                                alignItems: 'center', 
-                                gap: 4, 
-                                fontSize: '0.75rem', 
-                                color: 'var(--primary)', 
-                                backgroundColor: 'rgba(99, 102, 241, 0.1)', 
-                                border: '1px solid rgba(99, 102, 241, 0.2)', 
-                                padding: '2px 8px', 
-                                borderRadius: 12,
-                                fontFamily: 'monospace',
-                                fontWeight: 700
-                              }}>
-                                Factura: #{doc.referencia}
-                              </span>
-                            ) : (
-                              <span style={{ 
-                                display: 'inline-flex', 
-                                alignItems: 'center', 
-                                gap: 4, 
-                                fontSize: '0.72rem', 
-                                color: 'var(--text-sec)', 
-                                backgroundColor: 'rgba(255,255,255,0.05)', 
-                                padding: '2px 8px', 
-                                borderRadius: 12,
-                                fontStyle: 'italic'
-                              }}>
-                                Anticipo / Sin Factura
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Factura Original */}
-                        <td style={{ padding: '16px', fontSize: '0.85rem' }}>
-                          {doc ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                              <div>
-                                <span style={{ color: 'var(--text-sec)' }}>Total Factura:</span>{' '}
-                                <strong style={{ color: 'var(--text-main)' }}>
-                                  ${Number(doc.total || 0).toFixed(2)}
-                                </strong>
-                              </div>
-                              <div style={{ fontSize: '0.78rem', color: 'var(--text-sec)' }}>
-                                Vencimiento: <span style={{ fontWeight: 600, color: '#f59e0b' }}>{formatEcuadorianDate(doc.fecha_vencimiento)}</span>
-                              </div>
-                            </div>
-                          ) : (
-                            <span style={{ color: 'var(--text-sec)', fontStyle: 'italic' }}>—</span>
-                          )}
-                        </td>
-
-                        {/* Detalles del Pago */}
-                        <td style={{ padding: '16px', fontSize: '0.85rem' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <div>
-                              <span style={{ color: 'var(--text-sec)' }}>Concepto:</span>{' '}
-                              <span style={{ color: 'var(--text-main)', fontStyle: mov.concepto ? 'normal' : 'italic' }}>
-                                {mov.concepto || '—'}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: '0.78rem' }}>
-                              <span style={{ color: 'var(--text-sec)' }}>Ref. Pago / N° Documento:</span>{' '}
-                              <strong style={{ fontFamily: 'monospace', color: 'var(--text-main)' }}>
-                                {mov.referencia || '—'}
-                              </strong>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Monto Aplicado */}
-                        <td style={{ padding: '16px', textAlign: 'right' }}>
-                          <div style={{ 
-                            fontWeight: 900, 
-                            fontSize: '1.05rem', 
-                            color: isCobro ? 'var(--success)' : 'var(--error)' 
-                          }}>
-                            {isCobro ? '+' : '-'}${Number(mov.monto).toFixed(2)}
-                          </div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-sec)', textTransform: 'uppercase', fontWeight: 700, marginTop: 2 }}>
-                            {isCobro ? 'Monto Cobrado' : 'Monto Pagado'}
-                          </div>
-                        </td>
-
-                        {/* Acciones */}
-                        <td style={{ padding: '16px', textAlign: 'center' }}>
-                          <div style={{ display: 'inline-flex', gap: 8 }}>
-                            <button
-                              className="btn"
-                              style={{ 
-                                padding: '8px 16px', 
-                                background: 'rgba(59,130,246,0.1)', 
-                                color: '#3b82f6', 
-                                border: 'none', 
-                                borderRadius: 10, 
-                                cursor: 'pointer', 
-                                fontWeight: 'bold', 
-                                fontSize: '0.8rem',
-                                transition: 'all 0.2s'
-                              }}
-                              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(59,130,246,0.2)'; }}
-                              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(59,130,246,0.1)'; }}
-                              onClick={() => handleOpenEditModal(mov)}
-                              disabled={saving}
-                            >
-                              Editar
-                            </button>
-                            <button
-                              className="btn"
-                              style={{ 
-                                padding: '8px 16px', 
-                                background: 'rgba(239,68,68,0.1)', 
-                                color: 'var(--error)', 
-                                border: 'none', 
-                                borderRadius: 10, 
-                                cursor: 'pointer', 
-                                fontWeight: 'bold', 
-                                fontSize: '0.8rem',
-                                transition: 'all 0.2s'
-                              }}
-                              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.2)'; }}
-                              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
-                              onClick={() => handleAnularMovimientoTesoreria(mov.id)}
-                              disabled={saving}
-                            >
-                              Anular
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                {movimientos.filter(m => m.tipo_movimiento === (isCobro ? 'Cobro' : 'Pago') && m.estado !== 'Anulado').length === 0 && (
-                  <tr>
-                    <td colSpan={6} style={{ padding: 32, textAlign: 'center', color: 'var(--text-sec)' }}>
-                      Sin movimientos recientes de {isCobro ? 'cobro' : 'pago'} aplicados.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-    </div>
-    );
-  };
-
-  const renderConciliacion = () => (
-      <div className="space-y-6" style={{ animation: 'fadeIn 0.5s ease' }}>
-        <header>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--primary)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.5, fontSize: '0.8rem', marginBottom: 8 }}>
-                <CheckCircle2 size={14} /> Auditoría
-            </div>
-            <h2 className="h1" style={{ fontSize: '2.2rem' }}>Conciliación Bancaria</h2>
-            <p className="text-sec">Verifica que los saldos del sistema coincidan con tu estado de cuenta real.</p>
-        </header>
-
-        <section style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24, alignItems: 'start' }}>
-            {/* Lista Bancos */}
-            <div className="glass-card" style={{ padding: 0 }}>
-                <div style={{ padding: 20, borderBottom: '1px solid var(--border-color)', background: 'var(--primary-light)' }}>
-                    <h3 style={{ margin: 0, color: 'var(--primary)' }}>Saldos Contables</h3>
-                    <div style={{ fontSize: '0.75rem', marginTop: 4, color: 'var(--text-main)' }}>Valores calculados por el sistema</div>
-                </div>
-                <div>
-                   {cuentas.map(c => {
-                       const c_movs = movimientos.filter(m => m.cuenta_financiera?.nombre === c.nombre);
-                       const ingresos = c_movs.filter(m => m.tipo_movimiento === 'Cobro').reduce((a, b) => a + Number(b.monto), 0);
-                       const egresos = c_movs.filter(m => m.tipo_movimiento === 'Pago').reduce((a, b) => a + Number(b.monto), 0);
-                       const saldoFinal = Number(c.saldo_inicial) + ingresos - egresos;
-
-                       return (
-                       <div key={c.id} style={{ padding: 20, borderBottom: '1px solid var(--border-color)' }}>
-                           <div style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: 12 }}>{c.nombre}</div>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 6 }}>
-                               <span className="text-sec">Inicial:</span> <span>${Number(c.saldo_inicial).toFixed(2)}</span>
-                           </div>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 6, color: 'var(--success)' }}>
-                               <span>Ingresos:</span> <span>+${ingresos.toFixed(2)}</span>
-                           </div>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 12, color: 'var(--error)' }}>
-                               <span>Egresos:</span> <span>-${egresos.toFixed(2)}</span>
-                           </div>
-                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 900, paddingTop: 12, borderTop: '1px dashed var(--border-color)' }}>
-                               <span>Calculado:</span> <span>${saldoFinal.toFixed(2)}</span>
-                           </div>
-                       </div>
-                       );
-                   })}
-                </div>
-            </div>
-
-            {/* Libro Auxiliar de Bancos */}
-            <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ padding: 20, borderBottom: '1px solid var(--border-color)' }}>
-                    <h3 style={{ margin: 0 }}>Libro Auxiliar de Bancos</h3>
-                    <p className="text-sec" style={{ margin: '6px 0 0' }}>Historial detallado para cotejar (Cartola).</p>
-                </div>
-                <div style={{ overflowX: 'auto' }}>
-                    <table className="data-table">
-                        <thead><tr><th>Fecha / Ref</th><th>Cuenta</th><th>Concepto / Proveedor</th><th style={{ textAlign: 'right' }}>Cobros</th><th style={{ textAlign: 'right' }}>Pagos</th></tr></thead>
-                        <tbody>
-                            {movimientos.map(mov => (
-                                <tr key={mov.id}>
-                                    <td style={{ padding: '12px 16px' }}>
-                                        <div style={{ fontWeight: 800 }}>{mov.fecha}</div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-sec)' }}>{mov.referencia || 'S/N'}</div>
-                                    </td>
-                                    <td style={{ padding: '12px 16px', fontWeight: 600 }}>{mov.cuenta_financiera?.nombre}</td>
-                                    <td style={{ padding: '12px 16px' }}>
-                                        <div>{mov.concepto}</div>
-                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-sec)' }}>{mov.entidades?.razon_social}</div>
-                                    </td>
-                                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: 'var(--success)' }}>
-                                        {mov.tipo_movimiento === 'Cobro' ? `$${Number(mov.monto).toFixed(2)}` : ''}
-                                    </td>
-                                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: 'var(--error)' }}>
-                                        {mov.tipo_movimiento === 'Pago' ? `$${Number(mov.monto).toFixed(2)}` : ''}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-      </div>
-  );
-
   if (loading) return <div style={{ padding: '120px 0', width: '100%', display: 'flex', justifyContent: 'center' }}><Loader2 className="animate-spin" size={36} style={{ color: 'var(--primary)' }} /></div>;
 
   return (
       <div className="tesoreria-module">
           {message && <div style={{ background: 'var(--primary)', color: '#000', padding: 12, borderRadius: 12, fontWeight: 800, marginBottom: 20, animation: 'fadeIn 0.3s ease' }}>INFO: {message}</div>}
           
-          {mode === 'resumen' && renderResumen()}
-          {(mode === 'cobros' || mode === 'pagos') && renderCobrosPagos()}
-          {mode === 'conciliacion' && renderConciliacion()}
+          {mode === 'resumen' && (
+            <TesoreriaResumen
+              summary={summary}
+              cuentas={cuentas}
+              movimientos={movimientos}
+              showCuentaForm={showCuentaForm}
+              setShowCuentaForm={setShowCuentaForm}
+              cuentaForm={cuentaForm}
+              setCuentaForm={setCuentaForm}
+              handleCrearCuenta={handleCrearCuenta}
+              saving={saving}
+            />
+          )}
+          {(mode === 'cobros' || mode === 'pagos') && (
+            <TesoreriaCobrosPagos
+              mode={mode}
+              summary={summary}
+              docsFiltrados={docsFiltrados}
+              movForm={movForm}
+              setMovForm={setMovForm}
+              docForm={docForm}
+              setDocForm={setDocForm}
+              cuentas={cuentas}
+              cuentasContables={cuentasContables}
+              entities={entities}
+              movimientos={movimientos}
+              saving={saving}
+              handleRegistrarMovimiento={handleRegistrarMovimiento}
+              handleCrearDocumento={handleCrearDocumento}
+              handleOpenEditModal={handleOpenEditModal}
+              handleAnularMovimientoTesoreria={handleAnularMovimientoTesoreria}
+            />
+          )}
+          {mode === 'conciliacion' && (
+            <TesoreriaConciliacion
+              cuentas={cuentas}
+              movimientos={movimientos}
+            />
+          )}
 
           {/* Edit Modal */}
           {editingMov && (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(5,8,16,0.85)', backdropFilter: 'blur(12px)', padding: '20px', boxSizing: 'border-box' }}>
-                <div className="glass-card" style={{ padding: '28px', width: '90%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto' }}>
-                    <h3 className="h1" style={{ fontSize: '1.3rem', display: 'flex', alignItems: 'center', gap: 8, marginBottom: '20px' }}>
-                        <CheckCircle2 color="var(--primary)" /> Editar {editingMov.tipo_movimiento === 'Pago' ? 'Pago a Proveedor' : 'Cobro a Cliente'}
-                    </h3>
-                    
-                    {!editingMov.txId && (
-                      <div style={{ 
-                        background: 'rgba(245,158,11,0.1)', 
-                        border: '1px solid rgba(245,158,11,0.3)', 
-                        color: '#f59e0b', 
-                        padding: '10px 14px', 
-                        borderRadius: '8px', 
-                        fontSize: '0.8rem', 
-                        fontWeight: 600, 
-                        marginBottom: '16px',
-                        lineHeight: '1.4'
-                      }}>
-                        ⚠️ No se encontró el asiento contable asociado a este movimiento en el Libro Diario. La edición solo modificará el registro en el panel de Tesorería.
-                      </div>
-                    )}
-                    
-                    <form onSubmit={handleGuardarEdicionMovimiento} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                        <div>
-                            <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Documento a saldar</label>
-                            <select value={editingMov.id_documento || ''} disabled style={{...inputStyle, opacity: 0.7, cursor: 'not-allowed'}}>
-                                <option value="">Selecciona (Factura/Deuda)</option>
-                                {documentos.map(doc => (
-                                    <option key={doc.id} value={doc.id}>
-                                        {doc.entidades?.razon_social} - {doc.referencia} (${Number(doc.total).toFixed(2)})
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                            <div>
-                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Monto a aplicar ($)</label>
-                                <input 
-                                    type="number" 
-                                    step="0.01" 
-                                    value={editingMov.monto} 
-                                    onChange={e => setEditingMov({...editingMov, monto: e.target.value})} 
-                                    style={{...inputStyle, fontWeight: 900}} 
-                                    required 
-                                />
-                            </div>
-                            <div>
-                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Fecha</label>
-                                <input 
-                                    type="date" 
-                                    value={editingMov.fecha} 
-                                    onChange={e => setEditingMov({...editingMov, fecha: e.target.value})} 
-                                    style={inputStyle} 
-                                    required 
-                                />
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                            <div>
-                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Caja / Banco de Tesorería (Opcional)</label>
-                                <select 
-                                    value={editingMov.id_cuenta_financiera || ''} 
-                                    onChange={e => {
-                                        const fid = e.target.value;
-                                        const selectedFinCta = cuentas.find(c => c.id === fid);
-                                        let matchedContableId = editingMov.id_cuenta_banco_contable;
-                                        if (selectedFinCta) {
-                                            const match = cuentasContables.find((cc: any) => 
-                                                cc.nombre.toLowerCase().includes(selectedFinCta.nombre.toLowerCase()) ||
-                                                selectedFinCta.nombre.toLowerCase().includes(cc.nombre.toLowerCase())
-                                            );
-                                            if (match) {
-                                                matchedContableId = match.id;
-                                            }
-                                        }
-                                        setEditingMov({
-                                            ...editingMov, 
-                                            id_cuenta_financiera: fid,
-                                            id_cuenta_banco_contable: matchedContableId
-                                        });
-                                    }} 
-                                    style={inputStyle}
-                                >
-                                    <option value="">No deducir de panel</option>
-                                    {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Cuenta Contable (Libro Diario)</label>
-                                <div ref={editBankRef} style={{ position: 'relative' }}>
-                                    <input 
-                                        value={searchEditBank}
-                                        onChange={e => {
-                                            setSearchEditBank(e.target.value);
-                                            setIsEditBankOpen(true);
-                                        }}
-                                        onFocus={() => {
-                                            setSearchEditBank('');
-                                            setIsEditBankOpen(true);
-                                        }}
-                                        placeholder="Buscar cuenta contable..."
-                                        style={inputStyle}
-                                        required={!editingMov.id_cuenta_banco_contable}
-                                    />
-                                    <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.6, fontSize: '0.8rem', color: 'var(--text-sec)' }}>
-                                        ▼
-                                    </span>
-                                    
-                                    {isEditBankOpen && (
-                                        <div style={{ 
-                                            position: 'absolute', 
-                                            top: '100%', 
-                                            left: 0, 
-                                            right: 0, 
-                                            maxHeight: '180px', 
-                                            overflowY: 'auto', 
-                                            background: '#0c101f', 
-                                            border: '1px solid var(--border-color)', 
-                                            borderRadius: '12px', 
-                                            marginTop: '4px', 
-                                            zIndex: 9999,
-                                            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)'
-                                        }}>
-                                            {filteredEditBankCuentas.length === 0 ? (
-                                                <div style={{ padding: '10px 12px', color: 'var(--text-sec)', fontSize: '0.85rem' }}>No se encontraron cuentas</div>
-                                            ) : (
-                                                filteredEditBankCuentas.map((c: any) => {
-                                                    const isSelected = c.id === editingMov.id_cuenta_banco_contable;
-                                                    return (
-                                                        <div 
-                                                            key={c.id}
-                                                            onClick={() => {
-                                                                setEditingMov({...editingMov, id_cuenta_banco_contable: c.id});
-                                                                setIsEditBankOpen(false);
-                                                            }}
-                                                            style={{ 
-                                                                padding: '8px 12px', 
-                                                                cursor: 'pointer', 
-                                                                background: isSelected ? 'var(--primary-light)' : 'transparent',
-                                                                color: isSelected ? 'var(--primary)' : 'var(--text-main)',
-                                                                fontSize: '0.85rem',
-                                                                borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
-                                                                textAlign: 'left'
-                                                            }}
-                                                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }}
-                                                            onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
-                                                        >
-                                                            {c.codigo_cuenta} - {c.nombre}
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Referencia bancaria / Voucher</label>
-                            <input 
-                                value={editingMov.referencia} 
-                                onChange={e => setEditingMov({...editingMov, referencia: e.target.value})} 
-                                placeholder="Nº de transferencia, cheque, etc..." 
-                                style={inputStyle} 
-                            />
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 10 }}>
-                            <button 
-                                type="button" 
-                                onClick={() => setEditingMov(null)} 
-                                className="btn" 
-                                style={{ padding: '10px 20px', borderRadius: 10 }}
-                            >
-                                Cancelar
-                            </button>
-                            <button 
-                                type="submit" 
-                                disabled={saving || !editingMov.monto || !editingMov.id_cuenta_banco_contable} 
-                                className="btn btn-primary" 
-                                style={{ padding: '10px 24px', borderRadius: 10 }}
-                            >
-                                {saving ? 'Guardando...' : 'Guardar Cambios'}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+            <EditMovimientoModal
+              editingMov={editingMov}
+              setEditingMov={setEditingMov}
+              cuentas={cuentas}
+              cuentasContables={cuentasContables}
+              saving={saving}
+              onSave={handleGuardarEdicionMovimiento}
+              onClose={() => setEditingMov(null)}
+            />
           )}
       </div>
   );
