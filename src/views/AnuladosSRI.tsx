@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Ban, Search, Filter, ChevronLeft, ChevronRight,
-    RefreshCw, FileText, FileMinus, Receipt, Eye
+    RefreshCw, FileText, FileMinus, Receipt, Eye,
+    ArrowDownCircle, ArrowUpCircle
 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 
@@ -67,6 +68,17 @@ const extractXmlNumero = (concepto: string, numComp: string, clave: string): str
     return null;
 };
 
+// Obtiene el tipo de documento anulado
+const getAnuladoTipo = (doc: DocAnulado): 'XML Compras' | 'XML Ventas' | 'Pago a Proveedor' | 'Cobro a Cliente' => {
+    if (doc.es_compra === true) return 'XML Compras';
+    if (doc.es_compra === false) return 'XML Ventas';
+    const concepto = (doc.transacciones?.concepto || '').toLowerCase();
+    if (concepto.includes('cobro') || concepto.includes('ingreso') || concepto.includes('cliente')) {
+        return 'Cobro a Cliente';
+    }
+    return 'Pago a Proveedor';
+};
+
 interface AnuladoDetailModalProps {
     doc: DocAnulado;
     onClose: () => void;
@@ -80,6 +92,14 @@ const AnuladoDetailModal: React.FC<AnuladoDetailModalProps> = ({ doc, onClose })
         doc.clave_acceso_xml || ''
     );
     const valOrig = parsedConcepto.valoresOriginales;
+    const tipo = getAnuladoTipo(doc);
+    const isXml = doc.es_compra !== null;
+
+    let badgeColor = '#6b7280';
+    if (tipo === 'XML Compras') badgeColor = '#f59e0b';
+    else if (tipo === 'XML Ventas') badgeColor = '#8b5cf6';
+    else if (tipo === 'Pago a Proveedor') badgeColor = '#10b981';
+    else if (tipo === 'Cobro a Cliente') badgeColor = '#3b82f6';
 
     const formatDate = (dateStr: string) =>
         dateStr ? new Date(dateStr + 'T12:00:00').toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
@@ -136,8 +156,8 @@ const AnuladoDetailModal: React.FC<AnuladoDetailModalProps> = ({ doc, onClose })
                         </div>
                         <div style={{ background: 'var(--input-bg)', borderRadius: 10, padding: '14px' }}>
                             <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Origen</div>
-                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: doc.es_compra ? '#f59e0b' : '#8b5cf6' }}>
-                                {doc.es_compra === true ? 'XML Compras' : doc.es_compra === false ? 'XML Ventas' : '—'}
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: badgeColor }}>
+                                {tipo}
                             </div>
                         </div>
                     </div>
@@ -176,7 +196,7 @@ const AnuladoDetailModal: React.FC<AnuladoDetailModalProps> = ({ doc, onClose })
                     <div style={{ background: valOrig ? 'rgba(16,185,129,0.04)' : 'rgba(107,114,128,0.05)', border: `1px dashed ${valOrig ? 'rgba(16,185,129,0.25)' : 'rgba(107,114,128,0.2)'}`, borderRadius: 10, padding: '14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                             <div style={{ fontSize: '0.72rem', color: valOrig ? '#10b981' : 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase' }}>
-                                Valores Originales de la Factura
+                                {isXml ? 'Valores Originales de la Factura' : 'Monto Original'}
                             </div>
                             <span style={{ fontSize: '0.65rem', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', padding: '2px 8px', borderRadius: 20, fontWeight: 700 }}>
                                 Solo referencia · No afecta reportes
@@ -184,55 +204,70 @@ const AnuladoDetailModal: React.FC<AnuladoDetailModalProps> = ({ doc, onClose })
                         </div>
 
                         {valOrig ? (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                                {[
-                                    { label: 'Base Gravada 12/15/5%', val: valOrig.base_12 },
-                                    { label: 'Base Gravada 0%', val: valOrig.base_0 },
-                                    { label: 'Base No Objeto', val: valOrig.base_no_objeto },
-                                    { label: 'IVA', val: valOrig.monto_iva },
-                                ].map(item => (
-                                    <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                        <span style={{ color: 'var(--text-sec)' }}>{item.label}</span>
-                                        <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>${(item.val || 0).toFixed(2)}</span>
-                                    </div>
-                                ))}
-                                {/* Total */}
-                                <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', padding: '8px 0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 4 }}>
-                                    <span style={{ fontWeight: 700 }}>Total Original</span>
+                            valOrig.total !== undefined ? (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', padding: '8px 0' }}>
+                                    <span style={{ fontWeight: 700 }}>Monto Original</span>
                                     <span style={{ fontWeight: 800, color: '#10b981' }}>
-                                        ${((valOrig.base_12||0) + (valOrig.base_0||0) + (valOrig.base_no_objeto||0) + (valOrig.monto_iva||0)).toFixed(2)}
+                                        ${(valOrig.total || 0).toFixed(2)}
                                     </span>
                                 </div>
-                                {/* Retenciones */}
-                                {valOrig.retenciones_aplicadas && valOrig.retenciones_aplicadas.length > 0 && (
-                                    <div style={{ gridColumn: '1 / -1', marginTop: 8 }}>
-                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Retenciones Originales</div>
-                                        {valOrig.retenciones_aplicadas.map((r: any, i: number) => (
-                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '4px 0' }}>
-                                                <span style={{ color: 'var(--text-sec)' }}>{r.tipo} {r.porcentaje ? `(${r.porcentaje}%)` : ''}</span>
-                                                <span style={{ fontWeight: 700 }}>${(r.valor || 0).toFixed(2)}</span>
-                                            </div>
-                                        ))}
+                            ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                                    {[
+                                        { label: 'Base Gravada 12/15/5%', val: valOrig.base_12 },
+                                        { label: 'Base Gravada 0%', val: valOrig.base_0 },
+                                        { label: 'Base No Objeto', val: valOrig.base_no_objeto },
+                                        { label: 'IVA', val: valOrig.monto_iva },
+                                    ].map(item => (
+                                        <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                            <span style={{ color: 'var(--text-sec)' }}>{item.label}</span>
+                                            <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>${(item.val || 0).toFixed(2)}</span>
+                                        </div>
+                                    ))}
+                                    {/* Total */}
+                                    <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', padding: '8px 0', borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 4 }}>
+                                        <span style={{ fontWeight: 700 }}>Total Original</span>
+                                        <span style={{ fontWeight: 800, color: '#10b981' }}>
+                                            ${((valOrig.base_12||0) + (valOrig.base_0||0) + (valOrig.base_no_objeto||0) + (valOrig.monto_iva||0)).toFixed(2)}
+                                        </span>
                                     </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                                {[
-                                    { label: 'Base Gravada 12/15/5%', val: doc.base_12 },
-                                    { label: 'Base Gravada 0%', val: doc.base_0 },
-                                    { label: 'Base No Objeto', val: doc.base_no_objeto },
-                                    { label: 'IVA', val: doc.monto_iva },
-                                ].map(item => (
-                                    <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                        <span style={{ color: 'var(--text-sec)' }}>{item.label}</span>
-                                        <span style={{ fontWeight: 700, color: '#6b7280', textDecoration: 'line-through' }}>${(item.val || 0).toFixed(2)}</span>
-                                    </div>
-                                ))}
-                                <div style={{ gridColumn: '1 / -1', fontSize: '0.72rem', color: '#6b7280', marginTop: 8, fontStyle: 'italic' }}>
-                                    * Los valores originales no están disponibles para este documento (anulado antes de la actualización).
+                                    {/* Retenciones */}
+                                    {valOrig.retenciones_aplicadas && valOrig.retenciones_aplicadas.length > 0 && (
+                                        <div style={{ gridColumn: '1 / -1', marginTop: 8 }}>
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Retenciones Originales</div>
+                                            {valOrig.retenciones_aplicadas.map((r: any, i: number) => (
+                                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '4px 0' }}>
+                                                    <span style={{ color: 'var(--text-sec)' }}>{r.tipo} {r.porcentaje ? `(${r.porcentaje}%)` : ''}</span>
+                                                    <span style={{ fontWeight: 700 }}>${(r.valor || 0).toFixed(2)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
+                            )
+                        ) : (
+                            isXml ? (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                                    {[
+                                        { label: 'Base Gravada 12/15/5%', val: doc.base_12 },
+                                        { label: 'Base Gravada 0%', val: doc.base_0 },
+                                        { label: 'Base No Objeto', val: doc.base_no_objeto },
+                                        { label: 'IVA', val: doc.monto_iva },
+                                    ].map(item => (
+                                        <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                                            <span style={{ color: 'var(--text-sec)' }}>{item.label}</span>
+                                            <span style={{ fontWeight: 700, color: '#6b7280', textDecoration: 'line-through' }}>${(item.val || 0).toFixed(2)}</span>
+                                        </div>
+                                    ))}
+                                    <div style={{ gridColumn: '1 / -1', fontSize: '0.72rem', color: '#6b7280', marginTop: 8, fontStyle: 'italic' }}>
+                                        * Los valores originales no están disponibles para este documento (anulado antes de la actualización).
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ fontSize: '0.82rem', color: '#6b7280', fontStyle: 'italic' }}>
+                                    * El monto original no está disponible para esta transacción (anulada antes de la actualización).
+                                </div>
+                            )
                         )}
                     </div>
                 </div>
@@ -251,7 +286,7 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
     const [documentos, setDocumentos] = useState<DocAnulado[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
-    const [filterTipo, setFilterTipo] = useState<'todos' | 'compras' | 'ventas'>('todos');
+    const [filterTipo, setFilterTipo] = useState<'todos' | 'compras' | 'ventas' | 'pagos' | 'cobros'>('todos');
     const [currentPage, setCurrentPage] = useState(1);
     const [viewingDoc, setViewingDoc] = useState<DocAnulado | null>(null);
 
@@ -260,31 +295,66 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
         setLoading(true);
         try {
             const { data, error } = await supabase
-                .from('documentos_sri')
+                .from('transacciones')
                 .select(`
-                    id, clave_acceso_xml, base_12, base_0, base_no_objeto,
-                    monto_iva, es_compra, retenciones_aplicadas, created_at,
-                    transacciones (
-                        id, fecha, concepto, tipo_comprobante, numero_comprobante,
-                        entidades ( nombre, ruc_cedula )
+                    id,
+                    fecha,
+                    concepto,
+                    tipo_comprobante,
+                    numero_comprobante,
+                    created_at,
+                    entidades (
+                        nombre,
+                        razon_social,
+                        ruc_cedula
+                    ),
+                    documentos_sri (
+                        id,
+                        clave_acceso_xml,
+                        base_12,
+                        base_0,
+                        base_no_objeto,
+                        monto_iva,
+                        es_compra,
+                        retenciones_aplicadas,
+                        created_at
                     )
                 `)
                 .eq('id_empresa', empresaId)
-                .eq('transacciones.tipo_comprobante', 'Anulado')
+                .eq('tipo_comprobante', 'Anulado')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
 
-            const normalized = (data || []).map((d: any) => ({
-                ...d,
-                transacciones: Array.isArray(d.transacciones) ? d.transacciones[0] ?? null : d.transacciones
-            }));
+            const normalized: DocAnulado[] = (data || []).map((tx: any) => {
+                const entidad = Array.isArray(tx.entidades) ? tx.entidades[0] : tx.entidades;
+                const docSri = Array.isArray(tx.documentos_sri) ? tx.documentos_sri[0] : tx.documentos_sri;
+                
+                return {
+                    id: tx.id,
+                    clave_acceso_xml: docSri?.clave_acceso_xml || '',
+                    base_12: docSri?.base_12 || 0,
+                    base_0: docSri?.base_0 || 0,
+                    base_no_objeto: docSri?.base_no_objeto || 0,
+                    monto_iva: docSri?.monto_iva || 0,
+                    es_compra: docSri ? docSri.es_compra : null,
+                    retenciones_aplicadas: docSri?.retenciones_aplicadas || null,
+                    created_at: tx.created_at || docSri?.created_at || '',
+                    transacciones: {
+                        id: tx.id,
+                        fecha: tx.fecha,
+                        concepto: tx.concepto,
+                        tipo_comprobante: tx.tipo_comprobante,
+                        numero_comprobante: tx.numero_comprobante,
+                        entidades: entidad ? {
+                            nombre: entidad.nombre || entidad.razon_social || '',
+                            ruc_cedula: entidad.ruc_cedula || ''
+                        } : null
+                    }
+                };
+            });
 
-            const anulados = normalized.filter(
-                (d: any) => d.transacciones?.tipo_comprobante === 'Anulado'
-            ) as DocAnulado[];
-
-            setDocumentos(anulados);
+            setDocumentos(normalized);
         } catch (err) {
             console.error('Error fetching anulados:', err);
         } finally {
@@ -315,8 +385,11 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
             entidad.includes(search.toLowerCase());
 
         let matchTipo = true;
-        if (filterTipo === 'compras') matchTipo = doc.es_compra === true;
-        if (filterTipo === 'ventas') matchTipo = doc.es_compra === false;
+        const tipo = getAnuladoTipo(doc);
+        if (filterTipo === 'compras') matchTipo = tipo === 'XML Compras';
+        if (filterTipo === 'ventas') matchTipo = tipo === 'XML Ventas';
+        if (filterTipo === 'pagos') matchTipo = tipo === 'Pago a Proveedor';
+        if (filterTipo === 'cobros') matchTipo = tipo === 'Cobro a Cliente';
 
         return matchSearch && matchTipo;
     });
@@ -363,7 +436,7 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
                     </div>
                     <h2 style={{ fontSize: '1.8rem', fontWeight: 800, marginBottom: '16px' }}>Sin Anulaciones</h2>
                     <p className="text-sec" style={{ maxWidth: '400px', fontSize: '1rem' }}>
-                        No hay documentos anulados. Cuando anules un comprobante desde XML Compras o XML Ventas, aparecerá aquí.
+                        No hay transacciones anuladas. Cuando anules una factura desde XML Compras/Ventas o un pago/cobro desde Tesorería, aparecerá aquí.
                     </p>
                 </motion.div>
             )}
@@ -395,9 +468,11 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
                                 onChange={e => { setFilterTipo(e.target.value as any); setCurrentPage(1); }}
                                 style={{ paddingLeft: 36, padding: '10px 12px 10px 36px', borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '0.9rem' }}
                             >
-                                <option value="todos">Compras y Ventas</option>
-                                <option value="compras">Solo Compras</option>
-                                <option value="ventas">Solo Ventas</option>
+                                <option value="todos">Todos los Tipos</option>
+                                <option value="compras">XML Compras</option>
+                                <option value="ventas">XML Ventas</option>
+                                <option value="pagos">Pago a Proveedor</option>
+                                <option value="cobros">Cobro a Cliente</option>
                             </select>
                         </div>
                     </div>
@@ -427,136 +502,162 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
                                 <AnimatePresence>
                                     <tbody>
                                         {paginated.map((doc, idx) => {
-                                            const concepto = doc.transacciones?.concepto || '';
-                                            const parsedC = parseConceptoAnulado(concepto);
-                                            const conceptoOrig = parsedC.conceptoOriginal;
+                                             const concepto = doc.transacciones?.concepto || '';
+                                             const parsedC = parseConceptoAnulado(concepto);
+                                             const conceptoOrig = parsedC.conceptoOriginal;
 
-                                            // Detectar tipo original por el concepto
-                                            const isRet = conceptoOrig.toLowerCase().includes('retención') || conceptoOrig.toLowerCase().includes('retencion');
-                                            const isNC = conceptoOrig.toLowerCase().includes('nc:') || conceptoOrig.toLowerCase().includes('nota de crédito') || conceptoOrig.toLowerCase().includes('nota de credito');
-                                            const tipoOriginal = isRet ? 'Retención' : isNC ? 'Nota de Crédito' : 'Factura';
-                                            const tipoIcon = isRet ? <Receipt size={13} /> : isNC ? <FileMinus size={13} /> : <FileText size={13} />;
-                                            const origen = doc.es_compra === true ? 'Compras' : doc.es_compra === false ? 'Ventas' : '—';
+                                             const isXml = doc.es_compra !== null;
+                                             const tipo = getAnuladoTipo(doc);
 
-                                            // Número SRI del XML
-                                            const numComp = (doc.transacciones?.numero_comprobante || '').trim();
-                                            const xmlNumero = extractXmlNumero(conceptoOrig, numComp, doc.clave_acceso_xml || '');
-                                            const isSRIFormat = /\d{3}-\d{3}-\d{9}/.test(numComp);
+                                             let tipoOriginal = '';
+                                             let tipoIcon = null;
 
-                                            // Número secuencial (comprobante contable)
-                                            const secuencialDisplay = isSRIFormat
-                                                ? String(filtered.length - ((currentPage - 1) * ITEMS_PER_PAGE + idx))
-                                                : numComp || String(filtered.length - ((currentPage - 1) * ITEMS_PER_PAGE + idx));
+                                             if (isXml) {
+                                                 const isRet = conceptoOrig.toLowerCase().includes('retención') || conceptoOrig.toLowerCase().includes('retencion');
+                                                 const isNC = conceptoOrig.toLowerCase().includes('nc:') || conceptoOrig.toLowerCase().includes('nota de crédito') || conceptoOrig.toLowerCase().includes('nota de credito');
+                                                 tipoOriginal = isRet ? 'Retención' : isNC ? 'Nota de Crédito' : 'Factura';
+                                                 tipoIcon = isRet ? <Receipt size={13} /> : isNC ? <FileMinus size={13} /> : <FileText size={13} />;
+                                             } else {
+                                                 const isCobro = tipo === 'Cobro a Cliente';
+                                                 tipoOriginal = isCobro ? 'Cobro' : 'Pago';
+                                                 tipoIcon = isCobro ? <ArrowDownCircle size={13} /> : <ArrowUpCircle size={13} />;
+                                             }
 
-                                            // Valores originales para mostrar total en tabla
-                                            const valOrig = parsedC.valoresOriginales;
-                                            const totalOrig = valOrig
-                                                ? (valOrig.base_12||0) + (valOrig.base_0||0) + (valOrig.base_no_objeto||0) + (valOrig.monto_iva||0)
-                                                : null;
+                                             // Número SRI del XML
+                                             const numComp = (doc.transacciones?.numero_comprobante || '').trim();
+                                             const xmlNumero = extractXmlNumero(conceptoOrig, numComp, doc.clave_acceso_xml || '');
+                                             const isSRIFormat = /\d{3}-\d{3}-\d{9}/.test(numComp);
 
-                                            return (
-                                                <motion.tr
-                                                    key={doc.id}
-                                                    initial={{ opacity: 0, y: 8 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    transition={{ delay: idx * 0.03 }}
-                                                    style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s', opacity: 0.8 }}
-                                                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
-                                                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                                                >
-                                                    {/* TIPO + número de factura debajo */}
-                                                    <td style={{ padding: '12px 12px' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 700, color: '#6b7280', background: 'rgba(107,114,128,0.1)', padding: '4px 10px', borderRadius: 20, whiteSpace: 'nowrap', textDecoration: 'line-through' }}>
-                                                                {tipoIcon} {tipoOriginal}
-                                                            </span>
-                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', fontWeight: 700, color: '#ef4444' }}>
-                                                                <Ban size={11} /> Anulado
-                                                            </span>
-                                                        </div>
-                                                        {xmlNumero && (
-                                                            <div style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'var(--text-sec)', marginTop: 5, letterSpacing: '0.3px', whiteSpace: 'nowrap' }}>
-                                                                {xmlNumero}
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                    {/* Entidad */}
-                                                    <td style={{ padding: '12px', fontSize: '0.85rem', fontWeight: 600, maxWidth: 180 }}>
-                                                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.transacciones?.entidades?.nombre || '—'}</div>
-                                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', marginTop: 2 }}>{doc.transacciones?.entidades?.ruc_cedula || ''}</div>
-                                                    </td>
-                                                    {/* Comprobante secuencial */}
-                                                    <td style={{ padding: '12px', fontSize: '0.82rem', fontWeight: 700, fontFamily: 'monospace', textAlign: 'center', color: '#6b7280' }}>
-                                                        {secuencialDisplay}
-                                                        {totalOrig !== null && (
-                                                            <div style={{ fontSize: '0.7rem', color: '#6b7280', textDecoration: 'line-through', marginTop: 2, fontWeight: 400 }}>
-                                                                ${totalOrig.toFixed(2)}
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                    {/* Fecha */}
-                                                    <td style={{ padding: '12px', fontSize: '0.82rem', color: 'var(--text-sec)', whiteSpace: 'nowrap' }}>
-                                                        {doc.transacciones?.fecha ? formatDate(doc.transacciones.fecha) : '—'}
-                                                    </td>
-                                                    {/* Origen */}
-                                                    <td style={{ padding: '12px' }}>
-                                                        <span style={{
-                                                            display: 'inline-flex', alignItems: 'center', gap: 4,
-                                                            fontSize: '0.75rem', fontWeight: 700,
-                                                            color: doc.es_compra ? '#f59e0b' : '#8b5cf6',
-                                                            background: doc.es_compra ? 'rgba(245,158,11,0.1)' : 'rgba(139,92,246,0.1)',
-                                                            padding: '3px 10px', borderRadius: 20
-                                                        }}>
-                                                            {origen}
-                                                        </span>
-                                                    </td>
-                                                    {/* Acciones */}
-                                                    <td style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                                                        <button
-                                                            onClick={() => setViewingDoc(doc)}
-                                                            title="Ver detalle"
-                                                            style={{ background: 'rgba(59,130,246,0.1)', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '6px 12px', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', fontWeight: 700 }}
-                                                        >
-                                                            <Eye size={14} /> Ver
-                                                        </button>
-                                                    </td>
-                                                </motion.tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </AnimatePresence>
-                            </table>
-                        </div>
-                    )}
+                                             // Número secuencial (comprobante contable)
+                                             const secuencialDisplay = isSRIFormat
+                                                 ? String(filtered.length - ((currentPage - 1) * ITEMS_PER_PAGE + idx))
+                                                 : numComp || String(filtered.length - ((currentPage - 1) * ITEMS_PER_PAGE + idx));
 
-                    {/* Paginación */}
-                    {totalPages > 1 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border-color)' }}>
-                            <span style={{ fontSize: '0.82rem', color: 'var(--text-sec)' }}>
-                                Página {currentPage} de {totalPages} — {filtered.length} documentos
-                            </span>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="btn" style={{ padding: '8px 14px', borderRadius: 12, opacity: currentPage === 1 ? 0.4 : 1 }}>
-                                    <ChevronLeft size={16} />
-                                </button>
-                                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="btn btn-primary" style={{ padding: '8px 14px', borderRadius: 12, opacity: currentPage === totalPages ? 0.4 : 1 }}>
-                                    <ChevronRight size={16} />
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </motion.div>
-            )}
+                                             // Valores originales para mostrar total en tabla
+                                             const valOrig = parsedC.valoresOriginales;
+                                             const totalOrig = valOrig
+                                                 ? (valOrig.total !== undefined ? valOrig.total : (valOrig.base_12||0) + (valOrig.base_0||0) + (valOrig.base_no_objeto||0) + (valOrig.monto_iva||0))
+                                                 : null;
 
-            {/* ─── MODAL VER DETALLE ─── */}
-            <AnimatePresence>
-                {viewingDoc && (
-                    <AnuladoDetailModal
-                        doc={viewingDoc}
-                        onClose={() => setViewingDoc(null)}
-                    />
-                )}
-            </AnimatePresence>
-        </div>
-    );
-};
+                                             let badgeColor = '#6b7280';
+                                             let badgeBg = 'rgba(107,114,128,0.1)';
+                                             if (tipo === 'XML Compras') {
+                                                 badgeColor = '#f59e0b';
+                                                 badgeBg = 'rgba(245,158,11,0.1)';
+                                             } else if (tipo === 'XML Ventas') {
+                                                 badgeColor = '#8b5cf6';
+                                                 badgeBg = 'rgba(139,92,246,0.1)';
+                                             } else if (tipo === 'Pago a Proveedor') {
+                                                 badgeColor = '#10b981';
+                                                 badgeBg = 'rgba(16,185,129,0.1)';
+                                             } else if (tipo === 'Cobro a Cliente') {
+                                                 badgeColor = '#3b82f6';
+                                                 badgeBg = 'rgba(59,130,246,0.1)';
+                                             }
+
+                                             return (
+                                                 <motion.tr
+                                                     key={doc.id}
+                                                     initial={{ opacity: 0, y: 8 }}
+                                                     animate={{ opacity: 1, y: 0 }}
+                                                     transition={{ delay: idx * 0.03 }}
+                                                     style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.2s', opacity: 0.8 }}
+                                                     onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+                                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                                 >
+                                                     {/* TIPO + número de factura debajo */}
+                                                     <td style={{ padding: '12px 12px' }}>
+                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', fontWeight: 700, color: '#6b7280', background: 'rgba(107,114,128,0.1)', padding: '4px 10px', borderRadius: 20, whiteSpace: 'nowrap', textDecoration: 'line-through' }}>
+                                                                 {tipoIcon} {tipoOriginal}
+                                                             </span>
+                                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', fontWeight: 700, color: '#ef4444' }}>
+                                                                 <Ban size={11} /> Anulado
+                                                             </span>
+                                                         </div>
+                                                         {xmlNumero && (
+                                                             <div style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'var(--text-sec)', marginTop: 5, letterSpacing: '0.3px', whiteSpace: 'nowrap' }}>
+                                                                 {xmlNumero}
+                                                             </div>
+                                                         )}
+                                                     </td>
+                                                     {/* Entidad */}
+                                                     <td style={{ padding: '12px', fontSize: '0.85rem', fontWeight: 600, maxWidth: 180 }}>
+                                                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.transacciones?.entidades?.nombre || '—'}</div>
+                                                         <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', marginTop: 2 }}>{doc.transacciones?.entidades?.ruc_cedula || ''}</div>
+                                                     </td>
+                                                     {/* Comprobante secuencial */}
+                                                     <td style={{ padding: '12px', fontSize: '0.82rem', fontWeight: 700, fontFamily: 'monospace', textAlign: 'center', color: '#6b7280' }}>
+                                                         {secuencialDisplay}
+                                                         {totalOrig !== null && (
+                                                             <div style={{ fontSize: '0.7rem', color: '#6b7280', textDecoration: 'line-through', marginTop: 2, fontWeight: 400 }}>
+                                                                 ${totalOrig.toFixed(2)}
+                                                             </div>
+                                                         )}
+                                                     </td>
+                                                     {/* Fecha */}
+                                                     <td style={{ padding: '12px', fontSize: '0.82rem', color: 'var(--text-sec)', whiteSpace: 'nowrap' }}>
+                                                         {doc.transacciones?.fecha ? formatDate(doc.transacciones.fecha) : '—'}
+                                                     </td>
+                                                     {/* Origen */}
+                                                     <td style={{ padding: '12px' }}>
+                                                         <span style={{
+                                                             display: 'inline-flex', alignItems: 'center', gap: 4,
+                                                             fontSize: '0.75rem', fontWeight: 700,
+                                                             color: badgeColor,
+                                                             background: badgeBg,
+                                                             padding: '3px 10px', borderRadius: 20
+                                                         }}>
+                                                             {tipo}
+                                                         </span>
+                                                     </td>
+                                                     {/* Acciones */}
+                                                     <td style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                                         <button
+                                                             onClick={() => setViewingDoc(doc)}
+                                                             title="Ver detalle"
+                                                             style={{ background: 'rgba(59,130,246,0.1)', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '6px 12px', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', fontWeight: 700 }}
+                                                         >
+                                                             <Eye size={14} /> Ver
+                                                         </button>
+                                                     </td>
+                                                 </motion.tr>
+                                             );
+                                         })}
+                                     </tbody>
+                                 </AnimatePresence>
+                             </table>
+                         </div>
+                     )}
+
+                     {/* Paginación */}
+                     {totalPages > 1 && (
+                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border-color)' }}>
+                             <span style={{ fontSize: '0.82rem', color: 'var(--text-sec)' }}>
+                                 Página {currentPage} de {totalPages} — {filtered.length} documentos
+                             </span>
+                             <div style={{ display: 'flex', gap: 8 }}>
+                                 <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="btn" style={{ padding: '8px 14px', borderRadius: 12, opacity: currentPage === 1 ? 0.4 : 1 }}>
+                                     <ChevronLeft size={16} />
+                                 </button>
+                                 <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="btn btn-primary" style={{ padding: '8px 14px', borderRadius: 12, opacity: currentPage === totalPages ? 0.4 : 1 }}>
+                                     <ChevronRight size={16} />
+                                 </button>
+                             </div>
+                         </div>
+                     )}
+                 </motion.div>
+             )}
+
+             {/* ─── MODAL VER DETALLE ─── */}
+             <AnimatePresence>
+                 {viewingDoc && (
+                     <AnuladoDetailModal
+                         doc={viewingDoc}
+                         onClose={() => setViewingDoc(null)}
+                     />
+                 )}
+             </AnimatePresence>
+         </div>
+     );
+ };

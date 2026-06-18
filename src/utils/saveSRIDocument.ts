@@ -1,6 +1,7 @@
 import { supabase } from '../services/supabase';
 import { type SRIParsedData } from './sriParser';
 import { CATALOGO_RETENCIONES_RENTA, inferSustentoTributario } from './sriCatalog';
+import { getNextNumeroComprobante } from '../services/xmlSaveService';
 
 export interface SaveSRIParams {
   parsedData: SRIParsedData;
@@ -37,11 +38,12 @@ export async function saveSRIDocument(p: SaveSRIParams): Promise<void> {
       : `NC: ${parsedData.razonSocialEmisor} - Mod: ${parsedData.numDocModificado}`;
 
   // 1. Transacción
+  const nextNum = await getNextNumeroComprobante(empresaId);
   const { data: tx, error: tErr } = await supabase.from('transacciones').insert({
     fecha: new Date(parsedData.fechaEmision.split('/').reverse().join('-')),
     concepto,
     tipo_comprobante: isFactura ? 'Factura' : isRetencion ? 'Comprobante de Retención' : 'Nota de Crédito',
-    numero_comprobante: parsedData.numeroComprobante,
+    numero_comprobante: nextNum,
     id_entidad: entidadId,
     xml_referencia: parsedData.claveAcceso,
     id_empresa: empresaId,

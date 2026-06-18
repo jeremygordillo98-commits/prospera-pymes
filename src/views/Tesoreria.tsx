@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Wallet, Landmark, ArrowDownCircle, ArrowUpCircle, Repeat, Loader2, CheckCircle2, Building2, Banknote } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getNextNumeroComprobante } from '../services/xmlSaveService';
 
 const BANCOS_ECUADOR = [
   // Bancos Privados
@@ -86,7 +87,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
       const [cuentasRes, docsRes, movRes, entRes, pcRes, txAnuladasRes] = await Promise.all([
         supabase.from('cuentas_financieras').select('*').eq('id_empresa', empresaId).order('nombre'),
         supabase.from('tesoreria_documentos').select('id,fecha_emision,fecha_vencimiento,tipo_documento,referencia,concepto,saldo_pendiente,total,estado,entidades(id,razon_social)').eq('id_empresa', empresaId).order('fecha_emision', { ascending: false }),
-        supabase.from('tesoreria_movimientos').select('id,fecha,tipo_movimiento,concepto,monto,estado,referencia,cuenta_financiera:cuentas_financieras(nombre),entidades(id,razon_social),documento:tesoreria_documentos(referencia,concepto)').eq('id_empresa', empresaId).order('fecha', { ascending: false }).limit(30),
+        supabase.from('tesoreria_movimientos').select('id,fecha,tipo_movimiento,concepto,monto,estado,referencia,cuenta_financiera:cuentas_financieras(nombre),entidades(id,razon_social),documento:tesoreria_documentos(referencia,concepto,total,fecha_vencimiento)').eq('id_empresa', empresaId).order('fecha', { ascending: false }).limit(30),
         supabase.from('entidades').select('id,razon_social,tipo_entidad').eq('id_empresa', empresaId).order('razon_social'),
         supabase.from('plan_cuentas').select('id, codigo_cuenta, nombre').eq('id_empresa', empresaId).order('codigo_cuenta'),
         // Traer todas las transacciones anuladas para poder excluir sus facturas de tesorería
@@ -125,8 +126,13 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
   const movimientos = data?.movimientos || [];
   const entities = data?.entities || [];
   const cuentasContables = data?.cuentasContables || [];
-  // Filtrar de las cuentas contables solo las que son de activo corriente (Bancos/Caja)
-  const cuentasContablesBancos = cuentasContables.filter((c: any) => c.codigo_cuenta?.startsWith('1.1.1') || c.nombre?.toLowerCase().includes('banco') || c.nombre?.toLowerCase().includes('caja'));
+  // Filtrar de las cuentas contables solo las que son de activo corriente (Bancos/Caja/Fondos)
+  const cuentasContablesBancos = cuentasContables.filter((c: any) => 
+    c.codigo_cuenta?.startsWith('1.1.1') || 
+    c.nombre?.toLowerCase().includes('banco') || 
+    c.nombre?.toLowerCase().includes('caja') ||
+    c.nombre?.toLowerCase().includes('fondo')
+  );
 
 
 
@@ -216,6 +222,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
     setSaving(true);
     setMessage('');
     try {
+      const target = movForm.id_documento ? documentos.find((d) => d.id === movForm.id_documento) : null;
       const monto = parseFloat(movForm.monto) || 0;
       const { data: mov, error } = await supabase.from('tesoreria_movimientos').insert({
         id_empresa: empresaId,
@@ -232,13 +239,10 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
       }).select('id_documento').single();
       if (error) throw error;
 
-      if (mov?.id_documento) {
-        const target = documentos.find((d) => d.id === mov.id_documento);
-        if (target) {
-          const nuevoSaldo = Math.max(0, Number(target.saldo_pendiente || 0) - monto);
-          const estado = nuevoSaldo === 0 ? 'Liquidado' : 'Parcial';
-          await supabase.from('tesoreria_documentos').update({ saldo_pendiente: nuevoSaldo, estado }).eq('id', target.id);
-        }
+      if (mov?.id_documento && target) {
+        const nuevoSaldo = Math.max(0, Number(target.saldo_pendiente || 0) - monto);
+        const estado = nuevoSaldo === 0 ? 'Liquidado' : 'Parcial';
+        await supabase.from('tesoreria_documentos').update({ saldo_pendiente: nuevoSaldo, estado }).eq('id', target.id);
       }
 
       // AUTOMATIZACIÓN DE ASIENTO CONTABLE
@@ -247,32 +251,78 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
         const { data: qCuentas } = await supabase.from('plan_cuentas').select('id, codigo_cuenta, nombre').eq('id_empresa', empresaId);
         if (qCuentas) {
           const ctasBancos = qCuentas.filter(c => c.codigo_cuenta.startsWith('1.1.1') || c.nombre.toLowerCase().includes('banco') || c.nombre.toLowerCase().includes('caja'));
-          const ctasCobrar = qCuentas.filter(c => c.codigo_cuenta.startsWith('1.1.2') || c.nombre.toLowerCase().includes('cobrar') || c.nombre.toLowerCase().includes('cliente'));
-          const ctasPagar = qCuentas.filter(c => c.codigo_cuenta.startsWith('2.1.1') || c.nombre.toLowerCase().includes('pagar') || c.nombre.toLowerCase().includes('proveedor'));
+          const ctasCobrar = qCuentas.filter(c => c.codigo_cuenta.startsWith('1') && !c.codigo_cuenta.startsWith('1.1.1') && (c.codigo_cuenta.startsWith('1.1.2') || c.nombre.toLowerCase().includes('cobrar') || c.nombre.toLowerCase().includes('cliente')));
+          const ctasPagar = qCuentas.filter(c => c.codigo_cuenta.startsWith('2') && (c.codigo_cuenta.startsWith('2.1') || c.nombre.toLowerCase().includes('pagar') || c.nombre.toLowerCase().includes('proveedor')));
 
           const bancoId = movForm.id_cuenta_banco_contable || ctasBancos[0]?.id;
-          const cxcId = ctasCobrar[0]?.id;
-          const cxpId = ctasPagar[0]?.id;
+          let cxcId = ctasCobrar[0]?.id;
+          let cxpId = ctasPagar[0]?.id;
+
+          // Si el documento origen es de un XML (origen !== 'Manual'),
+          // intentamos buscar la transacción contable de la factura para usar
+          // exactamente la misma cuenta de Proveedor / Cliente que se utilizó.
+          if (target && target.origen !== 'Manual') {
+            try {
+              const { data: invTx } = await supabase
+                .from('transacciones')
+                .select(`
+                  id,
+                  movimientos (
+                    id_cuenta,
+                    debe,
+                    haber
+                  )
+                `)
+                .eq('id_empresa', empresaId)
+                .eq('id_entidad', target.id_entidad)
+                .like('concepto', `%${target.referencia}%`)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (invTx && invTx.movimientos) {
+                if (movForm.tipo_movimiento === 'Pago') {
+                  // Pago: la cuenta contable del proveedor es la que se acreditó en la compra (haber > 0)
+                  const matchedAcc = invTx.movimientos.find((m: any) => m.haber > 0);
+                  if (matchedAcc) {
+                    cxpId = matchedAcc.id_cuenta;
+                  }
+                } else if (movForm.tipo_movimiento === 'Cobro') {
+                  // Cobro: la cuenta contable del cliente es la que se debitó en la venta (debe > 0)
+                  const matchedAcc = invTx.movimientos.find((m: any) => m.debe > 0);
+                  if (matchedAcc) {
+                    cxcId = matchedAcc.id_cuenta;
+                  }
+                }
+              }
+            } catch (err) {
+              console.error('Error al recuperar la cuenta contable de la factura original:', err);
+            }
+          }
 
           if (bancoId && ((movForm.tipo_movimiento === 'Cobro' && cxcId) || (movForm.tipo_movimiento === 'Pago' && cxpId))) {
+            const nextNum = await getNextNumeroComprobante(empresaId);
+            const refText = movForm.referencia ? ` (Ref: ${movForm.referencia})` : '';
+            const conceptoAsiento = (movForm.concepto || `${movForm.tipo_movimiento} de Tesorería`) + refText;
+
             const { data: transaccion } = await supabase.from('transacciones').insert({
               id_empresa: empresaId,
               id_usuario: user.id,
               fecha: movForm.fecha,
-              concepto: movForm.concepto || `${movForm.tipo_movimiento} de Tesorería`,
+              concepto: conceptoAsiento,
               tipo_comprobante: movForm.tipo_movimiento === 'Cobro' ? 'Ingreso' : 'Egreso',
-              numero_comprobante: movForm.referencia || `TES-${Date.now().toString().slice(-6)}`,
+              numero_comprobante: nextNum,
               id_entidad: movForm.id_entidad || null
             }).select('id').single();
 
             if (transaccion) {
               const payloadMovimientos = [];
               if (movForm.tipo_movimiento === 'Cobro') {
-                payloadMovimientos.push({ id_transaccion: transaccion.id, id_cuenta: bancoId, debe: monto, haber: 0 });
-                payloadMovimientos.push({ id_transaccion: transaccion.id, id_cuenta: cxcId, debe: 0, haber: monto });
+                payloadMovimientos.push({ id_transaccion: transaccion.id, id_cuenta: bancoId, debe: monto, haber: 0, id_empresa: empresaId });
+                payloadMovimientos.push({ id_transaccion: transaccion.id, id_cuenta: cxcId, debe: 0, haber: monto, id_empresa: empresaId });
               } else {
-                payloadMovimientos.push({ id_transaccion: transaccion.id, id_cuenta: cxpId, debe: monto, haber: 0 });
-                payloadMovimientos.push({ id_transaccion: transaccion.id, id_cuenta: bancoId, debe: 0, haber: monto });
+                payloadMovimientos.push({ id_transaccion: transaccion.id, id_cuenta: cxpId, debe: monto, haber: 0, id_empresa: empresaId });
+                payloadMovimientos.push({ id_transaccion: transaccion.id, id_cuenta: bancoId, debe: 0, haber: monto, id_empresa: empresaId });
               }
               await supabase.from('movimientos').insert(payloadMovimientos);
             }
@@ -286,6 +336,108 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
     } catch (error: any) {
       setMessage(error.message || 'No se pudo registrar el movimiento.');
     } finally { setSaving(false); }
+  };
+
+  const handleAnularMovimientoTesoreria = async (movId: string) => {
+    const reason = prompt("Por favor, ingresa el motivo de la anulación:");
+    if (reason === null) return;
+    
+    setSaving(true);
+    setMessage('');
+    try {
+      const { data: mov, error: fError } = await supabase
+        .from('tesoreria_movimientos')
+        .select('*, entidades(razon_social)')
+        .eq('id', movId)
+        .single();
+      if (fError || !mov) throw new Error("No se pudo encontrar el movimiento de tesorería.");
+
+      const { error: updMovErr } = await supabase
+        .from('tesoreria_movimientos')
+        .update({ estado: 'Anulado' })
+        .eq('id', movId);
+      if (updMovErr) throw updMovErr;
+
+      if (mov.id_documento) {
+        const { data: doc } = await supabase
+          .from('tesoreria_documentos')
+          .select('saldo_pendiente, total, estado')
+          .eq('id', mov.id_documento)
+          .single();
+        if (doc) {
+          const nuevoSaldo = Math.min(Number(doc.total), Number(doc.saldo_pendiente || 0) + Number(mov.monto));
+          const nuevoEstado = nuevoSaldo === Number(doc.total) ? 'Pendiente' : 'Parcial';
+          await supabase
+            .from('tesoreria_documentos')
+            .update({ saldo_pendiente: nuevoSaldo, estado: nuevoEstado })
+            .eq('id', mov.id_documento);
+        }
+      }
+
+      let txId = null;
+      let txConcepto = '';
+      
+      if (mov.referencia) {
+        const { data: txs } = await supabase
+          .from('transacciones')
+          .select('id, concepto, numero_comprobante')
+          .eq('id_empresa', empresaId)
+          .eq('numero_comprobante', mov.referencia);
+        if (txs && txs.length > 0) {
+          txId = txs[0].id;
+          txConcepto = txs[0].concepto;
+        }
+      }
+      
+      if (!txId) {
+        const { data: txs } = await supabase
+          .from('transacciones')
+          .select('id, concepto, numero_comprobante, movimientos(debe, haber)')
+          .eq('id_empresa', empresaId)
+          .eq('id_entidad', mov.id_entidad)
+          .eq('fecha', mov.fecha)
+          .in('tipo_comprobante', ['Ingreso', 'Egreso']);
+        
+        if (txs) {
+          const matchedTx = txs.find(t => 
+            (t.movimientos || []).some((m: any) => m.debe === Number(mov.monto) || m.haber === Number(mov.monto))
+          );
+          if (matchedTx) {
+            txId = matchedTx.id;
+            txConcepto = matchedTx.concepto;
+          }
+        }
+      }
+
+      if (txId) {
+        const ahora = new Date().toLocaleString('es-EC', { 
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit' 
+        });
+        
+        const cleanConcept = txConcepto.startsWith('[ANULADO]') ? txConcepto.replace(/^\[ANULADO\]\s*/, '') : txConcepto;
+        const valOrig = { total: Number(mov.monto) };
+        const newConcepto = `[ANULADO] Motivo: ${reason || 'No especificado'} | Fecha: ${ahora} | ${cleanConcept} | ValoresOriginales: ${JSON.stringify(valOrig)}`;
+        
+        await supabase
+          .from('transacciones')
+          .update({ concepto: newConcepto, tipo_comprobante: 'Anulado' })
+          .eq('id', txId);
+
+        await supabase
+          .from('movimientos')
+          .delete()
+          .eq('id_transaccion', txId);
+      }
+
+      setMessage('Movimiento anulado en tesorería y contabilidad.');
+      await queryClient.invalidateQueries({ queryKey: ['tesoreria', empresaId] });
+    } catch (err: any) {
+      console.error(err);
+      setMessage(err.message || 'No se pudo anular el movimiento.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // --- RENDERIZADO POR MODOS ---
@@ -608,7 +760,25 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                              <div>
                                 <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Caja / Banco de Tesorería (Opcional)</label>
-                                <select value={movForm.id_cuenta_financiera} onChange={e => setMovForm({...movForm, id_cuenta_financiera: e.target.value})} style={inputStyle}>
+                                <select value={movForm.id_cuenta_financiera} onChange={e => {
+                                    const fid = e.target.value;
+                                    const selectedFinCta = cuentas.find(c => c.id === fid);
+                                    let matchedContableId = movForm.id_cuenta_banco_contable;
+                                    if (selectedFinCta) {
+                                        const match = cuentasContablesBancos.find((cc: any) => 
+                                            cc.nombre.toLowerCase().includes(selectedFinCta.nombre.toLowerCase()) ||
+                                            selectedFinCta.nombre.toLowerCase().includes(cc.nombre.toLowerCase())
+                                        );
+                                        if (match) {
+                                            matchedContableId = match.id;
+                                        }
+                                    }
+                                    setMovForm({
+                                        ...movForm, 
+                                        id_cuenta_financiera: fid,
+                                        id_cuenta_banco_contable: matchedContableId
+                                    });
+                                }} style={inputStyle}>
                                     <option value="">No deducir de panel</option>
                                     {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                                 </select>
@@ -647,6 +817,182 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
                 </form>
             </div>
         </section>
+
+        {/* Historial de Movimientos de Tesorería */}
+        <div className="glass-card" style={{ padding: 0, overflow: 'hidden', marginTop: 24 }}>
+          <div style={{ padding: 20, borderBottom: '1px solid var(--border-color)' }}>
+            <h3 style={{ margin: 0, fontSize: '1.2rem' }}>
+              Historial de {isCobro ? 'Cobros' : 'Pagos'} Aplicados
+            </h3>
+            <p className="text-sec" style={{ fontSize: '0.85rem' }}>
+              Últimas operaciones registradas. Puedes anular cualquier registro erróneo aquí.
+            </p>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th style={{ padding: '12px 16px' }}>{isCobro ? 'Fecha de Cobro' : 'Fecha de Pago'}</th>
+                  <th style={{ padding: '12px 16px' }}>Tercero y Documento</th>
+                  <th style={{ padding: '12px 16px' }}>Factura Original</th>
+                  <th style={{ padding: '12px 16px' }}>Detalles del {isCobro ? 'Cobro' : 'Pago'}</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Monto Aplicado</th>
+                  <th style={{ padding: '12px 16px', textAlign: 'center' }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {movimientos
+                  .filter(m => m.tipo_movimiento === (isCobro ? 'Cobro' : 'Pago') && m.estado !== 'Anulado')
+                  .map(mov => {
+                    const doc = mov.documento;
+                    const ent = mov.entidades;
+                    
+                    const formatEcuadorianDate = (dateStr: string) => {
+                      if (!dateStr) return '—';
+                      try {
+                        const parts = dateStr.split('-');
+                        if (parts.length === 3) {
+                          return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                        }
+                      } catch {}
+                      return dateStr;
+                    };
+
+                    return (
+                      <tr key={mov.id}>
+                        {/* Fecha del Movimiento */}
+                        <td style={{ padding: '16px', fontSize: '0.88rem', fontWeight: 600 }}>
+                          {formatEcuadorianDate(mov.fecha)}
+                        </td>
+                        
+                        {/* Tercero y Documento */}
+                        <td style={{ padding: '16px' }}>
+                          <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--text-main)' }}>
+                            {ent?.razon_social || 'N/A'}
+                          </div>
+                          <div style={{ marginTop: 4 }}>
+                            {doc ? (
+                              <span style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                gap: 4, 
+                                fontSize: '0.75rem', 
+                                color: 'var(--primary)', 
+                                backgroundColor: 'rgba(99, 102, 241, 0.1)', 
+                                border: '1px solid rgba(99, 102, 241, 0.2)', 
+                                padding: '2px 8px', 
+                                borderRadius: 12,
+                                fontFamily: 'monospace',
+                                fontWeight: 700
+                              }}>
+                                Factura: #{doc.referencia}
+                              </span>
+                            ) : (
+                              <span style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                gap: 4, 
+                                fontSize: '0.72rem', 
+                                color: 'var(--text-sec)', 
+                                backgroundColor: 'rgba(255,255,255,0.05)', 
+                                padding: '2px 8px', 
+                                borderRadius: 12,
+                                fontStyle: 'italic'
+                              }}>
+                                Anticipo / Sin Factura
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Factura Original */}
+                        <td style={{ padding: '16px', fontSize: '0.85rem' }}>
+                          {doc ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              <div>
+                                <span style={{ color: 'var(--text-sec)' }}>Total Factura:</span>{' '}
+                                <strong style={{ color: 'var(--text-main)' }}>
+                                  ${Number(doc.total || 0).toFixed(2)}
+                                </strong>
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-sec)' }}>
+                                Vencimiento: <span style={{ fontWeight: 600, color: '#f59e0b' }}>{formatEcuadorianDate(doc.fecha_vencimiento)}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--text-sec)', fontStyle: 'italic' }}>—</span>
+                          )}
+                        </td>
+
+                        {/* Detalles del Pago */}
+                        <td style={{ padding: '16px', fontSize: '0.85rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <div>
+                              <span style={{ color: 'var(--text-sec)' }}>Concepto:</span>{' '}
+                              <span style={{ color: 'var(--text-main)', fontStyle: mov.concepto ? 'normal' : 'italic' }}>
+                                {mov.concepto || '—'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.78rem' }}>
+                              <span style={{ color: 'var(--text-sec)' }}>Ref. Pago / N° Documento:</span>{' '}
+                              <strong style={{ fontFamily: 'monospace', color: 'var(--text-main)' }}>
+                                {mov.referencia || '—'}
+                              </strong>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Monto Aplicado */}
+                        <td style={{ padding: '16px', textAlign: 'right' }}>
+                          <div style={{ 
+                            fontWeight: 900, 
+                            fontSize: '1.05rem', 
+                            color: isCobro ? 'var(--success)' : 'var(--error)' 
+                          }}>
+                            {isCobro ? '+' : '-'}${Number(mov.monto).toFixed(2)}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-sec)', textTransform: 'uppercase', fontWeight: 700, marginTop: 2 }}>
+                            {isCobro ? 'Monto Cobrado' : 'Monto Pagado'}
+                          </div>
+                        </td>
+
+                        {/* Acciones */}
+                        <td style={{ padding: '16px', textAlign: 'center' }}>
+                          <button
+                            className="btn"
+                            style={{ 
+                              padding: '8px 16px', 
+                              background: 'rgba(239,68,68,0.1)', 
+                              color: 'var(--error)', 
+                              border: 'none', 
+                              borderRadius: 10, 
+                              cursor: 'pointer', 
+                              fontWeight: 'bold', 
+                              fontSize: '0.8rem',
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.2)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
+                            onClick={() => handleAnularMovimientoTesoreria(mov.id)}
+                            disabled={saving}
+                          >
+                            Anular
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                {movimientos.filter(m => m.tipo_movimiento === (isCobro ? 'Cobro' : 'Pago') && m.estado !== 'Anulado').length === 0 && (
+                  <tr>
+                    <td colSpan={6} style={{ padding: 32, textAlign: 'center', color: 'var(--text-sec)' }}>
+                      Sin movimientos recientes de {isCobro ? 'cobro' : 'pago'} aplicados.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
     </div>
     );
   };

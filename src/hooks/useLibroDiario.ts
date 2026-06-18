@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../services/supabase';
 import { generatePDFReport, generateLibroDiarioPDF } from '../utils/pdfGenerator';
+import { getNextNumeroComprobante } from '../services/xmlSaveService';
 
 export interface Movement {
   id: string;
@@ -455,6 +456,230 @@ export const useLibroDiario = ({ empresaId, activeView }: UseLibroDiarioProps) =
     await generateLibroDiarioPDF(empresaId, 'Libro Diario General', subtitle, filteredTransactions);
   };
 
+  const [reparing, setReparing] = useState(false);
+
+  const emptyTxsCount = useMemo(() => {
+    return filteredTransactions.filter(tx => 
+      tx.movimientos.length === 0 && 
+      (tx.concepto.includes('de Tesorería') || tx.concepto.includes('Pago CxC') || tx.tipo_comprobante === 'Egreso' || tx.tipo_comprobante === 'Ingreso')
+    ).length;
+  }, [filteredTransactions]);
+
+  const incorrectTxsCount = useMemo(() => {
+    return filteredTransactions.filter(tx => {
+      if (tx.movimientos.length !== 2) return false;
+      const codes = tx.movimientos.map(m => m.plan_cuentas?.codigo_cuenta);
+      return codes.includes('1.1.1') && codes.includes('1.1.4.3');
+    }).length;
+  }, [filteredTransactions]);
+
+  const repararAsientosTesoreria = async () => {
+    setReparing(true);
+    try {
+      const emptyTxs = transactions.filter(tx => 
+        tx.movimientos.length === 0 && 
+        (tx.concepto.includes('de Tesorería') || tx.concepto.includes('Pago CxC') || tx.tipo_comprobante === 'Egreso' || tx.tipo_comprobante === 'Ingreso')
+      );
+
+      const incorrectTxs = transactions.filter(tx => {
+        if (tx.movimientos.length !== 2) return false;
+        const codes = tx.movimientos.map(m => m.plan_cuentas?.codigo_cuenta);
+        return codes.includes('1.1.1') && codes.includes('1.1.4.3');
+      });
+
+      if (emptyTxs.length === 0 && incorrectTxs.length === 0) {
+        showAlert("No se encontraron asientos de tesorería vacíos ni asientos con cuentas incorrectas para reparar.", "info");
+        return;
+      }
+
+      const { data: qCuentas } = await supabase.from('plan_cuentas').select('id, codigo_cuenta, nombre').eq('id_empresa', empresaId);
+      if (!qCuentas || qCuentas.length === 0) {
+        showAlert("No se pudo obtener el plan de cuentas de la empresa.", "error");
+        return;
+      }
+
+      const ctasBancos = qCuentas.filter(c => c.codigo_cuenta.startsWith('1.1.1') || c.nombre.toLowerCase().includes('banco') || c.nombre.toLowerCase().includes('caja'));
+      const ctasCobrar = qCuentas.filter(c => c.codigo_cuenta.startsWith('1.1.2') || c.nombre.toLowerCase().includes('cobrar') || c.nombre.toLowerCase().includes('cliente'));
+      const ctasPagar = qCuentas.filter(c => c.codigo_cuenta.startsWith('2.1.1') || c.nombre.toLowerCase().includes('pagar') || c.nombre.toLowerCase().includes('proveedor'));
+
+      const defaultBancoId = ctasBancos[0]?.id;
+      const cxcId = ctasCobrar[0]?.id;
+      const cxpId = ctasPagar[0]?.id;
+
+      let reparadosCount = 0;
+      let corregidosCount = 0;
+
+      // 1. REPARACIÓN DE ASIENTOS VACÍOS
+      for (const tx of emptyTxs) {
+        let { data: movsTesoreria } = await supabase
+          .from('tesoreria_movimientos')
+          .select('id, monto, tipo_movimiento, referencia, id_cuenta_financiera')
+          .eq('id_empresa', empresaId)
+          .eq('id_entidad', tx.id_entidad)
+          .eq('fecha', tx.fecha);
+
+        if (!movsTesoreria || movsTesoreria.length === 0) {
+          const { data: movsByRef } = await supabase
+            .from('tesoreria_movimientos')
+            .select('id, monto, tipo_movimiento, referencia, id_cuenta_financiera')
+            .eq('id_empresa', empresaId)
+            .eq('referencia', tx.numero_comprobante);
+          movsTesoreria = movsByRef;
+        }
+
+        if (movsTesoreria && movsTesoreria.length > 0) {
+          const tm = movsTesoreria[0];
+          const monto = Number(tm.monto) || 0;
+          
+          let bancoId = defaultBancoId;
+          if (tm.id_cuenta_financiera) {
+            const { data: ctaFin } = await supabase.from('cuentas_financieras').select('nombre').eq('id', tm.id_cuenta_financiera).single();
+            if (ctaFin) {
+              const matchedCta = qCuentas.find(c => c.nombre.toLowerCase().includes(ctaFin.nombre.toLowerCase()));
+              if (matchedCta) bancoId = matchedCta.id;
+            }
+          }
+
+          if (bancoId && ((tm.tipo_movimiento === 'Cobro' && cxcId) || (tm.tipo_movimiento === 'Pago' && cxpId))) {
+            const payloadMovimientos = [];
+            if (tm.tipo_movimiento === 'Cobro') {
+              payloadMovimientos.push({ id_transaccion: tx.id, id_cuenta: bancoId, debe: monto, haber: 0, id_empresa: empresaId });
+              payloadMovimientos.push({ id_transaccion: tx.id, id_cuenta: cxcId, debe: 0, haber: monto, id_empresa: empresaId });
+            } else {
+              payloadMovimientos.push({ id_transaccion: tx.id, id_cuenta: cxpId, debe: monto, haber: 0, id_empresa: empresaId });
+              payloadMovimientos.push({ id_transaccion: tx.id, id_cuenta: bancoId, debe: 0, haber: monto, id_empresa: empresaId });
+            }
+
+            const { error: insertError } = await supabase.from('movimientos').insert(payloadMovimientos);
+            if (!insertError) {
+              reparadosCount++;
+              
+              if (!/^\d+$/.test(tx.numero_comprobante)) {
+                const cleanNum = await getNextNumeroComprobante(empresaId);
+                const refText = ` (Ref: ${tx.numero_comprobante})`;
+                const newConcepto = tx.concepto.includes(tx.numero_comprobante) ? tx.concepto : tx.concepto + refText;
+                
+                await supabase.from('transacciones')
+                  .update({ numero_comprobante: cleanNum, concepto: newConcepto })
+                  .eq('id', tx.id);
+              }
+            }
+          }
+        }
+      }
+
+      // 2. CORRECCIÓN DE ASIENTOS CON CUENTAS INCORRECTAS (1.1.1 y 1.1.4.3)
+      for (const tx of incorrectTxs) {
+        const mov111 = tx.movimientos.find(m => m.plan_cuentas?.codigo_cuenta === '1.1.1');
+        const mov1143 = tx.movimientos.find(m => m.plan_cuentas?.codigo_cuenta === '1.1.4.3');
+
+        if (!mov111 || !mov1143) continue;
+
+        // Buscar Fondo Rotativo (1.1.1.4)
+        let correctBancoId = qCuentas.find(c => c.codigo_cuenta === '1.1.1.4')?.id;
+        if (!correctBancoId) {
+          correctBancoId = qCuentas.find(c => c.nombre.toLowerCase().includes('fondo rotativo'))?.id;
+        }
+        if (!correctBancoId) {
+          correctBancoId = qCuentas.find(c => c.codigo_cuenta.startsWith('1.1.1.'))?.id || defaultBancoId;
+        }
+
+        // Buscar la cuenta contable correcta del proveedor
+        let correctSupplierId = null;
+
+        // Intentar obtener la cuenta contable de la factura original
+        let { data: movsTesoreria } = await supabase
+          .from('tesoreria_movimientos')
+          .select('id, id_documento, monto, tipo_movimiento')
+          .eq('id_empresa', empresaId)
+          .eq('id_entidad', tx.id_entidad)
+          .eq('fecha', tx.fecha);
+
+        if (!movsTesoreria || movsTesoreria.length === 0) {
+          const { data: movsByRef } = await supabase
+            .from('tesoreria_movimientos')
+            .select('id, id_documento, monto, tipo_movimiento')
+            .eq('id_empresa', empresaId)
+            .eq('referencia', tx.numero_comprobante);
+          movsTesoreria = movsByRef;
+        }
+
+        if (movsTesoreria && movsTesoreria.length > 0 && movsTesoreria[0].id_documento) {
+          const { data: doc } = await supabase
+            .from('tesoreria_documentos')
+            .select('id, referencia, origen, id_entidad')
+            .eq('id', movsTesoreria[0].id_documento)
+            .single();
+
+          if (doc && doc.origen !== 'Manual' && doc.referencia) {
+            const { data: invTx } = await supabase
+              .from('transacciones')
+              .select(`
+                id,
+                movimientos (
+                  id_cuenta,
+                  debe,
+                  haber
+                )
+              `)
+              .eq('id_empresa', empresaId)
+              .eq('id_entidad', doc.id_entidad)
+              .like('concepto', `%${doc.referencia}%`)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (invTx && invTx.movimientos) {
+              const matchedAcc = invTx.movimientos.find((m: any) => m.haber > 0);
+              if (matchedAcc) {
+                correctSupplierId = matchedAcc.id_cuenta;
+              }
+            }
+          }
+        }
+
+        if (!correctSupplierId) {
+          const ctasPagar = qCuentas.filter(c => 
+            c.codigo_cuenta.startsWith('2') && 
+            (c.codigo_cuenta.startsWith('2.1') || c.nombre.toLowerCase().includes('pagar') || c.nombre.toLowerCase().includes('proveedor'))
+          );
+          correctSupplierId = ctasPagar[0]?.id || cxpId;
+        }
+
+        if (correctBancoId && correctSupplierId) {
+          const { error: err1 } = await supabase
+            .from('movimientos')
+            .update({ id_cuenta: correctBancoId })
+            .eq('id', mov111.id);
+
+          const { error: err2 } = await supabase
+            .from('movimientos')
+            .update({ id_cuenta: correctSupplierId })
+            .eq('id', mov1143.id);
+
+          if (!err1 && !err2) {
+            corregidosCount++;
+          }
+        }
+      }
+
+      if (reparadosCount > 0 || corregidosCount > 0) {
+        let msg = 'Se completó la reparación de asientos:';
+        if (reparadosCount > 0) msg += `\n- ${reparadosCount} asientos vacíos reparados.`;
+        if (corregidosCount > 0) msg += `\n- ${corregidosCount} asientos con cuentas incorrectas corregidos.`;
+        showAlert(msg, "success");
+        fetchTransactions();
+      } else {
+        showAlert("No se pudieron reparar los asientos de tesorería. Asegúrate de tener cuentas contables de banco y proveedores parametrizadas.", "warning");
+      }
+    } catch (err: any) {
+      console.error("Error al reparar asientos:", err);
+      showAlert(`Error en reparación: ${err.message}`, "error");
+    } finally {
+      setReparing(false);
+    }
+  };
+
   return {
     loading,
     expandedTxs,
@@ -476,6 +701,10 @@ export const useLibroDiario = ({ empresaId, activeView }: UseLibroDiarioProps) =
     exportToExcel,
     handleExportTxPDF,
     exportLibroDiarioPDF,
-    showAlert
+    showAlert,
+    repararAsientosTesoreria,
+    reparing,
+    emptyTxsCount,
+    incorrectTxsCount
   };
 };
