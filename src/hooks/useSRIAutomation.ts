@@ -321,16 +321,24 @@ export const useSRIAutomation = ({ tipo, empresaId }: UseSRIAutomationProps) => 
     });
   };
 
-  // Filtrado
-  const filtered = documentos.filter(doc => {
-    const concepto = doc.transacciones?.concepto?.toLowerCase() || '';
-    const numero = doc.transacciones?.numero_comprobante?.toLowerCase() || '';
-    const entidad = doc.transacciones?.entidades?.nombre?.toLowerCase() || '';
-    const matchSearch = !search || concepto.includes(search.toLowerCase()) || numero.includes(search.toLowerCase()) || entidad.includes(search.toLowerCase());
-    const matchTipo = !filterTipo || doc.transacciones?.tipo_comprobante === filterTipo;
-    const notAnulado = doc.transacciones?.tipo_comprobante !== 'Anulado';
-    return matchSearch && matchTipo && notAnulado;
-  });
+  // Filtrado y ordenamiento: más reciente primero por fecha del documento
+  const filtered = documentos
+    .filter(doc => {
+      const concepto = doc.transacciones?.concepto?.toLowerCase() || '';
+      const numero = doc.transacciones?.numero_comprobante?.toLowerCase() || '';
+      const entidad = doc.transacciones?.entidades?.nombre?.toLowerCase() || '';
+      const matchSearch = !search || concepto.includes(search.toLowerCase()) || numero.includes(search.toLowerCase()) || entidad.includes(search.toLowerCase());
+      const matchTipo = !filterTipo || doc.transacciones?.tipo_comprobante === filterTipo;
+      const notAnulado = doc.transacciones?.tipo_comprobante !== 'Anulado';
+      return matchSearch && matchTipo && notAnulado;
+    })
+    .sort((a, b) => {
+      const fa = a.transacciones?.fecha ?? '';
+      const fb = b.transacciones?.fecha ?? '';
+      if (fb !== fa) return fb.localeCompare(fa); // más reciente primero
+      // desempate por created_at
+      return (b.created_at ?? '').localeCompare(a.created_at ?? '');
+    });
 
   return {
     isUploadOpen,
