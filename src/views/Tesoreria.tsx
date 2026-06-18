@@ -86,11 +86,8 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
 
   const [editingMov, setEditingMov] = useState<any | null>(null);
   const [searchEditBank, setSearchEditBank] = useState('');
-  const [searchEditContra, setSearchEditContra] = useState('');
   const [isEditBankOpen, setIsEditBankOpen] = useState(false);
-  const [isEditContraOpen, setIsEditContraOpen] = useState(false);
   const editBankRef = useRef<HTMLDivElement>(null);
-  const editContraRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading: loading } = useQuery({
     queryKey: ['tesoreria', empresaId],
@@ -181,32 +178,17 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
     return selected ? `${selected.codigo_cuenta} - ${selected.nombre}` : '';
   }, [cuentasContables, editingMov?.id_cuenta_banco_contable]);
 
-  const selectedEditContraText = useMemo(() => {
-    if (!editingMov) return '';
-    const selected = cuentasContables.find((c: any) => c.id === editingMov.id_cuenta_contrapartida_contable);
-    return selected ? `${selected.codigo_cuenta} - ${selected.nombre}` : '';
-  }, [cuentasContables, editingMov?.id_cuenta_contrapartida_contable]);
-
   useEffect(() => {
     if (!isEditBankOpen && editingMov) {
       setSearchEditBank(selectedEditBankText);
     }
   }, [selectedEditBankText, isEditBankOpen]);
 
-  useEffect(() => {
-    if (!isEditContraOpen && editingMov) {
-      setSearchEditContra(selectedEditContraText);
-    }
-  }, [selectedEditContraText, isEditContraOpen]);
-
   // Click outside listener for edit dropdowns
   useEffect(() => {
     const handleClickOutsideEdit = (event: MouseEvent) => {
       if (editBankRef.current && !editBankRef.current.contains(event.target as Node)) {
         setIsEditBankOpen(false);
-      }
-      if (editContraRef.current && !editContraRef.current.contains(event.target as Node)) {
-        setIsEditContraOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutsideEdit);
@@ -226,17 +208,6 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
     );
   }, [cuentasContables, searchEditBank, selectedEditBankText]);
 
-  const filteredEditContraCuentas = useMemo(() => {
-    if (!searchEditContra || searchEditContra === selectedEditContraText) {
-      return cuentasContables;
-    }
-    const query = searchEditContra.toLowerCase();
-    return cuentasContables.filter((c: any) =>
-      c.codigo_cuenta?.toLowerCase().includes(query) ||
-      c.nombre?.toLowerCase().includes(query)
-    );
-  }, [cuentasContables, searchEditContra, selectedEditContraText]);
-
   const handleOpenEditModal = async (mov: any) => {
     setSaving(true);
     try {
@@ -246,7 +217,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
       if (mov.referencia) {
         const { data: txs } = await supabase
           .from('transacciones')
-          .select('id, concepto, numero_comprobante, movimientos(id, id_cuenta, debe, haber, plan_cuentas(codigo_cuenta, nombre))')
+          .select('id, concepto, numero_comprobante, movimientos (id, id_cuenta, debe, haber, plan_cuentas (codigo_cuenta, nombre))')
           .eq('id_empresa', empresaId)
           .eq('numero_comprobante', mov.referencia);
         if (txs && txs.length > 0) {
@@ -258,7 +229,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
       if (!txId) {
         const { data: txs } = await supabase
           .from('transacciones')
-          .select('id, concepto, numero_comprobante, movimientos(id, id_cuenta, debe, haber, plan_cuentas(codigo_cuenta, nombre))')
+          .select('id, concepto, numero_comprobante, movimientos (id, id_cuenta, debe, haber, plan_cuentas (codigo_cuenta, nombre))')
           .eq('id_empresa', empresaId)
           .eq('id_entidad', mov.id_entidad)
           .eq('fecha', mov.fecha)
@@ -307,10 +278,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
       });
 
       const bCta = cuentasContables.find((c: any) => c.id === bankAccountId);
-      const cCta = cuentasContables.find((c: any) => c.id === contrapartidaAccountId);
-      
       setSearchEditBank(bCta ? `${bCta.codigo_cuenta} - ${bCta.nombre}` : '');
-      setSearchEditContra(cCta ? `${cCta.codigo_cuenta} - ${cCta.nombre}` : '');
       
     } catch (err) {
       console.error("Error al cargar transacción para editar:", err);
@@ -322,7 +290,15 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
 
   const handleGuardarEdicionMovimiento = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingMov || !editingMov.id_cuenta_banco_contable || !editingMov.id_cuenta_contrapartida_contable) return;
+    if (!editingMov) return;
+    if (!editingMov.id_cuenta_banco_contable) {
+      alert("Por favor, selecciona una cuenta contable de banco.");
+      return;
+    }
+    if (editingMov.txId && !editingMov.id_cuenta_contrapartida_contable) {
+      alert("No se pudo identificar la cuenta contable de contrapartida (proveedor/cliente) del asiento original.");
+      return;
+    }
 
     setSaving(true);
     setMessage('');
@@ -1611,87 +1587,6 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
                         </div>
 
                         <div>
-                            <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Cuenta Contable Proveedor/Cliente (Contrapartida)</label>
-                            <div ref={editContraRef} style={{ position: 'relative' }}>
-                                <input 
-                                    value={searchEditContra}
-                                    onChange={e => {
-                                            setSearchEditContra(e.target.value);
-                                            setIsEditContraOpen(true);
-                                    }}
-                                    onFocus={() => {
-                                            setSearchEditContra('');
-                                            setIsEditContraOpen(true);
-                                    }}
-                                    placeholder="Buscar cuenta contrapartida..."
-                                    style={inputStyle}
-                                    required={!editingMov.id_cuenta_contrapartida_contable}
-                                />
-                                <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.6, fontSize: '0.8rem', color: 'var(--text-sec)' }}>
-                                    ▼
-                                </span>
-                                
-                                {isEditContraOpen && (
-                                    <div style={{ 
-                                        position: 'absolute', 
-                                        top: '100%', 
-                                        left: 0, 
-                                        right: 0, 
-                                        maxHeight: '180px', 
-                                        overflowY: 'auto', 
-                                        background: '#0c101f', 
-                                        border: '1px solid var(--border-color)', 
-                                        borderRadius: '12px', 
-                                        marginTop: '4px', 
-                                        zIndex: 9999,
-                                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)'
-                                    }}>
-                                        {filteredEditContraCuentas.length === 0 ? (
-                                            <div style={{ padding: '10px 12px', color: 'var(--text-sec)', fontSize: '0.85rem' }}>No se encontraron cuentas</div>
-                                        ) : (
-                                            filteredEditContraCuentas.map((c: any) => {
-                                                const isSelected = c.id === editingMov.id_cuenta_contrapartida_contable;
-                                                return (
-                                                    <div 
-                                                        key={c.id}
-                                                        onClick={() => {
-                                                            setEditingMov({...editingMov, id_cuenta_contrapartida_contable: c.id});
-                                                            setIsEditContraOpen(false);
-                                                        }}
-                                                        style={{ 
-                                                            padding: '8px 12px', 
-                                                            cursor: 'pointer', 
-                                                            background: isSelected ? 'var(--primary-light)' : 'transparent',
-                                                            color: isSelected ? 'var(--primary)' : 'var(--text-main)',
-                                                            fontSize: '0.85rem',
-                                                            borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
-                                                            textAlign: 'left'
-                                                        }}
-                                                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }}
-                                                        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
-                                                    >
-                                                        {c.codigo_cuenta} - {c.nombre}
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Concepto</label>
-                            <input 
-                                value={editingMov.concepto} 
-                                onChange={e => setEditingMov({...editingMov, concepto: e.target.value})} 
-                                placeholder="Concepto del movimiento..." 
-                                style={inputStyle} 
-                                required 
-                            />
-                        </div>
-
-                        <div>
                             <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Referencia bancaria / Voucher</label>
                             <input 
                                 value={editingMov.referencia} 
@@ -1712,7 +1607,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
                             </button>
                             <button 
                                 type="submit" 
-                                disabled={saving || !editingMov.monto || !editingMov.id_cuenta_banco_contable || !editingMov.id_cuenta_contrapartida_contable} 
+                                disabled={saving || !editingMov.monto || !editingMov.id_cuenta_banco_contable} 
                                 className="btn btn-primary" 
                                 style={{ padding: '10px 24px', borderRadius: 10 }}
                             >
