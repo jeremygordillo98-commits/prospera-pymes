@@ -23,6 +23,14 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView 
     expandedTxs,
     filterDate,
     setFilterDate,
+    filterEntidad,
+    setFilterEntidad,
+    filterTipo,
+    setFilterTipo,
+    filterMontoMin,
+    setFilterMontoMin,
+    filterMontoMax,
+    setFilterMontoMax,
     annulModal,
     setAnnulModal,
     annulReasonInput,
@@ -46,6 +54,14 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView 
         filteredTransactionsLength={filteredTransactions.length}
         filterDate={filterDate}
         setFilterDate={setFilterDate}
+        filterEntidad={filterEntidad}
+        setFilterEntidad={setFilterEntidad}
+        filterTipo={filterTipo}
+        setFilterTipo={setFilterTipo}
+        filterMontoMin={filterMontoMin}
+        setFilterMontoMin={setFilterMontoMin}
+        filterMontoMax={filterMontoMax}
+        setFilterMontoMax={setFilterMontoMax}
         exportToExcel={exportToExcel}
         exportToPDF={exportLibroDiarioPDF}
       />
