@@ -91,12 +91,13 @@ export const useReportes = (empresaId: string) => {
     const load = async () => {
       setLoading(true);
       try {
-        const [accRes, movRes, carteraRes, tesoRes, sriRes] = await Promise.all([
+        const [accRes, movRes, carteraRes, tesoRes, sriRes, txAnuladasRes] = await Promise.all([
           supabase.from('plan_cuentas').select('id,codigo_cuenta,nombre,tipo').eq('id_empresa', empresaId).order('codigo_cuenta'),
           supabase.from('movimientos').select('id_cuenta,debe,haber,transacciones(fecha, entidades(id, ruc_cedula, razon_social))').eq('id_empresa', empresaId),
           supabase.from('tesoreria_documentos').select('id,fecha_emision,fecha_vencimiento,tipo_documento,referencia,concepto,saldo_pendiente,total,estado,entidades(id,razon_social,tipo_entidad,ruc_cedula)').eq('id_empresa', empresaId),
           supabase.from('tesoreria_movimientos').select('id,fecha,tipo_movimiento,concepto,monto,estado,referencia,cuentas_financieras(nombre),entidades(razon_social)').eq('id_empresa', empresaId),
-          supabase.from('documentos_sri').select('id, es_compra, base_12, base_0, monto_iva, retenciones_aplicadas, transacciones(fecha, concepto, tipo_comprobante, numero_comprobante, entidades(ruc_cedula, razon_social))').eq('id_empresa', empresaId)
+          supabase.from('documentos_sri').select('id, es_compra, base_12, base_0, monto_iva, retenciones_aplicadas, transacciones(fecha, concepto, tipo_comprobante, numero_comprobante, entidades(ruc_cedula, razon_social))').eq('id_empresa', empresaId),
+          supabase.from('transacciones').select('concepto').eq('id_empresa', empresaId).eq('tipo_comprobante', 'Anulado')
         ]);
 
         if (!accRes.error) setAccounts(accRes.data || []);
@@ -112,7 +113,16 @@ export const useReportes = (empresaId: string) => {
             };
           }));
         }
-        if (!carteraRes.error) setCarteraDocs(carteraRes.data as any || []);
+        if (!carteraRes.error) {
+          const refsAnuladas = new Set<string>();
+          (txAnuladasRes?.data || []).forEach((tx: any) => {
+            const match = (tx.concepto || '').match(/(\d{3}-\d{3}-\d{9})/);
+            if (match) refsAnuladas.add(match[1]);
+          });
+          const rawDocs = carteraRes.data as any || [];
+          const filteredDocs = rawDocs.filter((d: any) => !refsAnuladas.has(d.referencia));
+          setCarteraDocs(filteredDocs);
+        }
         if (!tesoRes.error) setTesoMovs(tesoRes.data as any || []);
         if (!sriRes.error) setSriDocs(sriRes.data as any || []);
 
