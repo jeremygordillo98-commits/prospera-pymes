@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Wallet, Landmark, ArrowDownCircle, ArrowUpCircle, Repeat, Loader2, CheckCircle2, Building2, Banknote } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -76,6 +76,9 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
     tipo_movimiento: mode === 'pagos' ? 'Pago' : 'Cobro',
     concepto: '', monto: '', id_cuenta_financiera: '', id_cuenta_banco_contable: '', id_entidad: '', id_documento: '', referencia: '', estado: 'Aplicado'
   });
+  const [searchAccount, setSearchAccount] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [docForm, setDocForm] = useState({
     tipo_documento: mode === 'pagos' ? 'Cuenta por pagar' : 'Cuenta por cobrar',
     fecha_emision: new Date().toISOString().slice(0, 10), fecha_vencimiento: '', id_entidad: '', concepto: '', referencia: '', total: ''
@@ -126,6 +129,43 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
   const movimientos = data?.movimientos || [];
   const entities = data?.entities || [];
   const cuentasContables = data?.cuentasContables || [];
+
+  // Synchronize search text with the selected account
+  const selectedAccountText = useMemo(() => {
+    const selected = cuentasContables.find((c: any) => c.id === movForm.id_cuenta_banco_contable);
+    return selected ? `${selected.codigo_cuenta} - ${selected.nombre}` : '';
+  }, [cuentasContables, movForm.id_cuenta_banco_contable]);
+
+  useEffect(() => {
+    if (!isDropdownOpen) {
+      setSearchAccount(selectedAccountText);
+    }
+  }, [selectedAccountText, isDropdownOpen]);
+
+  // Click outside listener for dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const filteredCuentasContables = useMemo(() => {
+    if (!searchAccount || searchAccount === selectedAccountText) {
+      return cuentasContables;
+    }
+    const query = searchAccount.toLowerCase();
+    return cuentasContables.filter((c: any) =>
+      c.codigo_cuenta?.toLowerCase().includes(query) ||
+      c.nombre?.toLowerCase().includes(query)
+    );
+  }, [cuentasContables, searchAccount, selectedAccountText]);
+
   // Filtrar de las cuentas contables solo las que son de activo corriente (Bancos/Caja/Fondos)
   const cuentasContablesBancos = cuentasContables.filter((c: any) => 
     c.codigo_cuenta?.startsWith('1.1.1') || 
@@ -785,10 +825,73 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
                             </div>
                             <div>
                                 <label className="text-sec" style={{ fontSize: '0.75rem', fontWeight: 800 }}>Cuenta Contable (Libro Diario)</label>
-                                <select value={movForm.id_cuenta_banco_contable} onChange={e => setMovForm({...movForm, id_cuenta_banco_contable: e.target.value})} style={inputStyle} required>
-                                    <option value="">Selecciona Banco Contable</option>
-                                    {cuentasContablesBancos.map((c: any) => <option key={c.id} value={c.id}>{c.codigo_cuenta} - {c.nombre}</option>)}
-                                </select>
+                                <div ref={dropdownRef} style={{ position: 'relative' }}>
+                                    <input 
+                                        value={searchAccount}
+                                        onChange={e => {
+                                            setSearchAccount(e.target.value);
+                                            setIsDropdownOpen(true);
+                                        }}
+                                        onFocus={() => {
+                                            setSearchAccount('');
+                                            setIsDropdownOpen(true);
+                                        }}
+                                        placeholder="Buscar cuenta contable..."
+                                        style={inputStyle}
+                                        required={!movForm.id_cuenta_banco_contable}
+                                    />
+                                    <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.6, fontSize: '0.8rem', color: 'var(--text-sec)' }}>
+                                        ▼
+                                    </span>
+                                    
+                                    {isDropdownOpen && (
+                                        <div style={{ 
+                                            position: 'absolute', 
+                                            top: '100%', 
+                                            left: 0, 
+                                            right: 0, 
+                                            maxHeight: '260px', 
+                                            overflowY: 'auto', 
+                                            background: '#0c101f', 
+                                            border: '1px solid var(--border-color)', 
+                                            borderRadius: '12px', 
+                                            marginTop: '4px', 
+                                            zIndex: 9999,
+                                            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)'
+                                        }}>
+                                            {filteredCuentasContables.length === 0 ? (
+                                                <div style={{ padding: '10px 12px', color: 'var(--text-sec)', fontSize: '0.85rem' }}>No se encontraron cuentas</div>
+                                            ) : (
+                                                filteredCuentasContables.map((c: any) => {
+                                                    const isSelected = c.id === movForm.id_cuenta_banco_contable;
+                                                    return (
+                                                        <div 
+                                                            key={c.id}
+                                                            onClick={() => {
+                                                                setMovForm({...movForm, id_cuenta_banco_contable: c.id});
+                                                                setIsDropdownOpen(false);
+                                                            }}
+                                                            style={{ 
+                                                                padding: '8px 12px', 
+                                                                cursor: 'pointer', 
+                                                                background: isSelected ? 'var(--primary-light)' : 'transparent',
+                                                                color: isSelected ? 'var(--primary)' : 'var(--text-main)',
+                                                                fontSize: '0.85rem',
+                                                                borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
+                                                                transition: 'background 0.2s',
+                                                                textAlign: 'left'
+                                                            }}
+                                                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }}
+                                                            onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                                                        >
+                                                            {c.codigo_cuenta} - {c.nombre}
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <input value={movForm.referencia} onChange={e => setMovForm({...movForm, referencia: e.target.value})} placeholder="Referencia bancaria / Voucher..." style={inputStyle} />
