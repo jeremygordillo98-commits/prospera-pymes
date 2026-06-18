@@ -214,7 +214,27 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
       let txId = null;
       let txMovements: any[] = [];
 
+      // 1. Intentar buscar por concepto que contenga la referencia (voucher) del pago
       if (mov.referencia) {
+        const { data: txs } = await supabase
+          .from('transacciones')
+          .select('id, concepto, numero_comprobante, movimientos (id, id_cuenta, debe, haber, plan_cuentas (codigo_cuenta, nombre))')
+          .eq('id_empresa', empresaId)
+          .like('concepto', `%${mov.referencia}%`);
+        
+        if (txs) {
+          const matchedTx = txs.find(t => 
+            (t.movimientos || []).some((m: any) => Number(m.debe) === Number(mov.monto) || Number(m.haber) === Number(mov.monto))
+          );
+          if (matchedTx) {
+            txId = matchedTx.id;
+            txMovements = matchedTx.movimientos || [];
+          }
+        }
+      }
+
+      // 2. Intentar buscar por número de comprobante igual a la referencia
+      if (!txId && mov.referencia) {
         const { data: txs } = await supabase
           .from('transacciones')
           .select('id, concepto, numero_comprobante, movimientos (id, id_cuenta, debe, haber, plan_cuentas (codigo_cuenta, nombre))')
@@ -226,6 +246,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
         }
       }
 
+      // 3. Intentar buscar por entidad, fecha y monto
       if (!txId) {
         const { data: txs } = await supabase
           .from('transacciones')
@@ -237,7 +258,27 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
 
         if (txs) {
           const matchedTx = txs.find(t => 
-            (t.movimientos || []).some((m: any) => m.debe === Number(mov.monto) || m.haber === Number(mov.monto))
+            (t.movimientos || []).some((m: any) => Number(m.debe) === Number(mov.monto) || Number(m.haber) === Number(mov.monto))
+          );
+          if (matchedTx) {
+            txId = matchedTx.id;
+            txMovements = matchedTx.movimientos || [];
+          }
+        }
+      }
+
+      // 4. Intentar buscar por fecha y monto (sin filtrar por entidad)
+      if (!txId) {
+        const { data: txs } = await supabase
+          .from('transacciones')
+          .select('id, concepto, numero_comprobante, movimientos (id, id_cuenta, debe, haber, plan_cuentas (codigo_cuenta, nombre))')
+          .eq('id_empresa', empresaId)
+          .eq('fecha', mov.fecha)
+          .in('tipo_comprobante', ['Ingreso', 'Egreso']);
+
+        if (txs) {
+          const matchedTx = txs.find(t => 
+            (t.movimientos || []).some((m: any) => Number(m.debe) === Number(mov.monto) || Number(m.haber) === Number(mov.monto))
           );
           if (matchedTx) {
             txId = matchedTx.id;
@@ -248,18 +289,32 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
 
       let bankAccountId = '';
       let contrapartidaAccountId = '';
+      let bankMovId = '';
+      let contrapartidaMovId = '';
 
       if (txMovements.length > 0) {
         if (mov.tipo_movimiento === 'Pago') {
           const bankMov = txMovements.find(m => Number(m.haber) > 0);
           const supplierMov = txMovements.find(m => Number(m.debe) > 0);
-          if (bankMov) bankAccountId = bankMov.id_cuenta;
-          if (supplierMov) contrapartidaAccountId = supplierMov.id_cuenta;
+          if (bankMov) {
+            bankAccountId = bankMov.id_cuenta;
+            bankMovId = bankMov.id;
+          }
+          if (supplierMov) {
+            contrapartidaAccountId = supplierMov.id_cuenta;
+            contrapartidaMovId = supplierMov.id;
+          }
         } else {
           const bankMov = txMovements.find(m => Number(m.debe) > 0);
           const clientMov = txMovements.find(m => Number(m.haber) > 0);
-          if (bankMov) bankAccountId = bankMov.id_cuenta;
-          if (clientMov) contrapartidaAccountId = clientMov.id_cuenta;
+          if (bankMov) {
+            bankAccountId = bankMov.id_cuenta;
+            bankMovId = bankMov.id;
+          }
+          if (clientMov) {
+            contrapartidaAccountId = clientMov.id_cuenta;
+            contrapartidaMovId = clientMov.id;
+          }
         }
       }
 
@@ -267,6 +322,8 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
         ...mov,
         txId,
         txMovements,
+        bankMovId,
+        contrapartidaMovId,
         fecha: mov.fecha,
         monto: String(mov.monto),
         montoOriginal: Number(mov.monto),
@@ -346,67 +403,38 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
         const refText = editingMov.referencia ? ` (Ref: ${editingMov.referencia})` : '';
         const conceptoAsiento = (editingMov.concepto || `${editingMov.tipo_movimiento} de Tesorería`) + refText;
 
-        await supabase
+        const { error: txError } = await supabase
           .from('transacciones')
           .update({
             fecha: editingMov.fecha,
             concepto: conceptoAsiento
           })
           .eq('id', editingMov.txId);
+        
+        if (txError) throw txError;
 
-        const { data: txMovs } = await supabase
-          .from('movimientos')
-          .select('id, debe, haber')
-          .eq('id_transaccion', editingMov.txId);
+        if (editingMov.bankMovId) {
+          const { error: bankError } = await supabase
+            .from('movimientos')
+            .update({
+              id_cuenta: editingMov.id_cuenta_banco_contable,
+              debe: editingMov.tipo_movimiento === 'Cobro' ? newMonto : 0,
+              haber: editingMov.tipo_movimiento === 'Pago' ? newMonto : 0
+            })
+            .eq('id', editingMov.bankMovId);
+          if (bankError) throw bankError;
+        }
 
-        if (txMovs && txMovs.length === 2) {
-          const mov1 = txMovs[0];
-          const mov2 = txMovs[1];
-
-          if (editingMov.tipo_movimiento === 'Pago') {
-            const debitMov = mov1.debe > 0 ? mov1 : mov2;
-            const creditMov = mov1.haber > 0 ? mov1 : mov2;
-
-            await supabase
-              .from('movimientos')
-              .update({
-                id_cuenta: editingMov.id_cuenta_banco_contable,
-                debe: 0,
-                haber: newMonto
-              })
-              .eq('id', creditMov.id);
-
-            await supabase
-              .from('movimientos')
-              .update({
-                id_cuenta: editingMov.id_cuenta_contrapartida_contable,
-                debe: newMonto,
-                haber: 0
-              })
-              .eq('id', debitMov.id);
-
-          } else {
-            const debitMov = mov1.debe > 0 ? mov1 : mov2;
-            const creditMov = mov1.haber > 0 ? mov1 : mov2;
-
-            await supabase
-              .from('movimientos')
-              .update({
-                id_cuenta: editingMov.id_cuenta_banco_contable,
-                debe: newMonto,
-                haber: 0
-              })
-              .eq('id', debitMov.id);
-
-            await supabase
-              .from('movimientos')
-              .update({
-                id_cuenta: editingMov.id_cuenta_contrapartida_contable,
-                debe: 0,
-                haber: newMonto
-              })
-              .eq('id', creditMov.id);
-          }
+        if (editingMov.contrapartidaMovId) {
+          const { error: contraError } = await supabase
+            .from('movimientos')
+            .update({
+              id_cuenta: editingMov.id_cuenta_contrapartida_contable,
+              debe: editingMov.tipo_movimiento === 'Pago' ? newMonto : 0,
+              haber: editingMov.tipo_movimiento === 'Cobro' ? newMonto : 0
+            })
+            .eq('id', editingMov.contrapartidaMovId);
+          if (contraError) throw contraError;
         }
       }
 
@@ -1477,6 +1505,22 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
                     <h3 className="h1" style={{ fontSize: '1.3rem', display: 'flex', alignItems: 'center', gap: 8, marginBottom: '20px' }}>
                         <CheckCircle2 color="var(--primary)" /> Editar {editingMov.tipo_movimiento === 'Pago' ? 'Pago a Proveedor' : 'Cobro a Cliente'}
                     </h3>
+                    
+                    {!editingMov.txId && (
+                      <div style={{ 
+                        background: 'rgba(245,158,11,0.1)', 
+                        border: '1px solid rgba(245,158,11,0.3)', 
+                        color: '#f59e0b', 
+                        padding: '10px 14px', 
+                        borderRadius: '8px', 
+                        fontSize: '0.8rem', 
+                        fontWeight: 600, 
+                        marginBottom: '16px',
+                        lineHeight: '1.4'
+                      }}>
+                        ⚠️ No se encontró el asiento contable asociado a este movimiento en el Libro Diario. La edición solo modificará el registro en el panel de Tesorería.
+                      </div>
+                    )}
                     
                     <form onSubmit={handleGuardarEdicionMovimiento} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
