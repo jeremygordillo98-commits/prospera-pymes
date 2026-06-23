@@ -8,6 +8,7 @@ import { EditMovimientoModal } from '../components/EditMovimientoModal';
 import { TesoreriaResumen } from '../components/TesoreriaResumen';
 import { TesoreriaConciliacion } from '../components/TesoreriaConciliacion';
 import { TesoreriaCobrosPagos } from '../components/TesoreriaCobrosPagos';
+import { CustomModal } from '../components/CustomModal';
 
 interface Props { empresaId: string; mode?: 'resumen' | 'cobros' | 'pagos' | 'conciliacion'; }
 
@@ -16,6 +17,11 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [showCuentaForm, setShowCuentaForm] = useState(false);
+  const [anulacionModal, setAnulacionModal] = useState<{ isOpen: boolean; movId: string; motivo: string }>({
+    isOpen: false,
+    movId: '',
+    motivo: ''
+  });
 
   const [cuentaForm, setCuentaForm] = useState({
     banco_seleccionado: 'Banco Pichincha',
@@ -482,10 +488,18 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
     } finally { setSaving(false); }
   };
 
-  const handleAnularMovimientoTesoreria = async (movId: string) => {
-    const reason = prompt("Por favor, ingresa el motivo de la anulación:");
-    if (reason === null) return;
+  const handleAnularMovimientoTesoreria = (movId: string) => {
+    setAnulacionModal({ isOpen: true, movId, motivo: '' });
+  };
+
+  const handleConfirmarAnulacion = async () => {
+    const { movId, motivo } = anulacionModal;
+    if (!motivo.trim()) {
+      alert("Por favor, ingresa el motivo de la anulación.");
+      return;
+    }
     
+    setAnulacionModal(prev => ({ ...prev, isOpen: false }));
     setSaving(true);
     setMessage('');
     try {
@@ -561,7 +575,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
         
         const cleanConcept = txConcepto.startsWith('[ANULADO]') ? txConcepto.replace(/^\[ANULADO\]\s*/, '') : txConcepto;
         const valOrig = { total: Number(mov.monto) };
-        const newConcepto = `[ANULADO] Motivo: ${reason || 'No especificado'} | Fecha: ${ahora} | ${cleanConcept} | ValoresOriginales: ${JSON.stringify(valOrig)}`;
+        const newConcepto = `[ANULADO] Motivo: ${motivo} | Fecha: ${ahora} | ${cleanConcept} | ValoresOriginales: ${JSON.stringify(valOrig)}`;
         
         await supabase
           .from('transacciones')
@@ -640,6 +654,23 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
               saving={saving}
               onSave={handleGuardarEdicionMovimiento}
               onClose={() => setEditingMov(null)}
+            />
+          )}
+
+          {/* Anulacion Prompt Modal */}
+          {anulacionModal.isOpen && (
+            <CustomModal
+              isOpen={anulacionModal.isOpen}
+              onClose={() => setAnulacionModal(prev => ({ ...prev, isOpen: false }))}
+              title="Confirmar Anulación"
+              type="prompt"
+              message="Por favor, ingresa el motivo de la anulación:"
+              confirmLabel="Confirmar Anulación"
+              cancelLabel="Cancelar"
+              onConfirm={handleConfirmarAnulacion}
+              inputValue={anulacionModal.motivo}
+              onInputChange={(val) => setAnulacionModal(prev => ({ ...prev, motivo: val }))}
+              inputPlaceholder="Motivo de la anulación..."
             />
           )}
       </div>
