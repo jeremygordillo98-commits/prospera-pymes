@@ -1,15 +1,20 @@
 import React from 'react';
+import { Download } from 'lucide-react';
+import { generatePDFReport } from '../utils/pdfGenerator';
 
 interface Props {
+  empresaId: string;
   retencionesAgrupadas: {
     emitidasRenta: any[];
     emitidasIva: any[];
     recibidasRenta: any[];
     recibidasIva: any[];
   };
+  permisoReportesPdf: boolean;
+  onPremiumBlock: () => void;
 }
 
-export const RetencionesSRITab: React.FC<Props> = ({ retencionesAgrupadas }) => {
+export const RetencionesSRITab: React.FC<Props> = ({ empresaId, retencionesAgrupadas, permisoReportesPdf, onPremiumBlock }) => {
   const totalEmitidoRenta = retencionesAgrupadas.emitidasRenta?.reduce((s, r) => s + r.valor, 0) || 0;
   const totalEmitidoIva   = retencionesAgrupadas.emitidasIva?.reduce((s, r) => s + r.valor, 0) || 0;
   const totalEmitido      = totalEmitidoRenta + totalEmitidoIva;
@@ -18,8 +23,126 @@ export const RetencionesSRITab: React.FC<Props> = ({ retencionesAgrupadas }) => 
   const totalRecibidoIva   = retencionesAgrupadas.recibidasIva?.reduce((s, r) => s + r.valor, 0) || 0;
   const totalRecibido      = totalRecibidoRenta + totalRecibidoIva;
 
+  const exportCSV = () => {
+    if (!permisoReportesPdf) {
+      onPremiumBlock();
+      return;
+    }
+    const rows = [
+      ['Reporte de Retenciones SRI - Emitidas (Compras)'],
+      ['Tipo', 'Código / Porcentaje', 'Base Imponible', 'Valor Retenido', 'Documentos'],
+    ];
+
+    retencionesAgrupadas.emitidasRenta?.forEach(r => {
+      rows.push(['Renta (Compras)', r.codigo, r.base.toFixed(2), r.valor.toFixed(2), r.count.toString()]);
+    });
+    retencionesAgrupadas.emitidasIva?.forEach(r => {
+      rows.push(['IVA (Compras)', r.codigo, r.base.toFixed(2), r.valor.toFixed(2), r.count.toString()]);
+    });
+    rows.push(['TOTAL EMITIDAS', '', '', totalEmitido.toFixed(2), '']);
+    rows.push([]);
+    rows.push(['Reporte de Retenciones SRI - Recibidas (Ventas)']);
+    rows.push(['Tipo', 'Código / Porcentaje', 'Base Imponible', 'Valor Retenido', 'Documentos']);
+
+    retencionesAgrupadas.recibidasRenta?.forEach(r => {
+      rows.push(['Renta (Ventas)', r.codigo, r.base.toFixed(2), r.valor.toFixed(2), r.count.toString()]);
+    });
+    retencionesAgrupadas.recibidasIva?.forEach(r => {
+      rows.push(['IVA (Ventas)', r.codigo, r.base.toFixed(2), r.valor.toFixed(2), r.count.toString()]);
+    });
+    rows.push(['TOTAL RECIBIDAS', '', '', totalRecibido.toFixed(2), '']);
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map(r => r.join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = encodeURI(csvContent);
+    a.download = `Retenciones_SRI_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  };
+
+  const exportPDF = async () => {
+    if (!permisoReportesPdf) {
+      onPremiumBlock();
+      return;
+    }
+    const columns = ['Tipo / Concepto', 'Código SRI', 'Base Imponible', 'Valor Retenido', 'Comprobantes'];
+    const rows: any[][] = [];
+
+    rows.push([
+      { content: 'RETENCIONES EMITIDAS (COMPRAS) - RENTA (F.103)', colSpan: 5, styles: { fillColor: [240, 245, 255], fontStyle: 'bold', textColor: [99, 102, 241] } }
+    ]);
+    retencionesAgrupadas.emitidasRenta?.forEach(r => {
+      rows.push(['Retención de Renta', r.codigo, `$${r.base.toFixed(2)}`, `$${r.valor.toFixed(2)}`, r.count.toString()]);
+    });
+    rows.push([
+      { content: 'SUBTOTAL RENTA EMITIDA', colSpan: 3, styles: { fontStyle: 'bold' } },
+      `$${totalEmitidoRenta.toFixed(2)}`,
+      ''
+    ]);
+
+    rows.push([
+      { content: 'RETENCIONES EMITIDAS (COMPRAS) - IVA (F.104)', colSpan: 5, styles: { fillColor: [243, 244, 246], fontStyle: 'bold', textColor: [139, 92, 246] } }
+    ]);
+    retencionesAgrupadas.emitidasIva?.forEach(r => {
+      rows.push(['Retención de IVA', r.codigo, `$${r.base.toFixed(2)}`, `$${r.valor.toFixed(2)}`, r.count.toString()]);
+    });
+    rows.push([
+      { content: 'SUBTOTAL IVA EMITIDO', colSpan: 3, styles: { fontStyle: 'bold' } },
+      `$${totalEmitidoIva.toFixed(2)}`,
+      ''
+    ]);
+    rows.push([
+      { content: 'TOTAL EMITIDAS (COMPRAS)', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } },
+      { content: `$${totalEmitido.toFixed(2)}`, styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } },
+      ''
+    ]);
+
+    rows.push([
+      { content: 'RETENCIONES RECIBIDAS (VENTAS) - RENTA (F.103)', colSpan: 5, styles: { fillColor: [240, 253, 250], fontStyle: 'bold', textColor: [16, 185, 129] } }
+    ]);
+    retencionesAgrupadas.recibidasRenta?.forEach(r => {
+      rows.push(['Retención de Renta Recibida', r.codigo, `$${r.base.toFixed(2)}`, `$${r.valor.toFixed(2)}`, r.count.toString()]);
+    });
+    rows.push([
+      { content: 'SUBTOTAL RENTA RECIBIDA', colSpan: 3, styles: { fontStyle: 'bold' } },
+      `$${totalRecibidoRenta.toFixed(2)}`,
+      ''
+    ]);
+
+    rows.push([
+      { content: 'RETENCIONES RECIBIDAS (VENTAS) - IVA (F.104)', colSpan: 5, styles: { fillColor: [254, 242, 242], fontStyle: 'bold', textColor: [239, 68, 68] } }
+    ]);
+    retencionesAgrupadas.recibidasIva?.forEach(r => {
+      rows.push(['Retención de IVA Recibida', r.codigo, `$${r.base.toFixed(2)}`, `$${r.valor.toFixed(2)}`, r.count.toString()]);
+    });
+    rows.push([
+      { content: 'SUBTOTAL IVA RECIBIDO', colSpan: 3, styles: { fontStyle: 'bold' } },
+      `$${totalRecibidoIva.toFixed(2)}`,
+      ''
+    ]);
+    rows.push([
+      { content: 'TOTAL RECIBIDAS (VENTAS)', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 253, 250] } },
+      { content: `$${totalRecibido.toFixed(2)}`, styles: { fontStyle: 'bold', fillColor: [240, 253, 250] } },
+      ''
+    ]);
+
+    await generatePDFReport(empresaId, 'Reporte de Retenciones SRI', 'Resumen consolidado de retenciones emitidas y recibidas', columns, rows, []);
+  };
+
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Cabecera del reporte con botones de descarga */}
+      <div className="glass-card" style={{ padding: '14px 20px', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        <h3 style={{ margin: 0, flex: 1 }}>Reporte Consolidado de Retenciones SRI</h3>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={exportCSV} className="btn" style={{ padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
+            <Download size={14} /> CSV
+          </button>
+          <button onClick={exportPDF} className="btn btn-primary" style={{ padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
+            <Download size={14} /> PDF
+          </button>
+        </div>
+      </div>
+
       {/* KPI Retenciones */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
         <div className="glass-card" style={{ borderLeft: '4px solid #8b5cf6', padding: '20px 24px' }}>

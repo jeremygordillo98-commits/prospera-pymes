@@ -6,9 +6,10 @@ import { ComunicadoWorkspace } from '../components/ComunicadoWorkspace';
 
 interface ComunicadosProps {
   empresaId: string;
+  permisoComunicacionCliente: boolean;
 }
 
-export const Comunicados: React.FC<ComunicadosProps> = ({ empresaId }) => {
+export const Comunicados: React.FC<ComunicadosProps> = ({ empresaId, permisoComunicacionCliente }) => {
   const {
     fileInputRef,
     isWorkspaceOpen,
@@ -38,6 +39,104 @@ export const Comunicados: React.FC<ComunicadosProps> = ({ empresaId }) => {
     sizeLimitExceeded,
     totalAttachmentsSize
   } = useComunicados(empresaId);
+
+  if (!permisoComunicacionCliente) {
+    return (
+      <div style={{
+        minHeight: '70vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+        overflow: 'hidden',
+        borderRadius: 24,
+        background: 'rgba(15, 23, 42, 0.4)',
+        border: '1px solid var(--border-color)',
+        padding: 40,
+        textAlign: 'center',
+        marginTop: 20
+      }}>
+        {/* Decorative background orbs to look extremely premium */}
+        <div style={{
+          position: 'absolute',
+          width: 250,
+          height: 250,
+          background: 'radial-gradient(circle, var(--primary) 0%, transparent 70%)',
+          opacity: 0.15,
+          top: '10%',
+          left: '10%',
+          filter: 'blur(40px)',
+          zIndex: 1
+        }} />
+        <div style={{
+          position: 'absolute',
+          width: 300,
+          height: 300,
+          background: 'radial-gradient(circle, #0ea5e9 0%, transparent 70%)',
+          opacity: 0.15,
+          bottom: '10%',
+          right: '10%',
+          filter: 'blur(50px)',
+          zIndex: 1
+        }} />
+
+        <div style={{
+          position: 'relative',
+          zIndex: 2,
+          maxWidth: 480,
+          padding: '40px 32px',
+          background: 'var(--card-bg)',
+          borderRadius: 24,
+          border: '1px solid var(--border-strong)',
+          boxShadow: '0 20px 50px rgba(0, 0, 0, 0.3)',
+          backdropFilter: 'blur(30px)',
+          animation: 'fadeIn 0.6s ease'
+        }}>
+          <div style={{
+            width: 72,
+            height: 72,
+            borderRadius: 24,
+            background: 'var(--primary-light)',
+            color: 'var(--primary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 24px',
+            boxShadow: '0 8px 24px rgba(0, 214, 143, 0.2)'
+          }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.5C2 7 4 5 6.5 5H18c2.5 0 4 2 4 4.5V17z" /><path d="M22 9.5l-8.5 5.5c-.9.6-2.1.6-3 0L2 9.5" /></svg>
+          </div>
+
+          <h2 className="h1" style={{ fontSize: '1.8rem', fontWeight: 900, marginBottom: 12, letterSpacing: '-0.5px' }}>
+            Mailer Pymes B2B
+          </h2>
+          <p className="text-sec" style={{ fontSize: '1rem', lineHeight: 1.6, marginBottom: 28 }}>
+            Habilita la comunicación premium y envío de notificaciones automáticas/manuales de balances y reportes directo al correo de tus clientes de manera masiva.
+          </p>
+
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 18px',
+            borderRadius: 14,
+            background: 'rgba(255, 190, 0, 0.1)',
+            color: '#F59E0B',
+            fontWeight: 800,
+            fontSize: '0.85rem',
+            marginBottom: 32,
+            border: '1px solid rgba(255, 190, 0, 0.2)'
+          }}>
+            <span>🔒 Módulo Premium Requerido</span>
+          </div>
+
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-sec)', margin: 0 }}>
+            Para activar esta función en tu cuenta, solicita a tu administrador de Prospera la licencia correspondiente.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: '100px' }}>

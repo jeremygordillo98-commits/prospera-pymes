@@ -1,7 +1,9 @@
 import React from 'react';
 import { Download, ChevronDown, ChevronRight, CheckCircle2, XCircle } from 'lucide-react';
+import { generatePDFReport } from '../utils/pdfGenerator';
 
 interface Props {
+  empresaId: string;
   filteredLedger: any[];
   rootAccounts: any[];
   expandedAccounts: Record<string, boolean>;
@@ -9,16 +11,21 @@ interface Props {
   isVisibleByParentCollapse: (code: string) => boolean;
   desde: string;
   hasta: string;
+  permisoReportesPdf: boolean;
+  onPremiumBlock: () => void;
 }
 
 export const BalanceGeneralTab: React.FC<Props> = ({
+  empresaId,
   filteredLedger,
   rootAccounts,
   expandedAccounts,
   toggleAccount,
   isVisibleByParentCollapse,
   desde,
-  hasta
+  hasta,
+  permisoReportesPdf,
+  onPremiumBlock
 }) => {
   // Calcular utilidad del período actual
   const totalIng = rootAccounts.filter(i => i.tipo === 'Ingreso').reduce((s, i) => s + i.saldo, 0);
@@ -41,6 +48,10 @@ export const BalanceGeneralTab: React.FC<Props> = ({
   const balanceCuadrado = Math.abs(totalActivos - totalPasivoPatrimonio) < 0.01;
 
   const exportBG = () => {
+    if (!permisoReportesPdf) {
+      onPremiumBlock();
+      return;
+    }
     const rows = [
       ['Balance General Clasificado'],
       ['Grupo', 'Código', 'Cuenta', 'Saldo'],
@@ -58,6 +69,67 @@ export const BalanceGeneralTab: React.FC<Props> = ({
     const a = document.createElement('a'); a.href = encodeURI(csv);
     a.download = `Balance_General_${desde || 'inicio'}_${hasta || 'fin'}.csv`;
     a.click();
+  };
+
+  const exportBGPDF = async () => {
+    if (!permisoReportesPdf) {
+      onPremiumBlock();
+      return;
+    }
+    const columns = ['Código', 'Cuenta', 'Monto'];
+    const rows: any[][] = [];
+
+    // Activos
+    rows.push([
+      { content: 'ACTIVOS', colSpan: 3, styles: { fillColor: [240, 245, 255], fontStyle: 'bold', textColor: [99, 102, 241] } }
+    ]);
+    activos.forEach(i => {
+      rows.push([i.codigo_cuenta, i.nombre, `$${i.saldo.toFixed(2)}`]);
+    });
+    rows.push([
+      { content: 'TOTAL ACTIVOS', colSpan: 2, styles: { fontStyle: 'bold' } },
+      `$${totalActivos.toFixed(2)}`
+    ]);
+
+    // Pasivos
+    rows.push([
+      { content: 'PASIVOS', colSpan: 3, styles: { fillColor: [255, 251, 235], fontStyle: 'bold', textColor: [245, 158, 11] } }
+    ]);
+    pasivos.forEach(i => {
+      rows.push([i.codigo_cuenta, i.nombre, `$${i.saldo.toFixed(2)}`]);
+    });
+    rows.push([
+      { content: 'TOTAL PASIVOS', colSpan: 2, styles: { fontStyle: 'bold' } },
+      `$${totalPasivos.toFixed(2)}`
+    ]);
+
+    // Patrimonio
+    rows.push([
+      { content: 'PATRIMONIO', colSpan: 3, styles: { fillColor: [243, 244, 246], fontStyle: 'bold', textColor: [139, 92, 246] } }
+    ]);
+    patrimonio.forEach(i => {
+      rows.push([i.codigo_cuenta, i.nombre, `$${i.saldo.toFixed(2)}`]);
+    });
+    rows.push([
+      '3.99.99',
+      'Resultado Neto del Ejercicio (Dinámico)',
+      `$${utilidadPeriodo.toFixed(2)}`
+    ]);
+    rows.push([
+      { content: 'TOTAL PATRIMONIO', colSpan: 2, styles: { fontStyle: 'bold' } },
+      `$${totalPatrimonioConUtilidad.toFixed(2)}`
+    ]);
+
+    // Total Pasivo + Patrimonio
+    rows.push([
+      { content: 'TOTAL PASIVO + PATRIMONIO', colSpan: 2, styles: { fontStyle: 'bold', fillColor: [255, 251, 235] } },
+      { content: `$${totalPasivoPatrimonio.toFixed(2)}`, styles: { fontStyle: 'bold', fillColor: [255, 251, 235] } }
+    ]);
+
+    let subtitle = 'Balance General Clasificado';
+    if (desde || hasta) subtitle += ` (${desde || 'Inicio'} al ${hasta || 'Hoy'})`;
+
+    await generatePDFReport(empresaId, 'Balance General', subtitle, columns, rows, []);
   };
 
   const renderTree = (items: typeof assets, color: string) => {
@@ -105,9 +177,14 @@ export const BalanceGeneralTab: React.FC<Props> = ({
           {balanceCuadrado ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
           {balanceCuadrado ? 'A = P + Pat Cuadrado ✓' : `Diferencia Ecuación: $${Math.abs(totalActivos - totalPasivoPatrimonio).toFixed(2)}`}
         </div>
-        <button onClick={exportBG} className="btn" style={{ padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
-          <Download size={14} /> CSV
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={exportBG} className="btn" style={{ padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
+            <Download size={14} /> CSV
+          </button>
+          <button onClick={exportBGPDF} className="btn btn-primary" style={{ padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
+            <Download size={14} /> PDF
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))', gap: 20 }}>

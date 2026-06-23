@@ -53,11 +53,12 @@ export const EditMovimientoModal: React.FC<EditMovimientoModalProps> = ({
   }, []);
 
   const filteredEditBankCuentas = useMemo(() => {
+    const movementCuentas = cuentasContables.filter((c: any) => c.acepta_movimientos);
     if (!searchEditBank || searchEditBank === selectedEditBankText) {
-      return cuentasContables;
+      return movementCuentas;
     }
     const query = searchEditBank.toLowerCase();
-    return cuentasContables.filter((c: any) =>
+    return movementCuentas.filter((c: any) =>
       c.codigo_cuenta?.toLowerCase().includes(query) ||
       c.nombre?.toLowerCase().includes(query)
     );

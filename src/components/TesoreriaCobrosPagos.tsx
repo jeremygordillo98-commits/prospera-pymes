@@ -70,11 +70,12 @@ export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
   }, []);
 
   const filteredCuentasContables = useMemo(() => {
+    const movementCuentas = cuentasContables.filter((c: any) => c.acepta_movimientos);
     if (!searchAccount || searchAccount === selectedAccountText) {
-      return cuentasContables;
+      return movementCuentas;
     }
     const query = searchAccount.toLowerCase();
-    return cuentasContables.filter((c: any) =>
+    return movementCuentas.filter((c: any) =>
       c.codigo_cuenta?.toLowerCase().includes(query) ||
       c.nombre?.toLowerCase().includes(query)
     );
@@ -82,10 +83,12 @@ export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
 
   const cuentasContablesBancos = useMemo(() => {
     return cuentasContables.filter((c: any) => 
-      c.codigo_cuenta?.startsWith('1.1.1') || 
-      c.nombre?.toLowerCase().includes('banco') || 
-      c.nombre?.toLowerCase().includes('caja') ||
-      c.nombre?.toLowerCase().includes('fondo')
+      c.acepta_movimientos && (
+        c.codigo_cuenta?.startsWith('1.1.1') || 
+        c.nombre?.toLowerCase().includes('banco') || 
+        c.nombre?.toLowerCase().includes('caja') ||
+        c.nombre?.toLowerCase().includes('fondo')
+      )
     );
   }, [cuentasContables]);
 

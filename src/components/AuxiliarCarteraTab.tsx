@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Download } from 'lucide-react';
+import { generatePDFReport } from '../utils/pdfGenerator';
 
 interface Props {
+  empresaId: string;
   carteraAgrupada: any[];
   carteraDocs: any[];
+  permisoReportesPdf: boolean;
+  onPremiumBlock: () => void;
 }
 
-export const AuxiliarCarteraTab: React.FC<Props> = ({ carteraAgrupada, carteraDocs }) => {
+export const AuxiliarCarteraTab: React.FC<Props> = ({ empresaId, carteraAgrupada, carteraDocs, permisoReportesPdf, onPremiumBlock }) => {
   const [expandedEntities, setExpandedEntities] = useState<Record<string, boolean>>({});
   
   const toggleEntity = (id: string) => {
@@ -18,6 +22,69 @@ export const AuxiliarCarteraTab: React.FC<Props> = ({ carteraAgrupada, carteraDo
 
   const totalPorCobrar = clientes.reduce((s, c) => s + c.saldo, 0);
   const totalPorPagar = proveedores.reduce((s, p) => s + p.saldo, 0);
+
+  const exportCSV = () => {
+    if (!permisoReportesPdf) {
+      onPremiumBlock();
+      return;
+    }
+    const rows = [
+      ['Auxiliar de Cartera - Clientes (Cuentas por Cobrar)'],
+      ['Razón Social', 'RUC/ID', 'Total Facturado', 'Saldo Pendiente']
+    ];
+    clientes.forEach(c => {
+      rows.push([`"${c.razonSocial}"`, c.ruc, c.total.toFixed(2), c.saldo.toFixed(2)]);
+    });
+    rows.push(['TOTAL POR COBRAR', '', '', totalPorCobrar.toFixed(2)]);
+    rows.push([]);
+    rows.push(['Auxiliar de Cartera - Proveedores (Cuentas por Pagar)']);
+    rows.push(['Proveedor', 'RUC/ID', 'Total Facturado', 'Saldo Pendiente']);
+    proveedores.forEach(p => {
+      rows.push([`"${p.razonSocial}"`, p.ruc, p.total.toFixed(2), p.saldo.toFixed(2)]);
+    });
+    rows.push(['TOTAL POR PAGAR', '', '', totalPorPagar.toFixed(2)]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map(r => r.join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = encodeURI(csvContent);
+    a.download = `Auxiliar_Cartera_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  };
+
+  const exportPDF = async () => {
+    if (!permisoReportesPdf) {
+      onPremiumBlock();
+      return;
+    }
+    const columns = ['Tercero', 'RUC/ID', 'Relación', 'Total Facturado', 'Saldo Pendiente'];
+    const rows: any[][] = [];
+
+    // Clientes
+    rows.push([
+      { content: 'CLIENTES (CUENTAS POR COBRAR)', colSpan: 5, styles: { fillColor: [240, 253, 250], fontStyle: 'bold', textColor: [16, 185, 129] } }
+    ]);
+    clientes.forEach(c => {
+      rows.push([c.razonSocial, c.ruc, 'Cliente', `$${c.total.toFixed(2)}`, `$${c.saldo.toFixed(2)}`]);
+    });
+    rows.push([
+      { content: 'TOTAL POR COBRAR', colSpan: 4, styles: { fontStyle: 'bold' } },
+      `$${totalPorCobrar.toFixed(2)}`
+    ]);
+
+    // Proveedores
+    rows.push([
+      { content: 'PROVEEDORES (CUENTAS POR PAGAR)', colSpan: 5, styles: { fillColor: [255, 251, 235], fontStyle: 'bold', textColor: [245, 158, 11] } }
+    ]);
+    proveedores.forEach(p => {
+      rows.push([p.razonSocial, p.ruc, 'Proveedor', `$${p.total.toFixed(2)}`, `$${p.saldo.toFixed(2)}`]);
+    });
+    rows.push([
+      { content: 'TOTAL POR PAGAR', colSpan: 4, styles: { fontStyle: 'bold' } },
+      `$${totalPorPagar.toFixed(2)}`
+    ]);
+
+    await generatePDFReport(empresaId, 'Auxiliar de Cartera', 'Detalle de saldos pendientes de clientes y proveedores', columns, rows, []);
+  };
 
   const renderEntityRow = (ent: any, isProveedor: boolean) => {
     const isExpanded = !!expandedEntities[ent.id];
@@ -139,6 +206,19 @@ export const AuxiliarCarteraTab: React.FC<Props> = ({ carteraAgrupada, carteraDo
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Cabecera del reporte con botones de descarga */}
+      <div className="glass-card" style={{ padding: '14px 20px', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        <h3 style={{ margin: 0, flex: 1 }}>Auxiliar de Cartera (Cuentas por Cobrar y Pagar)</h3>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={exportCSV} className="btn" style={{ padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
+            <Download size={14} /> CSV
+          </button>
+          <button onClick={exportPDF} className="btn btn-primary" style={{ padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
+            <Download size={14} /> PDF
+          </button>
+        </div>
+      </div>
+
       {/* KPI Carteras */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
         <div className="glass-card" style={{ borderLeft: '4px solid var(--success)', padding: '20px 24px' }}>
