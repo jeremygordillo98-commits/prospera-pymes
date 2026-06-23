@@ -113,18 +113,12 @@ export const Asientos: React.FC<Props> = ({ empresaId, activeView }) => {
           )
         `)
         .eq('id_empresa', empresaId)
-        .or('tipo_comprobante.eq.Asiento Manual,tipo_comprobante.eq.Anulado')
+        .eq('tipo_comprobante', 'Asiento Manual')
         .order('fecha', { ascending: false });
 
       if (error) throw error;
 
-      const filtered = (data || []).filter((tx: any) => {
-        if (tx.tipo_comprobante === 'Asiento Manual') return true;
-        if (tx.tipo_comprobante === 'Anulado') {
-          return !tx.xml_referencia && (tx.concepto?.includes('Asiento Manual') || tx.movimientos?.length > 0 || (tx.concepto?.includes('[ANULADO]') && !tx.xml_referencia));
-        }
-        return false;
-      });
+      const filtered = data || [];
 
       const mapped = filtered.map((tx: any) => ({
         ...tx,
