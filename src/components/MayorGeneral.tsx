@@ -3,7 +3,11 @@ import { supabase } from '../services/supabase';
 import { ChevronLeft, Download, Search, Calendar, ArrowUpDown } from 'lucide-react';
 import { generatePDFReport } from '../utils/pdfGenerator';
 
-interface Props { empresaId: string; }
+interface Props { 
+  empresaId: string; 
+  permisoReportesPdf: boolean;
+  onPremiumBlock: () => void;
+}
 
 interface Account {
   id: string;
@@ -30,7 +34,7 @@ const inp: React.CSSProperties = {
   background: 'var(--input-bg)', color: 'var(--text-main)', outline: 'none'
 };
 
-export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
+export const MayorGeneral: React.FC<Props> = ({ empresaId, permisoReportesPdf, onPremiumBlock }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selected, setSelected] = useState<Account | null>(null);
   const [lines, setLines] = useState<MovLine[]>([]);
@@ -174,6 +178,10 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
 
   // Exportar CSV
   const exportCSV = () => {
+    if (!permisoReportesPdf) {
+      onPremiumBlock();
+      return;
+    }
     if (!selected) return;
     const rows = [['Fecha', 'Concepto', 'Comprobante', 'Tercero', 'Debe', 'Haber', 'Saldo']];
     if (desde) {
@@ -207,6 +215,10 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId }) => {
   };
 
   const exportPDF = async () => {
+    if (!permisoReportesPdf) {
+      onPremiumBlock();
+      return;
+    }
     if (!selected) return;
     const columns = ['Fecha', 'Concepto / Tercero', 'Comprobante', 'Debe', 'Haber', 'Saldo Acum.'];
     const rows = [];

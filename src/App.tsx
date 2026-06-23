@@ -41,6 +41,10 @@ interface Empresa {
   id: string;
   nombre_empresa: string;
   ruc_empresa: string;
+  logo_url?: string | null;
+  permiso_reportes_pdf?: boolean;
+  permiso_descarga_ats?: boolean;
+  permiso_comunicacion_cliente?: boolean;
 }
 
 const App = () => {
@@ -85,6 +89,9 @@ const App = () => {
   const [newEmpresaLogo, setNewEmpresaLogo] = useState('');
   const [limiteEmpresas, setLimiteEmpresas] = useState<number>(2);
   const [showLimitModal, setShowLimitModal] = useState(false);
+  const [permisoReportesPdf, setPermisoReportesPdf] = useState<boolean>(false);
+  const [permisoDescargaAts, setPermisoDescargaAts] = useState<boolean>(false);
+  const [permisoComunicacionCliente, setPermisoComunicacionCliente] = useState<boolean>(false);
 
   // ── Editar / Archivar empresa ─────────────────────────────────────
   const [editingEmpresa, setEditingEmpresa] = useState<Empresa | null>(null);
@@ -129,6 +136,18 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('pymes_active_view', activeView);
   }, [activeView]);
+
+  useEffect(() => {
+    if (selectedEmpresa) {
+      setPermisoReportesPdf(!!selectedEmpresa.permiso_reportes_pdf);
+      setPermisoDescargaAts(!!selectedEmpresa.permiso_descarga_ats);
+      setPermisoComunicacionCliente(!!selectedEmpresa.permiso_comunicacion_cliente);
+    } else {
+      setPermisoReportesPdf(false);
+      setPermisoDescargaAts(false);
+      setPermisoComunicacionCliente(false);
+    }
+  }, [selectedEmpresa]);
 
   const fetchLimite = async () => {
     const { data, error } = await supabase
@@ -301,9 +320,9 @@ const App = () => {
       case 'cobros': return <Tesoreria empresaId={selectedEmpresa.id} mode="cobros" />;
       case 'pagos': return <Tesoreria empresaId={selectedEmpresa.id} mode="pagos" />;
       case 'conciliacion': return <Tesoreria empresaId={selectedEmpresa.id} mode="conciliacion" />;
-      case 'reportes': return <Reportes empresaId={selectedEmpresa.id} />;
-      case 'reportes-fiscales': return <ATS empresaId={selectedEmpresa.id} />;
-      case 'comunicados': return <Comunicados empresaId={selectedEmpresa.id} />;
+      case 'reportes': return <Reportes empresaId={selectedEmpresa.id} permisoReportesPdf={permisoReportesPdf} />;
+      case 'reportes-fiscales': return <ATS empresaId={selectedEmpresa.id} permisoDescargaAts={permisoDescargaAts} />;
+      case 'comunicados': return <Comunicados empresaId={selectedEmpresa.id} permisoComunicacionCliente={permisoComunicacionCliente} />;
       case 'config': return <Configuracion />;
       case 'perfil': return <Perfil />;
       default:

@@ -46,7 +46,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
         supabase.from('tesoreria_documentos').select('id,fecha_emision,fecha_vencimiento,tipo_documento,referencia,concepto,saldo_pendiente,total,estado,entidades(id,razon_social)').eq('id_empresa', empresaId).order('fecha_emision', { ascending: false }),
         supabase.from('tesoreria_movimientos').select('id,fecha,tipo_movimiento,concepto,monto,estado,referencia,cuenta_financiera:cuentas_financieras(nombre),entidades(id,razon_social),documento:tesoreria_documentos(referencia,concepto,total,fecha_vencimiento)').eq('id_empresa', empresaId).order('fecha', { ascending: false }).limit(30),
         supabase.from('entidades').select('id,razon_social,tipo_entidad').eq('id_empresa', empresaId).order('razon_social'),
-        supabase.from('plan_cuentas').select('id, codigo_cuenta, nombre').eq('id_empresa', empresaId).order('codigo_cuenta'),
+        supabase.from('plan_cuentas').select('id, codigo_cuenta, nombre, acepta_movimientos').eq('id_empresa', empresaId).order('codigo_cuenta'),
         // Traer todas las transacciones anuladas para poder excluir sus facturas de tesorería
         supabase.from('transacciones').select('concepto').eq('id_empresa', empresaId).eq('tipo_comprobante', 'Anulado')
       ]);
@@ -392,11 +392,11 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
       // AUTOMATIZACIÓN DE ASIENTO CONTABLE
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: qCuentas } = await supabase.from('plan_cuentas').select('id, codigo_cuenta, nombre').eq('id_empresa', empresaId);
+        const { data: qCuentas } = await supabase.from('plan_cuentas').select('id, codigo_cuenta, nombre, acepta_movimientos').eq('id_empresa', empresaId);
         if (qCuentas) {
-          const ctasBancos = qCuentas.filter(c => c.codigo_cuenta.startsWith('1.1.1') || c.nombre.toLowerCase().includes('banco') || c.nombre.toLowerCase().includes('caja'));
-          const ctasCobrar = qCuentas.filter(c => c.codigo_cuenta.startsWith('1') && !c.codigo_cuenta.startsWith('1.1.1') && (c.codigo_cuenta.startsWith('1.1.2') || c.nombre.toLowerCase().includes('cobrar') || c.nombre.toLowerCase().includes('cliente')));
-          const ctasPagar = qCuentas.filter(c => c.codigo_cuenta.startsWith('2') && (c.codigo_cuenta.startsWith('2.1') || c.nombre.toLowerCase().includes('pagar') || c.nombre.toLowerCase().includes('proveedor')));
+          const ctasBancos = qCuentas.filter(c => c.acepta_movimientos && (c.codigo_cuenta.startsWith('1.1.1') || c.nombre.toLowerCase().includes('banco') || c.nombre.toLowerCase().includes('caja')));
+          const ctasCobrar = qCuentas.filter(c => c.acepta_movimientos && c.codigo_cuenta.startsWith('1') && !c.codigo_cuenta.startsWith('1.1.1') && (c.codigo_cuenta.startsWith('1.1.2') || c.nombre.toLowerCase().includes('cobrar') || c.nombre.toLowerCase().includes('cliente')));
+          const ctasPagar = qCuentas.filter(c => c.acepta_movimientos && c.codigo_cuenta.startsWith('2') && (c.codigo_cuenta.startsWith('2.1') || c.nombre.toLowerCase().includes('pagar') || c.nombre.toLowerCase().includes('proveedor')));
 
           const bancoId = movForm.id_cuenta_banco_contable || ctasBancos[0]?.id;
           let cxcId = ctasCobrar[0]?.id;

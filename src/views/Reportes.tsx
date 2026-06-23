@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   BarChart3, 
   TrendingUp, 
   FileSpreadsheet, 
   Landmark, 
   BookCopy, 
-  Loader2 
+  Loader2,
+  Lock
 } from 'lucide-react';
 import { MayorGeneral } from '../components/MayorGeneral';
 import { useReportes } from '../hooks/useReportes';
@@ -16,7 +17,10 @@ import { AuxiliarCarteraTab } from '../components/AuxiliarCarteraTab';
 import { FlujoCajaTab } from '../components/FlujoCajaTab';
 import { RetencionesSRITab } from '../components/RetencionesSRITab';
 
-interface Props { empresaId: string; }
+interface Props { 
+  empresaId: string; 
+  permisoReportesPdf: boolean;
+}
 
 const tabStyle = (active: boolean): React.CSSProperties => ({
   padding: '10px 14px',
@@ -30,7 +34,8 @@ const tabStyle = (active: boolean): React.CSSProperties => ({
   transition: 'all 0.2s ease'
 });
 
-export const Reportes: React.FC<Props> = ({ empresaId }) => {
+export const Reportes: React.FC<Props> = ({ empresaId, permisoReportesPdf }) => {
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const {
     loading,
     activeTab,
@@ -59,6 +64,22 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
     exportBalanceCSV,
     exportBalancePDF
   } = useReportes(empresaId);
+
+  const handleExportBalanceCSV = () => {
+    if (!permisoReportesPdf) {
+      setShowUpgradeModal(true);
+      return;
+    }
+    exportBalanceCSV();
+  };
+
+  const handleExportBalancePDF = () => {
+    if (!permisoReportesPdf) {
+      setShowUpgradeModal(true);
+      return;
+    }
+    exportBalancePDF();
+  };
 
   if (loading) {
     return (
@@ -129,14 +150,15 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
           setHasta={setHasta}
           soloConMov={soloConMov}
           setSoloConMov={setSoloConMov}
-          exportBalanceCSV={exportBalanceCSV}
-          exportBalancePDF={exportBalancePDF}
+          exportBalanceCSV={handleExportBalanceCSV}
+          exportBalancePDF={handleExportBalancePDF}
         />
       )}
 
       {/* ── 2. TAB: ESTADO DE RESULTADOS ── */}
       {activeTab === 'resultado' && (
         <EstadoResultadosTab
+          empresaId={empresaId}
           filteredLedger={filteredLedger}
           rootAccounts={rootAccounts}
           expandedAccounts={expandedAccounts}
@@ -144,12 +166,15 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
           isVisibleByParentCollapse={isVisibleByParentCollapse}
           desde={desde}
           hasta={hasta}
+          permisoReportesPdf={permisoReportesPdf}
+          onPremiumBlock={() => setShowUpgradeModal(true)}
         />
       )}
 
       {/* ── 3. TAB: BALANCE GENERAL ── */}
       {activeTab === 'general' && (
         <BalanceGeneralTab
+          empresaId={empresaId}
           filteredLedger={filteredLedger}
           rootAccounts={rootAccounts}
           expandedAccounts={expandedAccounts}
@@ -157,31 +182,117 @@ export const Reportes: React.FC<Props> = ({ empresaId }) => {
           isVisibleByParentCollapse={isVisibleByParentCollapse}
           desde={desde}
           hasta={hasta}
+          permisoReportesPdf={permisoReportesPdf}
+          onPremiumBlock={() => setShowUpgradeModal(true)}
         />
       )}
 
       {/* ── 4. TAB: MAYOR GENERAL ── */}
       {activeTab === 'mayor' && (
-        <MayorGeneral empresaId={empresaId} />
+        <MayorGeneral 
+          empresaId={empresaId} 
+          permisoReportesPdf={permisoReportesPdf}
+          onPremiumBlock={() => setShowUpgradeModal(true)}
+        />
       )}
 
       {/* ── 5. TAB: AUXILIAR DE CARTERA ── */}
       {activeTab === 'cartera' && (
-        <AuxiliarCarteraTab carteraAgrupada={carteraAgrupada} carteraDocs={carteraDocs} />
+        <AuxiliarCarteraTab 
+          empresaId={empresaId} 
+          carteraAgrupada={carteraAgrupada} 
+          carteraDocs={carteraDocs} 
+          permisoReportesPdf={permisoReportesPdf}
+          onPremiumBlock={() => setShowUpgradeModal(true)}
+        />
       )}
 
       {/* ── 6. TAB: ESTADO DE FLUJO DE EFECTIVO ── */}
       {activeTab === 'flujo' && (
         <FlujoCajaTab
+          empresaId={empresaId}
           flowCategorized={flowCategorized}
           desde={desde}
           hasta={hasta}
+          permisoReportesPdf={permisoReportesPdf}
+          onPremiumBlock={() => setShowUpgradeModal(true)}
         />
       )}
 
       {/* ── 7. TAB: REPORTE DE RETENCIONES SRI ── */}
       {activeTab === 'retenciones' && (
-        <RetencionesSRITab retencionesAgrupadas={retencionesAgrupadas} />
+        <RetencionesSRITab 
+          empresaId={empresaId} 
+          retencionesAgrupadas={retencionesAgrupadas} 
+          permisoReportesPdf={permisoReportesPdf}
+          onPremiumBlock={() => setShowUpgradeModal(true)}
+        />
+      )}
+
+      {/* MODAL DE UPGRADE PREMIUM */}
+      {showUpgradeModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999999,
+          padding: 16
+        }} onClick={() => setShowUpgradeModal(false)}>
+          <div style={{
+            background: 'var(--card-bg)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 24,
+            width: '100%',
+            maxWidth: 440,
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
+            overflow: 'hidden',
+            padding: '32px 24px',
+            textAlign: 'center',
+            backdropFilter: 'blur(40px)'
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{
+              width: 64,
+              height: 64,
+              borderRadius: '50%',
+              background: 'rgba(0, 214, 143, 0.15)',
+              color: 'var(--primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              fontSize: '1.8rem'
+            }}>
+              <Lock size={32} />
+            </div>
+
+            <h3 style={{ margin: '0 0 12px', fontSize: '1.4rem', fontWeight: 900, color: 'var(--text-main)' }}>
+              ¡Acceso a Descargas Premium!
+            </h3>
+
+            <p style={{ margin: '0 0 24px', fontSize: '0.92rem', color: 'var(--text-sec)', lineHeight: 1.6 }}>
+              La exportación de informes financieros en PDF y Excel requiere una suscripción activa. Contacta con tu administrador para habilitar este módulo.
+            </p>
+
+            <button
+              onClick={() => setShowUpgradeModal(false)}
+              className="btn btn-primary"
+              style={{
+                width: '100%',
+                padding: '14px',
+                borderRadius: 14,
+                fontWeight: 800,
+                fontSize: '0.95rem',
+                justifyContent: 'center'
+              }}
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

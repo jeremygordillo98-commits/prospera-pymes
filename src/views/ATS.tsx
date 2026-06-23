@@ -1,25 +1,29 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  FileDown, 
-  Calendar, 
-  RefreshCw, 
-  CheckCircle2, 
-  FileText, 
-  Receipt, 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  FileDown,
+  Calendar,
+  RefreshCw,
+  CheckCircle2,
+  FileText,
+  Receipt,
+  TrendingUp,
+  TrendingDown,
   ShieldAlert,
   Code2,
   Copy,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Lock
 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import JSZip from 'jszip';
 import { buildATSXml, getSRIDocumentNumber } from '../utils/atsXmlBuilder';
 
-interface ATSProps { empresaId: string; }
+interface ATSProps { 
+  empresaId: string; 
+  permisoDescargaAts: boolean;
+}
 
 interface DocSRI {
   id: string;
@@ -37,13 +41,13 @@ interface DocSRI {
     concepto: string;
     tipo_comprobante: string;
     numero_comprobante: string;
-    entidades?: { 
+    entidades?: {
       id: string;
-      nombre: string; 
+      nombre: string;
       razon_social: string;
-      ruc_cedula: string; 
-      tipo_identificacion?: string; 
-      persona_tipo?: string 
+      ruc_cedula: string;
+      tipo_identificacion?: string;
+      persona_tipo?: string
     } | null;
   } | null;
 }
@@ -55,19 +59,20 @@ interface EmpresaInfo {
 
 type Tab = 'compras' | 'ventas' | 'retenciones' | 'anulados';
 
-export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
+export const ATS: React.FC<ATSProps> = ({ empresaId, permisoDescargaAts }) => {
   const now = new Date();
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [anio, setAnio] = useState(now.getFullYear());
   const [mes, setMes] = useState(now.getMonth() + 1);
   const [tab, setTab] = useState<Tab>('compras');
   const [docs, setDocs] = useState<DocSRI[]>([]);
   const [empresa, setEmpresa] = useState<EmpresaInfo | null>(null);
   const [loading, setLoading] = useState(false);
-  
+
   // Shield Diagnóstico
   const [alertasCriticas, setAlertasCriticas] = useState<string[]>([]);
   const [advertencias, setAdvertencias] = useState<string[]>([]);
-  
+
   // Live Previewer
   const [showXmlPreview, setShowXmlPreview] = useState(false);
   const [xmlStringPreview, setXmlStringPreview] = useState('');
@@ -88,7 +93,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       ]);
 
       if (empData) setEmpresa(empData);
-      
+
       if (docsData) {
         // Filtrar por periodo (mes y año)
         const filtered = (docsData as any[]).filter(d => {
@@ -149,7 +154,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
           // --- NUEVAS COMPROBACIONES DE ROBUSTEZ FISCAL ---
           const rets = d.retenciones_aplicadas || [];
           const firstRet = rets[0];
-          
+
           if (esComp) {
             // 1. Validar existencia del sustento tributario (solo si no hay retenciones en absoluto para evitar falsas advertencias en facturas antiguas procesadas)
             const sust = firstRet?.cod_sustento;
@@ -205,18 +210,18 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
   const ventas = docs.filter(d => (d.transacciones?.tipo_comprobante === 'Factura' || d.transacciones?.tipo_comprobante === 'Nota de Crédito') && !d.es_compra);
   const retenciones = docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retención');
   const retencionesRecibidas = docs.filter(d => d.transacciones?.tipo_comprobante === 'Comprobante de Retención' && !d.es_compra);
-  const anulados = docs.filter(d => 
-    d.transacciones?.concepto?.toLowerCase().includes('anulado') || 
+  const anulados = docs.filter(d =>
+    d.transacciones?.concepto?.toLowerCase().includes('anulado') ||
     d.transacciones?.tipo_comprobante === 'Anulado'
   );
 
   // ─── Agrupamientos y KPIs Contables ──────────────────────────
-  const totalIVAVentas     = ventas.reduce((s, d) => {
+  const totalIVAVentas = ventas.reduce((s, d) => {
     const isNC = d.transacciones?.tipo_comprobante === 'Nota de Crédito';
     return s + (isNC ? -(d.monto_iva || 0) : (d.monto_iva || 0));
   }, 0);
 
-  const totalRetEmitido    = compras.reduce((s, d) =>
+  const totalRetEmitido = compras.reduce((s, d) =>
     s + (d.retenciones_aplicadas || []).reduce((a: number, r: any) => a + (r.valor || 0), 0), 0);
 
   // Agrupamiento de Ventas por Cliente para el ATS con retenciones dinámicas
@@ -257,7 +262,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
     const retsCliente = retencionesRecibidas.filter(r => r.transacciones?.entidades?.ruc_cedula === v.ruc);
     let totalRetIva = 0;
     let totalRetRenta = 0;
-    
+
     retsCliente.forEach(r => {
       const retsAplicadas = r.retenciones_aplicadas || [];
       retsAplicadas.forEach((ra: any) => {
@@ -268,7 +273,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
         }
       });
     });
-    
+
     return {
       ...v,
       retIva: v.tipoComprobante === '04' ? 0 : totalRetIva,
@@ -283,14 +288,18 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
   };
 
   const generarXML = async () => {
+    if (!permisoDescargaAts) {
+      setShowUpgradeModal(true);
+      return;
+    }
     if (!empresa) return;
     const xml = buildXMLString();
     const mesStr = String(mes).padStart(2, '0');
-    
+
     const zip = new JSZip();
     const filename = `AT${mesStr}${anio}`;
     zip.file(`${filename}.xml`, xml);
-    
+
     try {
       const content = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(content);
@@ -318,7 +327,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
     setShowXmlPreview(!showXmlPreview);
   };
 
-  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
   return (
     <div className="space-y-6">
@@ -335,7 +344,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       <div className="glass-card" style={{ padding: '20px 24px', marginBottom: 24, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <Calendar size={18} style={{ color: 'var(--primary)' }} />
         <select value={mes} onChange={e => setMes(+e.target.value)} style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 700 }}>
-          {MESES.map((m, i) => <option key={i} value={i+1}>{m}</option>)}
+          {MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
         </select>
         <select value={anio} onChange={e => setAnio(+e.target.value)} style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 700 }}>
           {[2023, 2024, 2025, 2026].map(y => <option key={y}>{y}</option>)}
@@ -377,7 +386,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900, color: alertasCriticas.length > 0 ? '#ef4444' : 'var(--warning)', marginBottom: 12 }}>
             <ShieldAlert size={20} /> Diagnóstico Tributario Inteligente (Pre-Auditoría)
           </div>
-          
+
           {alertasCriticas.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <div style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 800, marginBottom: 6 }}>🚨 ERRORES CRÍTICOS (Impiden la descarga):</div>
@@ -407,16 +416,16 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       {/* Tabs de inspección */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         {([
-          ['compras', 'Facturas Compra', compras.length], 
+          ['compras', 'Facturas Compra', compras.length],
           ['ventas', 'Ventas (Agrupadas)', ventasAgrupadasPorCliente.length],
           ['retenciones', 'Retenciones', retenciones.length],
           ['anulados', 'Anulados', anulados.length]
         ] as [Tab, string, number][]).map(([id, label, cnt]) => (
           <button key={id} onClick={() => setTab(id)} style={{ padding: '10px 20px', borderRadius: 12, border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem', background: tab === id ? 'var(--primary)' : 'var(--glass-bg)', color: tab === id ? '#fff' : 'var(--text-sec)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            {id === 'compras' && <FileText size={15}/>}
-            {id === 'ventas' && <TrendingUp size={15}/>}
-            {id === 'retenciones' && <Receipt size={15}/>}
-            {id === 'anulados' && <TrendingDown size={15}/>}
+            {id === 'compras' && <FileText size={15} />}
+            {id === 'ventas' && <TrendingUp size={15} />}
+            {id === 'retenciones' && <Receipt size={15} />}
+            {id === 'anulados' && <TrendingDown size={15} />}
             {label}
             <span style={{ background: tab === id ? 'rgba(255,255,255,0.25)' : 'var(--primary-light)', color: tab === id ? '#fff' : 'var(--primary)', padding: '2px 8px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 800 }}>{cnt}</span>
           </button>
@@ -440,7 +449,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                  {['Proveedor','Número Comprobante','Fecha','Base 0%','Base Imp Grav','IVA','Forma Pago','Total'].map(h => (
+                  {['Proveedor', 'Número Comprobante', 'Fecha', 'Base 0%', 'Base Imp Grav', 'IVA', 'Forma Pago', 'Total'].map(h => (
                     <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Proveedor' ? 'left' : 'right', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)' }}>{h}</th>
                   ))}
                 </tr>
@@ -484,7 +493,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                  {['Cliente','Tipo ID','Tipo Doc','Comprobantes','Suma Base 0%','Suma Base 12%','Suma IVA','Total Facturado'].map(h => (
+                  {['Cliente', 'Tipo ID', 'Tipo Doc', 'Comprobantes', 'Suma Base 0%', 'Suma Base 12%', 'Suma IVA', 'Total Facturado'].map(h => (
                     <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Cliente' ? 'left' : 'right', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)' }}>{h}</th>
                   ))}
                 </tr>
@@ -498,13 +507,13 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800 }}>{v.tipoId}</td>
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      <span style={{ 
-                        fontSize: '0.75rem', 
-                        background: v.tipoDoc === 'Nota de Crédito' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)', 
-                        color: v.tipoDoc === 'Nota de Crédito' ? '#ef4444' : '#10b981', 
-                        padding: '2px 8px', 
-                        borderRadius: 6, 
-                        fontWeight: 700 
+                      <span style={{
+                        fontSize: '0.75rem',
+                        background: v.tipoDoc === 'Nota de Crédito' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                        color: v.tipoDoc === 'Nota de Crédito' ? '#ef4444' : '#10b981',
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        fontWeight: 700
                       }}>
                         {v.tipoDoc}
                       </span>
@@ -531,7 +540,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                  {['Tercero','Secuencial','Fecha','Conceptos Aplicados','Total Retenido'].map(h => (
+                  {['Tercero', 'Secuencial', 'Fecha', 'Conceptos Aplicados', 'Total Retenido'].map(h => (
                     <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Tercero' ? 'left' : 'right', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)' }}>{h}</th>
                   ))}
                 </tr>
@@ -566,7 +575,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                  {['Comprobante','Secuencial','Fecha Anulación','Autorización / Clave Acceso'].map(h => (
+                  {['Comprobante', 'Secuencial', 'Fecha Anulación', 'Autorización / Clave Acceso'].map(h => (
                     <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Comprobante' ? 'left' : 'right', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-sec)' }}>{h}</th>
                   ))}
                 </tr>
@@ -589,8 +598,8 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       {/* Acordeón Previsualizador de XML ATS */}
       {docs.length > 0 && (
         <div className="glass-card" style={{ padding: 0, marginTop: 32, overflow: 'hidden' }}>
-          <div 
-            onClick={handleTogglePreview} 
+          <div
+            onClick={handleTogglePreview}
             style={{ padding: '18px 24px', cursor: 'pointer', display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 900, color: 'var(--primary)' }}>
@@ -598,16 +607,16 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
             </div>
             {showXmlPreview ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
           </div>
-          
+
           <AnimatePresence>
             {showXmlPreview && (
-              <motion.div 
-                initial={{ height: 0, opacity: 0 }} 
-                animate={{ height: 'auto', opacity: 1 }} 
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 style={{ borderTop: '1px solid var(--border-color)', background: '#0f172a', padding: 24, position: 'relative' }}
               >
-                <button 
+                <button
                   onClick={copyToClipboard}
                   style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', fontWeight: 700 }}
                 >
@@ -623,6 +632,72 @@ export const ATS: React.FC<ATSProps> = ({ empresaId }) => {
       )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* MODAL DE UPGRADE PREMIUM */}
+      {showUpgradeModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999999,
+          padding: 16
+        }} onClick={() => setShowUpgradeModal(false)}>
+          <div style={{
+            background: 'var(--card-bg)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 24,
+            width: '100%',
+            maxWidth: 440,
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
+            overflow: 'hidden',
+            padding: '32px 24px',
+            textAlign: 'center',
+            backdropFilter: 'blur(40px)'
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{
+              width: 64,
+              height: 64,
+              borderRadius: '50%',
+              background: 'rgba(0, 214, 143, 0.15)',
+              color: 'var(--primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              fontSize: '1.8rem'
+            }}>
+              <Lock size={32} />
+            </div>
+
+            <h3 style={{ margin: '0 0 12px', fontSize: '1.4rem', fontWeight: 900, color: 'var(--text-main)' }}>
+              ¡Acceso a Descargas Premium!
+            </h3>
+
+            <p style={{ margin: '0 0 24px', fontSize: '0.92rem', color: 'var(--text-sec)', lineHeight: 1.6 }}>
+              La descarga del archivo XML para declaración fiscal del ATS requiere una suscripción activa. Contacta con tu administrador para habilitar este módulo.
+            </p>
+
+            <button
+              onClick={() => setShowUpgradeModal(false)}
+              className="btn btn-primary"
+              style={{
+                width: '100%',
+                padding: '14px',
+                borderRadius: 14,
+                fontWeight: 800,
+                fontSize: '0.95rem',
+                justifyContent: 'center'
+              }}
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

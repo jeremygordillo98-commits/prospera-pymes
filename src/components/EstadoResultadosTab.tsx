@@ -1,7 +1,9 @@
 import React from 'react';
 import { Download, ChevronDown, ChevronRight } from 'lucide-react';
+import { generatePDFReport } from '../utils/pdfGenerator';
 
 interface Props {
+  empresaId: string;
   filteredLedger: any[];
   rootAccounts: any[];
   expandedAccounts: Record<string, boolean>;
@@ -9,16 +11,21 @@ interface Props {
   isVisibleByParentCollapse: (code: string) => boolean;
   desde: string;
   hasta: string;
+  permisoReportesPdf: boolean;
+  onPremiumBlock: () => void;
 }
 
 export const EstadoResultadosTab: React.FC<Props> = ({
+  empresaId,
   filteredLedger,
   rootAccounts,
   expandedAccounts,
   toggleAccount,
   isVisibleByParentCollapse,
   desde,
-  hasta
+  hasta,
+  permisoReportesPdf,
+  onPremiumBlock
 }) => {
   const ingresos = filteredLedger.filter(i => i.tipo === 'Ingreso');
   const gastos = filteredLedger.filter(i => i.tipo === 'Gasto');
@@ -34,6 +41,10 @@ export const EstadoResultadosTab: React.FC<Props> = ({
   const utilidadNeta = utilidadOperativa - partTrabajadores - impuestoRenta;
 
   const exportER = () => {
+    if (!permisoReportesPdf) {
+      onPremiumBlock();
+      return;
+    }
     const rows = [
       ['Estado de Resultados en Cascada'],
       ['Estructura', 'Código', 'Cuenta', 'Valor'],
@@ -51,6 +62,62 @@ export const EstadoResultadosTab: React.FC<Props> = ({
     const a = document.createElement('a'); a.href = encodeURI(csv);
     a.download = `Estado_Resultados_${desde || 'inicio'}_${hasta || 'fin'}.csv`;
     a.click();
+  };
+
+  const exportERPDF = async () => {
+    if (!permisoReportesPdf) {
+      onPremiumBlock();
+      return;
+    }
+    const columns = ['Código', 'Cuenta', 'Monto'];
+    const rows: any[][] = [];
+
+    // Ingresos
+    rows.push([
+      { content: 'INGRESOS OPERACIONALES', colSpan: 3, styles: { fillColor: [240, 253, 250], fontStyle: 'bold', textColor: [16, 185, 129] } }
+    ]);
+    ingresos.forEach(i => {
+      rows.push([i.codigo_cuenta, i.nombre, `$${i.saldo.toFixed(2)}`]);
+    });
+    rows.push([
+      { content: 'TOTAL INGRESOS OPERACIONALES', colSpan: 2, styles: { fontStyle: 'bold' } },
+      `$${totalIng.toFixed(2)}`
+    ]);
+
+    // Gastos
+    rows.push([
+      { content: 'COSTOS Y GASTOS OPERACIONALES', colSpan: 3, styles: { fillColor: [254, 242, 242], fontStyle: 'bold', textColor: [239, 68, 68] } }
+    ]);
+    gastos.forEach(i => {
+      rows.push([i.codigo_cuenta, i.nombre, `$${i.saldo.toFixed(2)}`]);
+    });
+    rows.push([
+      { content: 'TOTAL COSTOS Y GASTOS', colSpan: 2, styles: { fontStyle: 'bold' } },
+      `$${totalGas.toFixed(2)}`
+    ]);
+
+    // Utilidad
+    rows.push([
+      { content: '(=) UTILIDAD DE LA OPERACIÓN', colSpan: 2, styles: { fontStyle: 'bold' } },
+      `$${utilidadOperativa.toFixed(2)}`
+    ]);
+    rows.push([
+      { content: '(-) 15% Participación Trabajadores', colSpan: 2, styles: { textColor: [100, 100, 100] } },
+      `-$${partTrabajadores.toFixed(2)}`
+    ]);
+    rows.push([
+      { content: '(-) 25% Impuesto a la Renta', colSpan: 2, styles: { textColor: [100, 100, 100] } },
+      `-$${impuestoRenta.toFixed(2)}`
+    ]);
+    rows.push([
+      { content: '(=) RESULTADO NETO DEL EJERCICIO', colSpan: 2, styles: { fontStyle: 'bold', fillColor: [240, 245, 250] } },
+      `$${utilidadNeta.toFixed(2)}`
+    ]);
+
+    let subtitle = 'Estado de Resultados Integral';
+    if (desde || hasta) subtitle += ` (${desde || 'Inicio'} al ${hasta || 'Hoy'})`;
+
+    await generatePDFReport(empresaId, 'Estado de Resultados', subtitle, columns, rows, []);
   };
 
   const renderTree = (items: typeof ingresos, color: string) => {
@@ -88,9 +155,14 @@ export const EstadoResultadosTab: React.FC<Props> = ({
     <section style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div className="glass-card" style={{ padding: '14px 20px', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <h3 style={{ margin: 0, flex: 1 }}>Estado de Resultados Integral</h3>
-        <button onClick={exportER} className="btn" style={{ padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
-          <Download size={14} /> CSV
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={exportER} className="btn" style={{ padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
+            <Download size={14} /> CSV
+          </button>
+          <button onClick={exportERPDF} className="btn btn-primary" style={{ padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
+            <Download size={14} /> PDF
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))', gap: 20 }}>
