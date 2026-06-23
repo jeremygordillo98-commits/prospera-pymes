@@ -49,7 +49,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
     queryFn: async () => {
       const [cuentasRes, docsRes, movRes, entRes, pcRes, txAnuladasRes] = await Promise.all([
         supabase.from('cuentas_financieras').select('*').eq('id_empresa', empresaId).order('nombre'),
-        supabase.from('tesoreria_documentos').select('id,fecha_emision,fecha_vencimiento,tipo_documento,referencia,concepto,saldo_pendiente,total,estado,entidades(id,razon_social)').eq('id_empresa', empresaId).order('fecha_emision', { ascending: false }),
+        supabase.from('tesoreria_documentos').select('id,fecha_emision,fecha_vencimiento,tipo_documento,referencia,concepto,saldo_pendiente,total,estado,origen,entidades(id,razon_social)').eq('id_empresa', empresaId).order('fecha_emision', { ascending: false }),
         supabase.from('tesoreria_movimientos').select('id,fecha,tipo_movimiento,concepto,monto,estado,referencia,cuenta_financiera:cuentas_financieras(nombre),entidades(id,razon_social),documento:tesoreria_documentos(referencia,concepto,total,fecha_vencimiento)').eq('id_empresa', empresaId).order('fecha', { ascending: false }).limit(30),
         supabase.from('entidades').select('id,razon_social,tipo_entidad').eq('id_empresa', empresaId).order('razon_social'),
         supabase.from('plan_cuentas').select('id, codigo_cuenta, nombre, acepta_movimientos').eq('id_empresa', empresaId).order('codigo_cuenta'),
@@ -400,20 +400,27 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
       if (user) {
         const { data: qCuentas } = await supabase.from('plan_cuentas').select('id, codigo_cuenta, nombre, acepta_movimientos').eq('id_empresa', empresaId);
         if (qCuentas) {
-          const ctasBancos = qCuentas.filter(c => c.acepta_movimientos && (c.codigo_cuenta.startsWith('1.1.1') || c.nombre.toLowerCase().includes('banco') || c.nombre.toLowerCase().includes('caja')));
-          const ctasCobrar = qCuentas.filter(c => c.acepta_movimientos && c.codigo_cuenta.startsWith('1') && !c.codigo_cuenta.startsWith('1.1.1') && (c.codigo_cuenta.startsWith('1.1.2') || c.nombre.toLowerCase().includes('cobrar') || c.nombre.toLowerCase().includes('cliente')));
-          const ctasPagar = qCuentas.filter(c => c.acepta_movimientos && c.codigo_cuenta.startsWith('2') && (c.codigo_cuenta.startsWith('2.1') || c.nombre.toLowerCase().includes('pagar') || c.nombre.toLowerCase().includes('proveedor')));
+          const ctasBancos = qCuentas.filter(c => c.acepta_movimientos && (c.codigo_cuenta.startsWith('1.1.1') || c.nombre.toLowerCase().includes('banco') || c.nombre.toLowerCase().includes('caja') || c.nombre.toLowerCase().includes('fondo')));
+          
+          // Buscar cuentas de proveedores y clientes con lógica más estricta
+          const ctasPagarMejores = qCuentas.filter(c => c.acepta_movimientos && (c.codigo_cuenta.startsWith('2.1.3') || c.nombre.toLowerCase().includes('proveedor')));
+          const ctasPagarFallback = qCuentas.filter(c => c.acepta_movimientos && c.codigo_cuenta.startsWith('2') && (c.codigo_cuenta.startsWith('2.1') || c.nombre.toLowerCase().includes('pagar')));
+          const cxpIdDefault = ctasPagarMejores[0]?.id || ctasPagarFallback[0]?.id;
+
+          const ctasCobrarMejores = qCuentas.filter(c => c.acepta_movimientos && (c.codigo_cuenta.startsWith('1.1.2.5') || c.nombre.toLowerCase().includes('cliente')));
+          const ctasCobrarFallback = qCuentas.filter(c => c.acepta_movimientos && c.codigo_cuenta.startsWith('1') && !c.codigo_cuenta.startsWith('1.1.1') && (c.codigo_cuenta.startsWith('1.1.2') || c.nombre.toLowerCase().includes('cobrar')));
+          const cxcIdDefault = ctasCobrarMejores[0]?.id || ctasCobrarFallback[0]?.id;
 
           const bancoId = movForm.id_cuenta_banco_contable || ctasBancos[0]?.id;
-          let cxcId = ctasCobrar[0]?.id;
-          let cxpId = ctasPagar[0]?.id;
+          let cxcId = cxcIdDefault;
+          let cxpId = cxpIdDefault;
 
-          // Si el documento origen es de un XML (origen !== 'Manual'),
-          // intentamos buscar la transacción contable de la factura para usar
-          // exactamente la misma cuenta de Proveedor / Cliente que se utilizó.
-          if (target && target.origen !== 'Manual') {
+          // Intentamos buscar la transacción contable de la factura para usar
+          // exactamente la misma cuenta de Proveedor / Cliente que se utilizó en el asiento de la factura.
+          if (target && target.referencia) {
             try {
-              const { data: invTx } = await supabase
+              // 1. Intentar buscar con id_entidad y referencia en concepto
+              let { data: invTx } = await supabase
                 .from('transacciones')
                 .select(`
                   id,
@@ -429,6 +436,27 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
+
+              // 2. Si no se encuentra, buscar por referencia en concepto sin restricción de entidad
+              if (!invTx) {
+                const { data: invTxFallback } = await supabase
+                  .from('transacciones')
+                  .select(`
+                    id,
+                    movimientos (
+                      id_cuenta,
+                      debe,
+                      haber
+                    )
+                  `)
+                  .eq('id_empresa', empresaId)
+                  .like('concepto', `%${target.referencia}%`)
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                
+                invTx = invTxFallback;
+              }
 
               if (invTx && invTx.movimientos) {
                 if (movForm.tipo_movimiento === 'Pago') {
