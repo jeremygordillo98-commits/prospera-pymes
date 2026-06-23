@@ -54,6 +54,10 @@ export const useLibroDiario = ({ empresaId, activeView }: UseLibroDiarioProps) =
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [expandedTxs, setExpandedTxs] = useState<Set<string>>(new Set());
   const [filterDate, setFilterDate] = useState<string>('');
+  const [filterEntidad, setFilterEntidad] = useState<string>('');
+  const [filterTipo, setFilterTipo] = useState<string>('');
+  const [filterMontoMin, setFilterMontoMin] = useState<string>('');
+  const [filterMontoMax, setFilterMontoMax] = useState<string>('');
   const [selectedTxs, setSelectedTxs] = useState<Set<string>>(new Set());
 
   const [annulModal, setAnnulModal] = useState<{
@@ -90,8 +94,27 @@ export const useLibroDiario = ({ empresaId, activeView }: UseLibroDiarioProps) =
   };
 
   const filteredTransactions = useMemo(() => {
-    return transactions.filter(tx => !filterDate || tx.fecha.startsWith(filterDate));
-  }, [transactions, filterDate]);
+    const minMonto = filterMontoMin !== '' ? parseFloat(filterMontoMin) : null;
+    const maxMonto = filterMontoMax !== '' ? parseFloat(filterMontoMax) : null;
+    return transactions.filter(tx => {
+      // Filtro fecha
+      if (filterDate && !tx.fecha.startsWith(filterDate)) return false;
+      // Filtro entidad
+      if (filterEntidad) {
+        const razon = tx.entidades?.razon_social?.toLowerCase() || '';
+        if (!razon.includes(filterEntidad.toLowerCase())) return false;
+      }
+      // Filtro tipo de comprobante
+      if (filterTipo && tx.tipo_comprobante !== filterTipo) return false;
+      // Filtro montos: suma total de débitos del asiento
+      if (minMonto !== null || maxMonto !== null) {
+        const totalDebe = (tx.movimientos || []).reduce((s, m) => s + (m.debe || 0), 0);
+        if (minMonto !== null && totalDebe < minMonto) return false;
+        if (maxMonto !== null && totalDebe > maxMonto) return false;
+      }
+      return true;
+    });
+  }, [transactions, filterDate, filterEntidad, filterTipo, filterMontoMin, filterMontoMax]);
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
@@ -752,6 +775,14 @@ export const useLibroDiario = ({ empresaId, activeView }: UseLibroDiarioProps) =
     expandedTxs,
     filterDate,
     setFilterDate,
+    filterEntidad,
+    setFilterEntidad,
+    filterTipo,
+    setFilterTipo,
+    filterMontoMin,
+    setFilterMontoMin,
+    filterMontoMax,
+    setFilterMontoMax,
     selectedTxs,
     annulModal,
     setAnnulModal,
