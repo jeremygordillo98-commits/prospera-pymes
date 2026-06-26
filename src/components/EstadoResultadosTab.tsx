@@ -45,8 +45,13 @@ export const EstadoResultadosTab: React.FC<Props> = ({
       onPremiumBlock();
       return;
     }
-    const rows = [
+    const metadata = [
       ['Estado de Resultados en Cascada'],
+      [`Período: ${desde || 'Inicio'} al ${hasta || 'Hoy'}`],
+      [`Descargado el: ${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`],
+      []
+    ];
+    const rows = [
       ['Estructura', 'Código', 'Cuenta', 'Valor'],
       ['Ingresos Operacionales', '', '', totalIng.toFixed(2)]
     ];
@@ -58,7 +63,7 @@ export const EstadoResultadosTab: React.FC<Props> = ({
     rows.push(['(-) 25% Impuesto a la Renta', '', '', impuestoRenta.toFixed(2)]);
     rows.push(['UTILIDAD NETA DEL EJERCICIO', '', '', utilidadNeta.toFixed(2)]);
     
-    const csv = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map(r => r.join(',')).join('\n');
+    const csv = 'data:text/csv;charset=utf-8,\uFEFF' + metadata.map(r => r.join(',')).join('\n') + '\n' + rows.map(r => r.join(',')).join('\n');
     const a = document.createElement('a'); a.href = encodeURI(csv);
     a.download = `Estado_Resultados_${desde || 'inicio'}_${hasta || 'fin'}.csv`;
     a.click();

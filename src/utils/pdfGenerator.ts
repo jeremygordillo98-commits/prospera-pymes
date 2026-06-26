@@ -88,6 +88,12 @@ export const generatePDFReport = async (
         doc.setFont('helvetica', 'italic');
         doc.setTextColor(120, 120, 120);
         doc.text(subtitle, pageWidth / 2, 32, { align: 'center' });
+
+        const downloadDateStr = `Descargado el: ${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`;
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(130, 130, 130);
+        doc.text(downloadDateStr, pageWidth / 2, 37, { align: 'center' });
     };
 
     const drawFooter = (data: any) => {
@@ -106,8 +112,8 @@ export const generatePDFReport = async (
         head: [columns],
         body: rows,
         foot: foot,
-        startY: 40,
-        margin: { top: 40, bottom: 20 },
+        startY: 42,
+        margin: { top: 42, bottom: 20 },
         styles: { fontSize: 8, cellPadding: 3, textColor: [50, 50, 50] },
         headStyles: { fillColor: [99, 102, 241], textColor: 255, fontStyle: 'bold', halign: 'center' },
         footStyles: { fillColor: [240, 245, 250], textColor: [0, 0, 0], fontStyle: 'bold' },
@@ -427,6 +433,12 @@ export const generateLibroDiarioPDF = async (
         doc.setFont('helvetica', 'italic');
         doc.setTextColor(120, 120, 120);
         doc.text(subtitle, pageWidth / 2, 32, { align: 'center' });
+
+        const downloadDateStr = `Descargado el: ${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`;
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(130, 130, 130);
+        doc.text(downloadDateStr, pageWidth / 2, 37, { align: 'center' });
     };
 
     const drawFooter = (data: any) => {
@@ -489,8 +501,8 @@ export const generateLibroDiarioPDF = async (
         head: [columns],
         body: rows,
         foot: foot,
-        startY: 40,
-        margin: { top: 40, bottom: 20 },
+        startY: 42,
+        margin: { top: 42, bottom: 20 },
         styles: { fontSize: 8, cellPadding: 3, textColor: [50, 50, 50] },
         headStyles: { fillColor: [99, 102, 241], textColor: 255, fontStyle: 'bold', halign: 'left' },
         footStyles: { fillColor: [240, 245, 250], textColor: [0, 0, 0], fontStyle: 'bold' },

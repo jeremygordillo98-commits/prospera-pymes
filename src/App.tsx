@@ -138,6 +138,11 @@ const App = () => {
   }, [activeView]);
 
   useEffect(() => {
+    const savedDensity = localStorage.getItem('pref_table_density') || 'normal';
+    document.documentElement.setAttribute('data-density', savedDensity);
+  }, []);
+
+  useEffect(() => {
     if (selectedEmpresa) {
       setPermisoReportesPdf(!!selectedEmpresa.permiso_reportes_pdf);
       setPermisoDescargaAts(!!selectedEmpresa.permiso_descarga_ats);
@@ -162,10 +167,12 @@ const App = () => {
   };
 
   const fetchEmpresas = async () => {
+    if (!session?.user?.id) return;
     setLoadingEmpresas(true);
     const { data, error } = await supabase
       .from('empresas_gestionadas')
       .select('*')
+      .eq('id_usuario', session.user.id)
       .order('nombre_empresa');
 
     if (!error && data) {
@@ -324,7 +331,16 @@ const App = () => {
       case 'reportes-fiscales': return <ATS empresaId={selectedEmpresa.id} permisoDescargaAts={permisoDescargaAts} />;
       case 'comunicados': return <Comunicados empresaId={selectedEmpresa.id} permisoComunicacionCliente={permisoComunicacionCliente} />;
       case 'config': return <Configuracion />;
-      case 'perfil': return <Perfil />;
+      case 'perfil': 
+        return (
+          <Perfil 
+            empresas={empresas}
+            onEditEmpresa={openEditEmpresa}
+            onArchiveEmpresa={(emp) => setShowArchiveConfirm(emp)}
+            onResetEmpresa={(emp) => setShowResetConfirm(emp)}
+            onAddNewEmpresa={() => setShowNewEmpresaModal(true)}
+          />
+        );
       default:
         return (
           <div
@@ -404,11 +420,7 @@ const App = () => {
           selectedEmpresa={selectedEmpresa}
           setSelectedEmpresa={setSelectedEmpresa}
           empresas={empresas}
-          setShowNewEmpresaModal={setShowNewEmpresaModal}
           session={session}
-          openEditEmpresa={openEditEmpresa}
-          onArchiveEmpresa={(emp) => setShowArchiveConfirm(emp)}
-          onResetEmpresa={(emp) => setShowResetConfirm(emp)}
         />
       </Suspense>
 

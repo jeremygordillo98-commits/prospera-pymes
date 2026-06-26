@@ -52,8 +52,13 @@ export const BalanceGeneralTab: React.FC<Props> = ({
       onPremiumBlock();
       return;
     }
-    const rows = [
+    const metadata = [
       ['Balance General Clasificado'],
+      [`Período: ${desde || 'Inicio'} al ${hasta || 'Hoy'}`],
+      [`Descargado el: ${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`],
+      []
+    ];
+    const rows = [
       ['Grupo', 'Código', 'Cuenta', 'Saldo'],
       ['Activos', '', '', totalActivos.toFixed(2)]
     ];
@@ -65,7 +70,7 @@ export const BalanceGeneralTab: React.FC<Props> = ({
     rows.push(['Utilidad del Ejercicio (Dinamica)', '', '', utilidadPeriodo.toFixed(2)]);
     rows.push(['TOTAL PASIVO + PATRIMONIO', '', '', totalPasivoPatrimonio.toFixed(2)]);
     
-    const csv = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map(r => r.join(',')).join('\n');
+    const csv = 'data:text/csv;charset=utf-8,\uFEFF' + metadata.map(r => r.join(',')).join('\n') + '\n' + rows.map(r => r.join(',')).join('\n');
     const a = document.createElement('a'); a.href = encodeURI(csv);
     a.download = `Balance_General_${desde || 'inicio'}_${hasta || 'fin'}.csv`;
     a.click();

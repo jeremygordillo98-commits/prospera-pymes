@@ -39,6 +39,7 @@ export const FlujoCajaTab: React.FC<Props> = ({
     const rows = [
       ['Estado de Flujo de Efectivo (Método Directo)'],
       ['Fecha / Período', `${desde || 'Inicio'} al ${hasta || 'Hoy'}`],
+      ['Descargado el', `${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`],
       [],
       ['Categoría / Actividad', 'Concepto', 'Monto'],
       ['Actividades de Operación', 'Cobros a Clientes (Ingresos Operativos)', flowCategorized.operacionIn.toFixed(2)],

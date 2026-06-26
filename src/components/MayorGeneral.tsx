@@ -183,6 +183,12 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId, permisoReportesPdf, o
       return;
     }
     if (!selected) return;
+    const metadata = [
+      [`Mayor General - Cuenta: ${selected.codigo_cuenta} - ${selected.nombre}`],
+      [`Período: ${desde || 'Inicio'} al ${hasta || 'Hoy'}`],
+      [`Descargado el: ${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`],
+      []
+    ];
     const rows = [['Fecha', 'Concepto', 'Comprobante', 'Tercero', 'Debe', 'Haber', 'Saldo']];
     if (desde) {
       rows.push([
@@ -207,7 +213,7 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId, permisoReportesPdf, o
       ]);
     });
     rows.push(['', 'TOTALES', '', '', totalDebe.toFixed(2), totalHaber.toFixed(2), '']);
-    const csv = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map(r => r.join(',')).join('\n');
+    const csv = 'data:text/csv;charset=utf-8,\uFEFF' + metadata.map(r => r.join(',')).join('\n') + '\n' + rows.map(r => r.join(',')).join('\n');
     const a = document.createElement('a');
     a.href = encodeURI(csv);
     a.download = `Mayor_${selected.codigo_cuenta}_${selected.nombre}.csv`;
