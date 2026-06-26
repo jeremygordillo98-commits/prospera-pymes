@@ -438,3 +438,18 @@ select option {
     transform: rotate(360deg);
   }
 }
+
+/* 📏 DENSIDAD DE TABLAS DINÁMICA */
+[data-density="compact"] td,
+[data-density="compact"] .data-table td,
+[data-density="compact"] table td {
+  padding: 6px 12px !important;
+  font-size: 0.85rem !important;
+}
+
+[data-density="compact"] th,
+[data-density="compact"] .data-table th,
+[data-density="compact"] table th {
+  padding: 8px 12px !important;
+  font-size: 0.75rem !important;
+}

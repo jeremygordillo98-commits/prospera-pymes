@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, XCircle, Calendar, Download, ChevronDown, ChevronRight } from 'lucide-react';
+import { CheckCircle2, XCircle, Download, ChevronDown, ChevronRight } from 'lucide-react';
 
 interface Props {
   filteredLedger: any[];
@@ -11,10 +11,6 @@ interface Props {
   totalHaber: number;
   searchTerm: string;
   setSearchTerm: (val: string) => void;
-  desde: string;
-  setDesde: (val: string) => void;
-  hasta: string;
-  setHasta: (val: string) => void;
   soloConMov: boolean;
   setSoloConMov: (val: boolean) => void;
   exportBalanceCSV: () => void;
@@ -31,10 +27,6 @@ export const BalanceComprobacionTab: React.FC<Props> = ({
   totalHaber,
   searchTerm,
   setSearchTerm,
-  desde,
-  setDesde,
-  hasta,
-  setHasta,
   soloConMov,
   setSoloConMov,
   exportBalanceCSV,
@@ -61,12 +53,6 @@ export const BalanceComprobacionTab: React.FC<Props> = ({
           {cuadrado ? 'Cuadrado ✓' : totalDebe === 0 ? 'Sin datos' : `Descuadre Período: $${Math.abs(totalDebe - totalHaber).toFixed(2)}`}
         </div>
         
-        <Calendar size={14} style={{ color: 'var(--text-sec)' }} />
-        <input type="date" value={desde} onChange={e => setDesde(e.target.value)}
-          style={{ padding: '7px 10px', borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '0.82rem' }} />
-        <input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
-          style={{ padding: '7px 10px', borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '0.82rem' }} />
-        {(desde || hasta) && <button onClick={() => { setDesde(''); setHasta(''); }} style={{ background: 'none', border: 'none', color: 'var(--text-sec)', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem' }}>✕</button>}
         
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', color: 'var(--text-sec)', cursor: 'pointer', userSelect: 'none' }}>
           <input type="checkbox" checked={soloConMov} onChange={e => setSoloConMov(e.target.checked)} style={{ accentColor: 'var(--primary)' }} />

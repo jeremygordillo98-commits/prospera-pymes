@@ -3,7 +3,6 @@ import {
   ChevronDown,
   ChevronRight,
   Building2,
-  Plus,
   LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,11 +15,7 @@ interface SidebarProps {
   selectedEmpresa: any;
   setSelectedEmpresa: (emp: any) => void;
   empresas: any[];
-  setShowNewEmpresaModal: (show: boolean) => void;
   session: any;
-  openEditEmpresa: (emp: any) => void;
-  onArchiveEmpresa: (emp: any) => void;
-  onResetEmpresa: (emp: any) => void;
 }
 
 export const Sidebar = ({
@@ -29,13 +24,9 @@ export const Sidebar = ({
   selectedEmpresa,
   setSelectedEmpresa,
   empresas,
-  setShowNewEmpresaModal,
   session,
-  openEditEmpresa,
-  onArchiveEmpresa,
-  onResetEmpresa,
 }: SidebarProps) => {
-  const [openMenus, setOpenMenus] = useState<string[]>(['config-parent']);
+  const [openMenus, setOpenMenus] = useState<string[]>(['contabilidad-parent']);
 
   const toggleMenu = (item: any) => {
     const id = item.id;
@@ -78,7 +69,7 @@ export const Sidebar = ({
       <div style={{ padding: '0 16px', marginBottom: '24px' }}>
         <div className="glass-card" style={{ padding: '12px', border: '1px solid var(--border-color)', borderRadius: '16px', background: 'rgba(255,255,255,0.02)' }}>
           <label style={{ fontSize: '0.65rem', color: 'var(--text-sec)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', display: 'block', paddingLeft: '4px' }}>Empresa Gestionada</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Building2 size={16} className="text-sec" style={{ opacity: 0.6 }} />
             <select
               value={selectedEmpresa?.id || ''}
@@ -99,50 +90,6 @@ export const Sidebar = ({
               ))}
             </select>
           </div>
-          <button
-            onClick={() => setShowNewEmpresaModal(true)}
-            style={{
-              width: '100%',
-              padding: '8px',
-              background: 'var(--primary-light)',
-              border: 'none',
-              borderRadius: '8px',
-              color: 'var(--primary)',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              transition: 'all 0.2s'
-            }}
-          >
-            <Plus size={14} /> Registrar Empresa
-          </button>
-
-          {/* Acciones sobre empresa activa */}
-          {selectedEmpresa && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => openEditEmpresa(selectedEmpresa)}
-                  title="Editar empresa"
-                  style={{ flex: 1, padding: '7px', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 8, color: '#818CF8', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
-                >✏️ Editar</button>
-                <button
-                  onClick={() => onArchiveEmpresa(selectedEmpresa)}
-                  title="Eliminar empresa"
-                  style={{ flex: 1, padding: '7px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, color: 'var(--error)', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
-                >🗑️ Eliminar</button>
-              </div>
-              <button
-                onClick={() => onResetEmpresa(selectedEmpresa)}
-                title="Resetear todos los datos contables y mantener el plan de cuentas"
-                style={{ width: '100%', padding: '7px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8, color: '#F59E0B', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
-              >🔄 Resetear Datos</button>
-            </div>
-          )}
         </div>
       </div>
 

@@ -10,9 +10,11 @@ import {
   Lock,
   X,
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { exportPlanCuentasExcel, exportPlanCuentasPDF } from '../utils/planCuentasExport';
 
 export const PlanCuentas = ({ empresaId }: { empresaId: string }) => {
   const [cuentas, setCuentas] = useState<any[]>([]);
@@ -212,8 +214,24 @@ export const PlanCuentas = ({ empresaId }: { empresaId: string }) => {
           <h2 className="h1">Plan de Cuentas</h2>
           <p className="text-sec">Estructura contable organizada.</p>
         </div>
-        <div className="flex gap-8">
-          <button className="btn btn-primary" onClick={() => handleOpenModal()}>
+        <div className="flex gap-8" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button 
+            className="btn" 
+            onClick={() => exportPlanCuentasPDF(empresaId, cuentas)} 
+            disabled={loading || cuentas.length === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 14px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 800 }}
+          >
+            <Download size={18} /><span className="hide-mobile">Exportar a PDF</span>
+          </button>
+          <button 
+            className="btn" 
+            onClick={() => exportPlanCuentasExcel(cuentas)} 
+            disabled={loading || cuentas.length === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 14px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 800 }}
+          >
+            <Download size={18} /><span className="hide-mobile">Exportar a Excel</span>
+          </button>
+          <button className="btn btn-primary" onClick={() => handleOpenModal()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Plus size={18} /> Nueva Cuenta
           </button>
         </div>

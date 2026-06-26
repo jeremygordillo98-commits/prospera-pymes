@@ -52,6 +52,8 @@ export interface SriDoc {
   es_compra: boolean;
   base_12: number;
   base_0: number;
+  base_no_objeto?: number;
+  clave_acceso_xml?: string;
   monto_iva: number;
   retenciones_aplicadas: any;
   transacciones: {
@@ -73,7 +75,7 @@ export const isDescendant = (parentCode: string, childCode: string) => {
 
 export const useReportes = (empresaId: string) => {
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'balance' | 'resultado' | 'general' | 'mayor' | 'cartera' | 'flujo' | 'retenciones'>('balance');
+  const [activeTab, setActiveTab] = useState<'balance' | 'resultado' | 'general' | 'mayor' | 'cartera' | 'flujo' | 'retenciones' | 'comprasventas'>('balance');
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [carteraDocs, setCarteraDocs] = useState<CarteraDoc[]>([]);
@@ -87,6 +89,35 @@ export const useReportes = (empresaId: string) => {
   const [soloConMov, setSoloConMov] = useState(false);
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
 
+  const [presetFilter, setPresetFilter] = useState<'curso' | 'pasado' | 'mes' | 'fecha'>('curso');
+  const [nivelFilter, setNivelFilter] = useState<'todos' | '1' | '2' | '3' | '4' | '5'>('todos');
+  const [vistaFilter, setVistaFilter] = useState<'general' | 'detallado'>('detallado');
+
+  useEffect(() => {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    
+    if (presetFilter === 'curso') {
+      setDesde(`${currentYear}-01-01`);
+      setHasta(`${currentYear}-12-31`);
+    } else if (presetFilter === 'pasado') {
+      setDesde(`${currentYear - 1}-01-01`);
+      setHasta(`${currentYear - 1}-12-31`);
+    } else if (presetFilter === 'mes') {
+      let prevMonth = today.getMonth() - 1;
+      let prevYear = currentYear;
+      if (prevMonth < 0) {
+        prevMonth = 11;
+        prevYear = currentYear - 1;
+      }
+      const lastDay = new Date(prevYear, prevMonth + 1, 0);
+      
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      setDesde(`${prevYear}-${pad(prevMonth + 1)}-01`);
+      setHasta(`${prevYear}-${pad(prevMonth + 1)}-${pad(lastDay.getDate())}`);
+    }
+  }, [presetFilter]);
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -96,7 +127,7 @@ export const useReportes = (empresaId: string) => {
           supabase.from('movimientos').select('id_cuenta,debe,haber,transacciones(fecha, entidades(id, ruc_cedula, razon_social))').eq('id_empresa', empresaId),
           supabase.from('tesoreria_documentos').select('id,fecha_emision,fecha_vencimiento,tipo_documento,referencia,concepto,saldo_pendiente,total,estado,entidades(id,razon_social,tipo_entidad,ruc_cedula)').eq('id_empresa', empresaId),
           supabase.from('tesoreria_movimientos').select('id,fecha,tipo_movimiento,concepto,monto,estado,referencia,cuentas_financieras(nombre),entidades(razon_social)').eq('id_empresa', empresaId),
-          supabase.from('documentos_sri').select('id, es_compra, base_12, base_0, monto_iva, retenciones_aplicadas, transacciones(fecha, concepto, tipo_comprobante, numero_comprobante, entidades(ruc_cedula, razon_social))').eq('id_empresa', empresaId),
+          supabase.from('documentos_sri').select('id, es_compra, base_12, base_0, base_no_objeto, clave_acceso_xml, monto_iva, retenciones_aplicadas, transacciones(fecha, concepto, tipo_comprobante, numero_comprobante, entidades(ruc_cedula, razon_social))').eq('id_empresa', empresaId),
           supabase.from('transacciones').select('concepto').eq('id_empresa', empresaId).eq('tipo_comprobante', 'Anulado')
         ]);
 
@@ -231,11 +262,14 @@ export const useReportes = (empresaId: string) => {
   const filteredLedger = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return ledger.filter(item => {
+      const level = item.codigo_cuenta.split('.').length;
+      if (nivelFilter !== 'todos' && level > Number(nivelFilter)) return false;
+      if (vistaFilter === 'general' && !item.isParent && !item.hasMov) return false;
       if (soloConMov && !item.hasMov) return false;
       if (term && !item.nombre.toLowerCase().includes(term) && !item.codigo_cuenta.toLowerCase().includes(term)) return false;
       return true;
     });
-  }, [ledger, searchTerm, soloConMov]);
+  }, [ledger, searchTerm, soloConMov, nivelFilter, vistaFilter]);
 
   const carteraAgrupada = useMemo(() => {
     const map = new Map<string, { id: string; razonSocial: string; ruc: string; tipo: string; total: number; saldo: number; docsCount: number }>();
@@ -299,6 +333,10 @@ export const useReportes = (empresaId: string) => {
     const recibidasIva = new Map<string, { base: number; valor: number; count: number }>();
 
     sriDocs.forEach(doc => {
+      const f = doc.transacciones?.fecha || '';
+      if (desde && f < desde) return;
+      if (hasta && f > hasta) return;
+
       const rets = doc.retenciones_aplicadas || [];
       if (!Array.isArray(rets)) return;
 
@@ -331,7 +369,7 @@ export const useReportes = (empresaId: string) => {
       recibidasRenta: Array.from(recibidasRenta.entries()).map(([codigo, val]) => ({ codigo, ...val })),
       recibidasIva: Array.from(recibidasIva.entries()).map(([codigo, val]) => ({ codigo, ...val }))
     };
-  }, [sriDocs]);
+  }, [sriDocs, desde, hasta]);
 
 
 
@@ -358,6 +396,12 @@ export const useReportes = (empresaId: string) => {
   };
 
   const exportBalanceCSV = () => {
+    const metadata = [
+      ['Balance de Comprobación (Sumas y Saldos)'],
+      [`Período: ${desde || 'Inicio'} al ${hasta || 'Hoy'}`],
+      [`Descargado el: ${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`],
+      []
+    ];
     const rows = [['Código', 'Cuenta', 'Tipo', 'Saldo Inicial Deudor', 'Saldo Inicial Acreedor', 'Debe Período', 'Haber Período', 'Saldo Final Deudor', 'Saldo Final Acreedor']];
     filteredLedger.forEach(i => {
       const esDeudora = ['Activo', 'Gasto'].includes(i.tipo);
@@ -377,7 +421,7 @@ export const useReportes = (empresaId: string) => {
         saldoFinA.toFixed(2)
       ]);
     });
-    const csv = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map(r => r.join(',')).join('\n');
+    const csv = 'data:text/csv;charset=utf-8,\uFEFF' + metadata.map(r => r.join(',')).join('\n') + '\n' + rows.map(r => r.join(',')).join('\n');
     const a = document.createElement('a'); a.href = encodeURI(csv);
     a.download = `Balance_Comprobacion_${desde || 'inicio'}_${hasta || 'fin'}.csv`;
     a.click();
@@ -435,6 +479,12 @@ export const useReportes = (empresaId: string) => {
     toggleAccount,
     isVisibleByParentCollapse,
     exportBalanceCSV,
-    exportBalancePDF
+    exportBalancePDF,
+    presetFilter,
+    setPresetFilter,
+    nivelFilter,
+    setNivelFilter,
+    vistaFilter,
+    setVistaFilter
   };
 };

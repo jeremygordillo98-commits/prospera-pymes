@@ -29,6 +29,9 @@ export const AuxiliarCarteraTab: React.FC<Props> = ({ empresaId, carteraAgrupada
       return;
     }
     const rows = [
+      ['Auxiliar de Cartera'],
+      ['Descargado el', `${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`],
+      [],
       ['Auxiliar de Cartera - Clientes (Cuentas por Cobrar)'],
       ['Razón Social', 'RUC/ID', 'Total Facturado', 'Saldo Pendiente']
     ];

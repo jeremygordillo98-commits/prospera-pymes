@@ -217,6 +217,7 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
     xml += `      <baseNoGraIva>${(d.base_no_objeto || 0).toFixed(2)}</baseNoGraIva>\n`;
     xml += `      <baseImponible>${(d.base_0 || 0).toFixed(2)}</baseImponible>\n`;
     xml += `      <baseImpGrav>${(d.base_12 || 0).toFixed(2)}</baseImpGrav>\n`;
+    xml += `      <baseImpExe>0.00</baseImpExe>\n`;
     xml += `      <montoIce>0.00</montoIce>\n`;
     xml += `      <montoIva>${(d.monto_iva || 0).toFixed(2)}</montoIva>\n`;
     xml += `      <valRetBien10>${ret10.toFixed(2)}</valRetBien10>\n`;
@@ -326,11 +327,11 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
       return sum + (isNC ? -val : val);
     }, 0);
 
-    xml += `    <ventaEstablecimiento>\n`;
+    xml += `    <ventaEst>\n`;
     xml += `      <codEstab>${est}</codEstab>\n`;
     xml += `      <ventasEstab>${totalEstab.toFixed(2)}</ventasEstab>\n`;
     xml += `      <ivaComp>0.00</ivaComp>\n`;
-    xml += `    </ventaEstablecimiento>\n`;
+    xml += `    </ventaEst>\n`;
   });
   xml += `  </ventasEstablecimiento>\n`;
 

@@ -10,9 +10,11 @@ import {
   Loader2,
   Trash2,
   Edit2,
-  X
+  X,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { exportEntidadesExcel, exportEntidadesPDF } from '../utils/entidadesExport';
 
 export const Entidades: React.FC<{ empresaId: string }> = ({ empresaId }) => {
   const queryClient = useQueryClient();
@@ -136,9 +138,27 @@ export const Entidades: React.FC<{ empresaId: string }> = ({ empresaId }) => {
           <h2 className="h1">Directorio de Terceros</h2>
           <p className="text-sec">Clientes, Proveedores y Empleados registrados.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => handleOpenModal()}>
-          <Plus size={18} /> Nueva Entidad
-        </button>
+        <div className="flex gap-8" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button 
+            className="btn" 
+            onClick={() => exportEntidadesPDF(empresaId, filtered)} 
+            disabled={loading || filtered.length === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 14px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 800 }}
+          >
+            <Download size={18} /><span className="hide-mobile">Exportar a PDF</span>
+          </button>
+          <button 
+            className="btn" 
+            onClick={() => exportEntidadesExcel(filtered)} 
+            disabled={loading || filtered.length === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 14px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 800 }}
+          >
+            <Download size={18} /><span className="hide-mobile">Exportar a Excel</span>
+          </button>
+          <button className="btn btn-primary" onClick={() => handleOpenModal()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Plus size={18} /> Nueva Entidad
+          </button>
+        </div>
       </header>
 
       <div className="glass-card" style={{ padding: '0' }}>

@@ -1,11 +1,18 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { ArrowDownCircle, ArrowUpCircle, CheckCircle2 } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, CheckCircle2, Download } from 'lucide-react';
+import {
+  exportCuentasExcel,
+  exportCuentasPDF,
+  exportHistorialExcel,
+  exportHistorialPDF
+} from '../utils/tesoreriaExport';
 
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', outline: 'none'
 };
 
 interface TesoreriaCobrosPagosProps {
+  empresaId: string;
   mode: 'cobros' | 'pagos';
   summary: any;
   docsFiltrados: any[];
@@ -25,6 +32,7 @@ interface TesoreriaCobrosPagosProps {
 }
 
 export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
+  empresaId,
   mode,
   summary,
   docsFiltrados,
@@ -95,6 +103,10 @@ export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
   const isCobro = mode === 'cobros';
   const color = isCobro ? 'var(--success)' : 'var(--error)';
 
+  const movimientosFiltrados = useMemo(() => {
+    return movimientos.filter(m => m.tipo_movimiento === (isCobro ? 'Cobro' : 'Pago') && m.estado !== 'Anulado');
+  }, [movimientos, isCobro]);
+
   const formatEcuadorianDate = (dateStr: string) => {
     if (!dateStr) return '—';
     try {
@@ -127,9 +139,33 @@ export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
         <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)', gap: 24, alignItems: 'start' }}>
             {/* Lista de Documentos Pendientes */}
             <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ padding: 20, borderBottom: '1px solid var(--border-color)' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.2rem' }}>{isCobro ? 'Facturas de Clientes' : 'Facturas de Proveedores'}</h3>
-                    <p className="text-sec" style={{ fontSize: '0.85rem' }}>Documentos con saldos pendientes.</p>
+                <div style={{ padding: 20, borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h3 style={{ margin: 0, fontSize: '1.2rem' }}>{isCobro ? 'Facturas de Clientes' : 'Facturas de Proveedores'}</h3>
+                        <p className="text-sec" style={{ fontSize: '0.85rem' }}>Documentos con saldos pendientes.</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <button 
+                            className="btn" 
+                            type="button"
+                            onClick={() => exportCuentasPDF(empresaId, docsFiltrados, isCobro ? 'cobrar' : 'pagar')}
+                            disabled={docsFiltrados.length === 0}
+                            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800 }}
+                            title="Exportar a PDF"
+                        >
+                            <Download size={14} /><span>PDF</span>
+                        </button>
+                        <button 
+                            className="btn" 
+                            type="button"
+                            onClick={() => exportCuentasExcel(docsFiltrados, isCobro ? 'cobrar' : 'pagar')}
+                            disabled={docsFiltrados.length === 0}
+                            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800 }}
+                            title="Exportar a Excel"
+                        >
+                            <Download size={14} /><span>Excel</span>
+                        </button>
+                    </div>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                     <table className="data-table">
@@ -319,13 +355,37 @@ export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
 
         {/* Historial de Movimientos de Tesorería */}
         <div className="glass-card" style={{ padding: 0, overflow: 'hidden', marginTop: 24 }}>
-          <div style={{ padding: 20, borderBottom: '1px solid var(--border-color)' }}>
-            <h3 style={{ margin: 0, fontSize: '1.2rem' }}>
-              Historial de {isCobro ? 'Cobros' : 'Pagos'} Aplicados
-            </h3>
-            <p className="text-sec" style={{ fontSize: '0.85rem' }}>
-              Últimas operaciones registradas. Puedes anular cualquier registro erróneo aquí.
-            </p>
+          <div style={{ padding: 20, borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.2rem' }}>
+                Historial de {isCobro ? 'Cobros' : 'Pagos'} Aplicados
+              </h3>
+              <p className="text-sec" style={{ fontSize: '0.85rem' }}>
+                Últimas operaciones registradas. Puedes anular cualquier registro erróneo aquí.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                    className="btn" 
+                    type="button"
+                    onClick={() => exportHistorialPDF(empresaId, movimientosFiltrados, isCobro ? 'cobro' : 'pago')}
+                    disabled={movimientosFiltrados.length === 0}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800 }}
+                    title="Exportar a PDF"
+                >
+                    <Download size={14} /><span>PDF</span>
+                </button>
+                <button 
+                    className="btn" 
+                    type="button"
+                    onClick={() => exportHistorialExcel(movimientosFiltrados, isCobro ? 'cobro' : 'pago')}
+                    disabled={movimientosFiltrados.length === 0}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 800 }}
+                    title="Exportar a Excel"
+                >
+                    <Download size={14} /><span>Excel</span>
+                </button>
+            </div>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table className="data-table">
@@ -340,8 +400,7 @@ export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {movimientos
-                  .filter(m => m.tipo_movimiento === (isCobro ? 'Cobro' : 'Pago') && m.estado !== 'Anulado')
+                {movimientosFiltrados
                   .map(mov => {
                     const doc = mov.documento;
                     const ent = mov.entidades;
@@ -486,7 +545,7 @@ export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
                       </tr>
                     );
                   })}
-                {movimientos.filter(m => m.tipo_movimiento === (isCobro ? 'Cobro' : 'Pago') && m.estado !== 'Anulado').length === 0 && (
+                {movimientosFiltrados.length === 0 && (
                   <tr>
                     <td colSpan={6} style={{ padding: 32, textAlign: 'center', color: 'var(--text-sec)' }}>
                       Sin movimientos recientes de {isCobro ? 'cobro' : 'pago'} aplicados.

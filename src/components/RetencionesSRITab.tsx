@@ -12,9 +12,11 @@ interface Props {
   };
   permisoReportesPdf: boolean;
   onPremiumBlock: () => void;
+  desde: string;
+  hasta: string;
 }
 
-export const RetencionesSRITab: React.FC<Props> = ({ empresaId, retencionesAgrupadas, permisoReportesPdf, onPremiumBlock }) => {
+export const RetencionesSRITab: React.FC<Props> = ({ empresaId, retencionesAgrupadas, permisoReportesPdf, onPremiumBlock, desde, hasta }) => {
   const totalEmitidoRenta = retencionesAgrupadas.emitidasRenta?.reduce((s, r) => s + r.valor, 0) || 0;
   const totalEmitidoIva   = retencionesAgrupadas.emitidasIva?.reduce((s, r) => s + r.valor, 0) || 0;
   const totalEmitido      = totalEmitidoRenta + totalEmitidoIva;
@@ -29,6 +31,10 @@ export const RetencionesSRITab: React.FC<Props> = ({ empresaId, retencionesAgrup
       return;
     }
     const rows = [
+      ['Reporte de Retenciones SRI'],
+      ['Período', `${desde || 'Inicio'} al ${hasta || 'Hoy'}`],
+      ['Descargado el', `${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`],
+      [],
       ['Reporte de Retenciones SRI - Emitidas (Compras)'],
       ['Tipo', 'Código / Porcentaje', 'Base Imponible', 'Valor Retenido', 'Documentos'],
     ];
@@ -125,7 +131,10 @@ export const RetencionesSRITab: React.FC<Props> = ({ empresaId, retencionesAgrup
       ''
     ]);
 
-    await generatePDFReport(empresaId, 'Reporte de Retenciones SRI', 'Resumen consolidado de retenciones emitidas y recibidas', columns, rows, []);
+    let subtitle = 'Resumen consolidado de retenciones emitidas y recibidas';
+    if (desde || hasta) subtitle += ` | Período: ${desde || 'Inicio'} al ${hasta || 'Hoy'}`;
+
+    await generatePDFReport(empresaId, 'Reporte de Retenciones SRI', subtitle, columns, rows, []);
   };
 
   return (

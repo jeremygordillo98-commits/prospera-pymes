@@ -19,14 +19,15 @@ import {
 export const MENU_STRUCTURE = [
   { id: 'dashboard', label: 'Resumen Financiero', icon: LayoutDashboard },
   {
-    id: 'config-parent',
-    label: 'Configuración',
+    id: 'contabilidad-parent',
+    label: 'Contabilidad',
     isParent: true,
-    icon: Settings,
+    icon: Database,
     children: [
       { id: 'plan-cuentas', label: 'Plan de Cuentas', icon: BookOpen },
       { id: 'entidades', label: 'Entidades (Terceros)', icon: Users },
-      { id: 'perfil', label: 'Mi Perfil', icon: User },
+      { id: 'libro-diario', label: 'Libro Diario', icon: FileText },
+      { id: 'asientos', label: 'Asientos Manuales', icon: Grid },
     ]
   },
   {
@@ -38,16 +39,6 @@ export const MENU_STRUCTURE = [
       { id: 'xml-compras', label: 'XML Compras', icon: FileUp },
       { id: 'xml-ventas', label: 'XML Ventas', icon: FileUp },
       { id: 'xml-anulados', label: 'Anulados', icon: Ban },
-    ]
-  },
-  {
-    id: 'contabilidad-parent',
-    label: 'Contabilidad Op.',
-    isParent: true,
-    icon: Database,
-    children: [
-      { id: 'libro-diario', label: 'Libro Diario', icon: FileText },
-      { id: 'asientos', label: 'Asientos Manuales', icon: Grid },
     ]
   },
   {
@@ -68,7 +59,7 @@ export const MENU_STRUCTURE = [
     isParent: true,
     icon: BarChart,
     children: [
-      { id: 'reportes', label: 'Financieros (P&L)', icon: FileText },
+      { id: 'reportes', label: 'Estados Financieros', icon: FileText },
       { id: 'reportes-fiscales', label: 'Fiscales (ATS)', icon: FileText },
     ]
   },
@@ -79,6 +70,16 @@ export const MENU_STRUCTURE = [
     icon: Mail,
     children: [
       { id: 'comunicados', label: 'Comunicados Mailer', icon: Mail }
+    ]
+  },
+  {
+    id: 'config-parent',
+    label: 'Configuración',
+    isParent: true,
+    icon: Settings,
+    children: [
+      { id: 'perfil', label: 'Mi Perfil', icon: User },
+      { id: 'config', label: 'Preferencias (Tema)', icon: Settings },
     ]
   }
 ];

@@ -18,6 +18,12 @@ export const getDocDetails = (tx: Transaction) => {
 };
 
 export const exportToExcel = (filteredTransactions: Transaction[], filterDate: string) => {
+  const metadata = [
+    ['Libro Diario General'],
+    [`Período: ${filterDate || 'Histórico Completo'}`],
+    [`Descargado el: ${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`],
+    []
+  ];
   const rows = [
     ['Fecha', 'Concepto', 'Comprobante', 'Entidad', 'Codigo Cuenta', 'Nombre Cuenta', 'Debe', 'Haber']
   ];
@@ -35,14 +41,16 @@ export const exportToExcel = (filteredTransactions: Transaction[], filterDate: s
       ]);
     });
   });
-  const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + rows.map(e => e.join(",")).join("\n");
-  const encodedUri = encodeURI(csvContent);
+  const csvString = "sep=,\n" + metadata.map(e => e.join(",")).join("\n") + "\n" + rows.map(e => e.join(",")).join("\n");
+  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvString], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
+  link.setAttribute("href", url);
   link.setAttribute("download", `Libro_Diario_${filterDate || 'Historico'}.csv`);
   document.body.appendChild(link);
   link.click();
   link.remove();
+  URL.revokeObjectURL(url);
 };
 
 export const handleExportTxPDF = async (empresaId: string, tx: Transaction) => {

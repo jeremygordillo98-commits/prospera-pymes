@@ -1,12 +1,24 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Mail, Save, LogOut, Building2, Image as ImageIcon, Sun, Moon } from 'lucide-react';
+import { User, Mail, Save, LogOut, Building2, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '../services/supabase';
-import { useTheme } from '../context/ThemeContext';
 import { ImageUploader } from '../components/ImageUploader';
 
-export const Perfil = () => {
-    const { isDark, toggleTheme } = useTheme();
+interface PerfilProps {
+    empresas: any[];
+    onEditEmpresa: (empresa: any) => void;
+    onArchiveEmpresa: (empresa: any) => void;
+    onResetEmpresa: (empresa: any) => void;
+    onAddNewEmpresa: () => void;
+}
+
+export const Perfil = ({
+    empresas,
+    onEditEmpresa,
+    onArchiveEmpresa,
+    onResetEmpresa,
+    onAddNewEmpresa
+}: PerfilProps) => {
     const [loading, setLoading] = useState(false);
     const [userData, setUserData] = useState({
         id_usuario: '',
@@ -15,7 +27,6 @@ export const Perfil = () => {
         ruc_profesional: '',
         logo_url: ''
     });
-    const [empresas, setEmpresas] = useState<any[]>([]);
     const [message, setMessage] = useState({ text: '', type: '' });
 
     useEffect(() => {
@@ -32,12 +43,6 @@ export const Perfil = () => {
                 .eq('id_usuario', user.id)
                 .single();
 
-            // Cargar empresas del usuario
-            const { data: dbEmpresas } = await supabase
-                .from('empresas_gestionadas')
-                .select('id, nombre_empresa, ruc_empresa, logo_url')
-                .eq('id_usuario', user.id);
-
             setUserData({
                 id_usuario: user.id,
                 nombre_completo: dbProfile?.nombre_completo || user.user_metadata?.nombre_completo || '',
@@ -45,7 +50,6 @@ export const Perfil = () => {
                 ruc_profesional: dbProfile?.ruc_profesional || '',
                 logo_url: dbProfile?.logo_url || ''
             });
-            setEmpresas(dbEmpresas || []);
         }
     };
 
@@ -207,65 +211,145 @@ export const Perfil = () => {
             </div>
 
             <div className="glass-card" style={{ padding: '32px' }}>
-                <h3 className="h2 flex items-center gap-2 mb-6" style={{ margin: 0 }}>
-                    <Building2 size={24} className="text-primary" /> Clientes Activos ({empresas.length})
-                </h3>
+                <div className="flex-between" style={{ marginBottom: '24px', gap: '16px', flexWrap: 'wrap' }}>
+                    <h3 className="h2 flex items-center gap-2" style={{ margin: 0 }}>
+                        <Building2 size={24} className="text-primary" /> Clientes Activos ({empresas.length})
+                    </h3>
+                    <button
+                        onClick={onAddNewEmpresa}
+                        style={{
+                            padding: '8px 16px',
+                            background: 'var(--primary-light)',
+                            border: '1px solid rgba(0, 214, 143, 0.2)',
+                            borderRadius: '10px',
+                            color: 'var(--primary)',
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        ➕ Registrar Empresa
+                    </button>
+                </div>
+                
                 {empresas.length > 0 ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '16px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
                         {empresas.map(empresa => (
-                            <div key={empresa.id} style={{ padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                                    {empresa.logo_url ? (
-                                        <img src={empresa.logo_url} alt={empresa.nombre_empresa} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                    ) : (
-                                        <Building2 size={24} className="text-primary" />
-                                    )}
+                            <div key={empresa.id} style={{ 
+                                padding: '20px', 
+                                background: 'rgba(255,255,255,0.02)', 
+                                border: '1px solid var(--border-color)', 
+                                borderRadius: '16px', 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                gap: '16px',
+                                justifyContent: 'space-between'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                    <div style={{ width: 52, height: 52, borderRadius: '14px', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                                        {empresa.logo_url ? (
+                                            <img src={empresa.logo_url} alt={empresa.nombre_empresa} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        ) : (
+                                            <Building2 size={26} className="text-primary" />
+                                        )}
+                                    </div>
+                                    <div style={{ overflow: 'hidden' }}>
+                                        <h4 style={{ margin: '0 0 4px 0', fontWeight: 800, fontSize: '1rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                                            {empresa.nombre_empresa}
+                                        </h4>
+                                        <div className="text-sec" style={{ fontSize: '0.8rem', fontWeight: 500 }}>RUC: {empresa.ruc_empresa || 'N/A'}</div>
+                                    </div>
                                 </div>
-                                <div style={{ overflow: 'hidden' }}>
-                                    <h4 style={{ margin: 0, fontWeight: 800, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{empresa.nombre_empresa}</h4>
-                                    <span className="text-sec" style={{ fontSize: '0.8rem' }}>RUC: {empresa.ruc_empresa || 'N/A'}</span>
+
+                                <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '4px' }}>
+                                    <button
+                                        onClick={() => onEditEmpresa(empresa)}
+                                        title="Editar empresa"
+                                        style={{ 
+                                            flex: 1, 
+                                            padding: '8px', 
+                                            background: 'rgba(99,102,241,0.08)', 
+                                            border: '1px solid rgba(99,102,241,0.2)', 
+                                            borderRadius: '8px', 
+                                            color: '#818CF8', 
+                                            fontSize: '0.75rem', 
+                                            fontWeight: 700, 
+                                            cursor: 'pointer', 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'center', 
+                                            gap: '4px',
+                                            transition: 'background-color 0.2s'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(99,102,241,0.15)'}
+                                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(99,102,241,0.08)'}
+                                    >
+                                        ✏️ Editar
+                                    </button>
+                                    <button
+                                        onClick={() => onResetEmpresa(empresa)}
+                                        title="Resetear todos los datos contables y mantener el plan de cuentas"
+                                        style={{ 
+                                            flex: 1.2, 
+                                            padding: '8px', 
+                                            background: 'rgba(245,158,11,0.06)', 
+                                            border: '1px solid rgba(245,158,11,0.2)', 
+                                            borderRadius: '8px', 
+                                            color: '#F59E0B', 
+                                            fontSize: '0.75rem', 
+                                            fontWeight: 700, 
+                                            cursor: 'pointer', 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'center', 
+                                            gap: '4px',
+                                            transition: 'background-color 0.2s'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(245,158,11,0.12)'}
+                                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(245,158,11,0.06)'}
+                                    >
+                                        🔄 Resetear
+                                    </button>
+                                    <button
+                                        onClick={() => onArchiveEmpresa(empresa)}
+                                        title="Eliminar empresa"
+                                        style={{ 
+                                            flex: 1, 
+                                            padding: '8px', 
+                                            background: 'rgba(239,68,68,0.06)', 
+                                            border: '1px solid rgba(239,68,68,0.2)', 
+                                            borderRadius: '8px', 
+                                            color: 'var(--error)', 
+                                            fontSize: '0.75rem', 
+                                            fontWeight: 700, 
+                                            cursor: 'pointer', 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'center', 
+                                            gap: '4px',
+                                            transition: 'background-color 0.2s'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.12)'}
+                                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.06)'}
+                                    >
+                                        🗑️ Eliminar
+                                    </button>
                                 </div>
                             </div>
                         ))}
                     </div>
                 ) : (
-                    <p className="text-sec">Aún no has creado ninguna empresa o cliente.</p>
+                    <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                        <p className="text-sec" style={{ margin: '0 0 16px 0' }}>Aún no has creado ninguna empresa o cliente.</p>
+                        <button className="btn btn-primary" onClick={onAddNewEmpresa} style={{ margin: '0 auto' }}>Registrar tu primera empresa</button>
+                    </div>
                 )}
             </div>
 
-            {/* Toggle de Tema */}
-            <div className="glass-card" style={{ padding: '24px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                    <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {isDark ? <Moon size={20} style={{ color: 'var(--primary)' }} /> : <Sun size={20} style={{ color: 'var(--primary)' }} />}
-                        Apariencia
-                    </h3>
-                    <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-sec)' }}>
-                        Actualmente en modo <strong>{isDark ? 'oscuro' : 'claro'}</strong>
-                    </p>
-                </div>
-                <button
-                    onClick={toggleTheme}
-                    style={{
-                        width: 56, height: 30, borderRadius: 999,
-                        background: isDark ? 'var(--primary)' : 'var(--border-color)',
-                        border: 'none', cursor: 'pointer', position: 'relative',
-                        transition: 'background 0.3s',
-                    }}
-                >
-                    <div style={{
-                        position: 'absolute', top: 3,
-                        left: isDark ? 28 : 3,
-                        width: 24, height: 24, borderRadius: '50%',
-                        background: '#fff',
-                        transition: 'left 0.3s',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                        {isDark ? <Moon size={12} color="#000" /> : <Sun size={12} color="#F59E0B" />}
-                    </div>
-                </button>
-            </div>
 
             <div className="glass-card" style={{ padding: '24px', borderColor: 'rgba(239, 68, 68, 0.3)', background: 'rgba(239, 68, 68, 0.05)' }}>
                 <h3 style={{ color: 'var(--error)', margin: '0 0 8px 0', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>

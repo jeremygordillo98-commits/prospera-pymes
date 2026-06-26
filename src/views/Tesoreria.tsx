@@ -647,6 +647,7 @@ export const Tesoreria: React.FC<Props> = ({ empresaId, mode = 'resumen' }) => {
           )}
           {(mode === 'cobros' || mode === 'pagos') && (
             <TesoreriaCobrosPagos
+              empresaId={empresaId}
               mode={mode}
               summary={summary}
               docsFiltrados={docsFiltrados}
