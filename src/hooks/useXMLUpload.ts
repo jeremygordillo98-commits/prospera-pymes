@@ -23,6 +23,7 @@ export interface BatchItem {
   idCuentaIva: string;
   idCuentaRetencion: string;
   retencionCodigo: string;
+  detalle: string;
   errorMsg?: string;
 }
 
@@ -229,7 +230,8 @@ export const useXMLUpload = (
               idCuentaHaber: '',
               idCuentaIva: '',
               idCuentaRetencion: '',
-              retencionCodigo: ''
+              retencionCodigo: '',
+              detalle: ''
             });
             continue;
           }
@@ -246,7 +248,8 @@ export const useXMLUpload = (
               idCuentaHaber: '',
               idCuentaIva: '',
               idCuentaRetencion: '',
-              retencionCodigo: ''
+              retencionCodigo: '',
+              detalle: ''
             });
             continue;
           }
@@ -321,6 +324,13 @@ export const useXMLUpload = (
             idCuentaIva: ivaAccount,
             idCuentaRetencion: defaultRetencion?.id || '',
             retencionCodigo: CATALOGO_RETENCIONES_RENTA[0].codigo,
+            detalle: isFact
+              ? `Factura: ${parsed.razonSocialEmisor} - ${parsed.numeroComprobante}`
+              : isRet
+              ? `Retención: ${parsed.razonSocialEmisor} - ${parsed.numeroComprobante}`
+              : isNC
+              ? `NC: ${parsed.razonSocialEmisor} - Mod: ${parsed.numDocModificado}`
+              : '',
           });
         } else {
           newItems.push({
@@ -334,7 +344,8 @@ export const useXMLUpload = (
             idCuentaHaber: '',
             idCuentaIva: '',
             idCuentaRetencion: '',
-            retencionCodigo: ''
+            retencionCodigo: '',
+            detalle: ''
           });
         }
       } catch (err: any) {
@@ -349,7 +360,8 @@ export const useXMLUpload = (
           idCuentaHaber: '',
           idCuentaIva: '',
           idCuentaRetencion: '',
-          retencionCodigo: ''
+          retencionCodigo: '',
+          detalle: ''
         });
       }
     }
@@ -442,7 +454,9 @@ export const useXMLUpload = (
           idCuentaHaber: item.idCuentaHaber,
           idCuentaIva: item.idCuentaIva,
           idCuentaRetencion: item.idCuentaRetencion,
-          retencionCodigo: item.retencionCodigo
+          retencionCodigo: item.retencionCodigo,
+          detalle: item.detalle,
+          file: item.file
         })),
         user.id,
         tipo,

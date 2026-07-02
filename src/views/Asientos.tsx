@@ -57,6 +57,7 @@ export const Asientos: React.FC<Props> = ({ empresaId, activeView }) => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string>('');
   const [isNumeroEdited, setIsNumeroEdited] = useState(false);
+  const [fechaBloqueo, setFechaBloqueo] = useState<string | null>(null);
   
   const [form, setForm] = useState({
     fecha: new Date().toISOString().slice(0, 10),
@@ -162,6 +163,9 @@ export const Asientos: React.FC<Props> = ({ empresaId, activeView }) => {
   }, [history, historySearch]);
 
   const handleEdit = (tx: any) => {
+    if (fechaBloqueo && tx.fecha <= fechaBloqueo) {
+      return alert(`Período contable cerrado. No se puede editar transacciones en o antes del ${new Date(fechaBloqueo + 'T12:00:00').toLocaleDateString()}.`);
+    }
     setEditingTxId(tx.id);
     setForm({
       fecha: tx.fecha,
@@ -189,6 +193,9 @@ export const Asientos: React.FC<Props> = ({ empresaId, activeView }) => {
   };
 
   const handleAnular = (tx: any) => {
+    if (fechaBloqueo && tx.fecha <= fechaBloqueo) {
+      return alert(`Período contable cerrado. No se puede anular transacciones en o antes del ${new Date(fechaBloqueo + 'T12:00:00').toLocaleDateString()}.`);
+    }
     setAnnulModal({
       isOpen: true,
       txId: tx.id,
@@ -274,10 +281,11 @@ export const Asientos: React.FC<Props> = ({ empresaId, activeView }) => {
     if (!empresaId || empresaId === 'undefined') return;
     const load = async () => {
       setLoading(true);
-      const [accRes, entRes, nextNum] = await Promise.all([
+      const [accRes, entRes, nextNum, empRes] = await Promise.all([
         supabase.from('plan_cuentas').select('id,codigo_cuenta,nombre,tipo').eq('id_empresa', empresaId).eq('acepta_movimientos', true).order('codigo_cuenta'),
         supabase.from('entidades').select('id,razon_social,ruc_cedula').eq('id_empresa', empresaId).order('razon_social'),
-        getNextNumeroComprobante(empresaId)
+        getNextNumeroComprobante(empresaId),
+        supabase.from('empresas_gestionadas').select('fecha_bloqueo').eq('id', empresaId).single()
       ]);
 
       if (!accRes.error) {
@@ -291,6 +299,9 @@ export const Asientos: React.FC<Props> = ({ empresaId, activeView }) => {
         setAccounts(leafAccounts);
       }
       if (!entRes.error) setEntities(entRes.data || []);
+      if (!empRes.error && empRes.data) {
+        setFechaBloqueo(empRes.data.fecha_bloqueo || null);
+      }
 
       const savedDraft = localStorage.getItem(`pymes_asiento_draft_${empresaId}`);
       if (savedDraft) {
@@ -362,6 +373,10 @@ export const Asientos: React.FC<Props> = ({ empresaId, activeView }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage('');
+
+    if (fechaBloqueo && form.fecha <= fechaBloqueo) {
+      return setMessage(`Período contable cerrado. No se admiten cambios en o antes del ${new Date(fechaBloqueo + 'T12:00:00').toLocaleDateString()}.`);
+    }
 
     const validLines = lines.filter((line) => line.id_cuenta && ((parseFloat(line.debe) || 0) > 0 || (parseFloat(line.haber) || 0) > 0));
     if (!form.concepto.trim()) return setMessage('Ingresa un concepto para el asiento.');
@@ -454,6 +469,8 @@ export const Asientos: React.FC<Props> = ({ empresaId, activeView }) => {
     return <div className="flex-center" style={{ padding: '120px 0' }}><Loader2 className="animate-spin" size={36} style={{ color: 'var(--primary)' }} /></div>;
   }
 
+  const decimals = parseInt(localStorage.getItem('pref_decimals') || '2', 10);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <header className="flex-between" style={{ gap: 16, flexWrap: 'wrap' }}>
@@ -467,8 +484,8 @@ export const Asientos: React.FC<Props> = ({ empresaId, activeView }) => {
         {activeTab === 'nuevo' && (
           <div className="glass-card" style={{ padding: 16, minWidth: 260 }}>
             <div className="text-sec" style={{ marginBottom: 8 }}>Control del asiento</div>
-            <div className="flex-between"><strong>Debe</strong><strong>${totals.debe.toFixed(2)}</strong></div>
-            <div className="flex-between" style={{ marginTop: 6 }}><strong>Haber</strong><strong>${totals.haber.toFixed(2)}</strong></div>
+            <div className="flex-between"><strong>Debe</strong><strong>${totals.debe.toFixed(decimals)}</strong></div>
+            <div className="flex-between" style={{ marginTop: 6 }}><strong>Haber</strong><strong>${totals.haber.toFixed(decimals)}</strong></div>
             <div style={{ marginTop: 10, fontWeight: 800, color: totals.cuadrado ? 'var(--success)' : 'var(--warning)' }}>
               {totals.cuadrado ? 'Asiento cuadrado' : 'Pendiente de cuadre'}
             </div>
@@ -577,13 +594,20 @@ export const Asientos: React.FC<Props> = ({ empresaId, activeView }) => {
             </div>
           </section>
 
+          {fechaBloqueo && form.fecha <= fechaBloqueo && (
+            <div className="glass-card" style={{ padding: 12, borderColor: 'var(--error)', background: 'rgba(239, 68, 68, 0.05)', color: 'var(--error)', fontWeight: 700, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <AlertTriangle size={18} />
+              <span>Período contable cerrado y bloqueado. La fecha seleccionada ({new Date(form.fecha + 'T12:00:00').toLocaleDateString()}) es igual o anterior al cierre ({new Date(fechaBloqueo + 'T12:00:00').toLocaleDateString()}).</span>
+            </div>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
             {editingTxId ? (
               <button type="button" className="btn" onClick={handleCancelEdit}>Cancelar Edición</button>
             ) : (
               <button type="button" className="btn" onClick={resetForm}>Limpiar</button>
             )}
-            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />} {editingTxId ? 'Guardar Cambios' : 'Guardar asiento'}</button>
+            <button type="submit" className="btn btn-primary" disabled={saving || (fechaBloqueo !== null && form.fecha <= fechaBloqueo)}>{saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />} {editingTxId ? 'Guardar Cambios' : 'Guardar asiento'}</button>
           </div>
         </form>
       ) : (
@@ -646,8 +670,8 @@ export const Asientos: React.FC<Props> = ({ empresaId, activeView }) => {
                     <tr key={m.id}>
                       <td>{m.plan_cuentas?.codigo_cuenta}</td>
                       <td style={{ fontWeight: 600 }}>{m.plan_cuentas?.nombre}</td>
-                      <td style={{ textAlign: 'right', fontWeight: m.debe > 0 ? 800 : 400 }}>{m.debe > 0 ? `$${m.debe.toFixed(2)}` : '-'}</td>
-                      <td style={{ textAlign: 'right', fontWeight: m.haber > 0 ? 800 : 400 }}>{m.haber > 0 ? `$${m.haber.toFixed(2)}` : '-'}</td>
+                      <td style={{ textAlign: 'right', fontWeight: m.debe > 0 ? 800 : 400 }}>{m.debe > 0 ? `$${m.debe.toFixed(decimals)}` : '-'}</td>
+                      <td style={{ textAlign: 'right', fontWeight: m.haber > 0 ? 800 : 400 }}>{m.haber > 0 ? `$${m.haber.toFixed(decimals)}` : '-'}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -1,13 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  ChevronDown,
-  ChevronRight,
   Building2,
   LogOut
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../services/supabase';
 import { MENU_STRUCTURE } from '../constants/menu';
+import { SoporteChat } from './SoporteChat';
+import { NotificationBellPymes } from './NotificationBellPymes';
 
 interface SidebarProps {
   activeView: string;
@@ -26,227 +25,391 @@ export const Sidebar = ({
   empresas,
   session,
 }: SidebarProps) => {
-  const [openMenus, setOpenMenus] = useState<string[]>(['contabilidad-parent']);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
 
-  const toggleMenu = (item: any) => {
-    const id = item.id;
-    const isOpening = !openMenus.includes(id);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 1024);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-    setOpenMenus(prev =>
-      isOpening ? [...prev, id] : prev.filter(m => m !== id)
-    );
+  const activeParent = MENU_STRUCTURE.find(item => 
+    item.id === activeView || (item.children && item.children.some(child => child.id === activeView))
+  ) || MENU_STRUCTURE[0];
 
-    // Si se está abriendo y tiene hijos, navega directo al primer hijo
-    if (isOpening && item.children && item.children.length > 0) {
+  const handleParentClick = (item: any) => {
+    if (item.children && item.children.length > 0) {
       setActiveView(item.children[0].id);
+    } else {
+      setActiveView(item.id);
     }
   };
 
-  return (
-    <aside className="sidebar custom-scrollbar" style={{ overflowY: 'auto', overflowX: 'hidden' }}>
-      <div style={{ padding: '0 20px', margin: '24px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-          <div style={{
-            width: 36,
-            height: 36,
-            background: 'linear-gradient(135deg, var(--primary), #8B5CF6)',
-            borderRadius: 10,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            fontWeight: 800,
-            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
-          }}>P</div>
-          <div>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>Prospera</h2>
-            <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>Pymes Contable</div>
+  if (!isMobile) {
+    return (
+      <aside className="sidebar custom-scrollbar" style={{ overflow: 'visible', padding: '0 24px', borderBottom: '1px solid var(--border-color)' }}>
+        {/* ROW 1: BRAND, COMPANY SELECTOR, MAIN NAVIGATION, USER & LOGOUT */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: '72px', gap: '20px' }}>
+          
+          {/* Brand Logo & Title */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+            <div style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
+            }}>
+              <img src="/logo-pymes.png" alt="Prospera Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>Prospera</h2>
+              <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>Pymes</div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Selector de Cliente - UI Pulida */}
-      <div style={{ padding: '0 16px', marginBottom: '24px' }}>
-        <div className="glass-card" style={{ padding: '12px', border: '1px solid var(--border-color)', borderRadius: '16px', background: 'rgba(255,255,255,0.02)' }}>
-          <label style={{ fontSize: '0.65rem', color: 'var(--text-sec)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', display: 'block', paddingLeft: '4px' }}>Empresa Gestionada</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Building2 size={16} className="text-sec" style={{ opacity: 0.6 }} />
-            <select
-              value={selectedEmpresa?.id || ''}
-              onChange={(e) => setSelectedEmpresa(empresas.find(emp => emp.id === e.target.value) || null)}
-              style={{
-                flex: 1,
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--text-main)',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              {empresas.map(emp => (
-                <option key={emp.id} value={emp.id} style={{ background: 'var(--bg-color)', color: 'var(--text-main)' }}>{emp.nombre_empresa}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Menú de Navegación Jerárquico */}
-      <nav style={{ flex: 1, padding: '0 12px' }}>
-        {MENU_STRUCTURE.map((item) => (
-          <div key={item.id} style={{ marginBottom: '4px' }}>
-            {item.children ? (
-              // Parent Item
-              <>
+          {/* Main Navigation (Horizontal list of parent tabs) */}
+          <nav style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+            {MENU_STRUCTURE.map((item) => {
+              const isSelected = activeParent.id === item.id;
+              return (
                 <button
-                  onClick={() => toggleMenu(item)}
+                  key={item.id}
+                  onClick={() => handleParentClick(item)}
                   style={{
-                    width: '100%',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '12px',
-                    padding: '12px 14px',
-                    borderRadius: '12px',
-                    background: 'transparent',
-                    border: 'none',
-                    color: openMenus.includes(item.id) ? 'var(--text-main)' : 'var(--text-sec)',
+                    gap: '4px',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    background: isSelected ? 'var(--primary-light)' : 'transparent',
+                    border: isSelected ? '1px solid rgba(0, 214, 143, 0.15)' : 'none',
+                    color: isSelected ? 'var(--primary)' : 'var(--text-sec)',
                     cursor: 'pointer',
-                    fontSize: '0.9rem',
-                    fontWeight: 600,
-                    transition: 'all 0.2s'
+                    fontSize: '0.76rem',
+                    fontWeight: isSelected ? 700 : 600,
+                    transition: 'all 0.2s',
+                    whiteSpace: 'nowrap'
                   }}
                 >
-                  <item.icon size={20} className={openMenus.includes(item.id) ? 'text-primary' : ''} />
-                  <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>
-                  {openMenus.includes(item.id) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  <item.icon size={14} />
+                  <span>{item.label}</span>
                 </button>
+              );
+            })}
+          </nav>
 
-                <AnimatePresence>
-                  {openMenus.includes(item.id) && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      style={{ overflow: 'hidden', paddingLeft: '12px' }}
-                    >
-                      {item.children.map(child => (
-                        <button
-                          key={child.id}
-                          onClick={() => setActiveView(child.id)}
-                          style={{
-                            width: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                            padding: '10px 14px',
-                            margin: '2px 0',
-                            borderRadius: '10px',
-                            background: activeView === child.id ? 'var(--primary-light)' : 'transparent',
-                            border: activeView === child.id ? '1px solid rgba(99, 102, 241, 0.1)' : 'none',
-                            color: activeView === child.id ? 'var(--primary)' : 'var(--text-sec)',
-                            cursor: 'pointer',
-                            fontSize: '0.85rem',
-                            fontWeight: activeView === child.id ? 700 : 500,
-                            transition: 'all 0.2s'
-                          }}
-                        >
-                          <child.icon size={18} />
-                          <span>{child.label}</span>
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </>
-            ) : (
-              // Single Item
-              <button
-                onClick={() => setActiveView(item.id)}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px 14px',
-                  borderRadius: '12px',
-                  background: activeView === item.id ? 'var(--primary-light)' : 'transparent',
-                  border: activeView === item.id ? '1px solid rgba(99, 102, 241, 0.1)' : 'none',
-                  color: activeView === item.id ? 'var(--primary)' : 'var(--text-sec)',
+          {/* User Profile Info & Company Selector (Combined on the right) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+            {/* Support and Notifications buttons inline */}
+            <SoporteChat />
+            <NotificationBellPymes />
+
+            {/* Avatar badge linking to profile */}
+            <div
+              onClick={() => setActiveView('perfil')}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #FFBD00, #FF0058)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontWeight: 800,
+                fontSize: '1rem',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(255, 189, 0, 0.2)'
+              }}
+              title="Mi Perfil"
+            >
+              {session.user.user_metadata?.nombre_completo?.[0] || 'A'}
+            </div>
+
+            {/* Profile Name & Company Selector Dropdown */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div 
+                onClick={() => setActiveView('perfil')}
+                style={{ 
+                  fontWeight: 800, 
+                  fontSize: '0.85rem', 
+                  color: 'var(--text-main)', 
                   cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: activeView === item.id ? 700 : 600,
-                  transition: 'all 0.2s'
+                  whiteSpace: 'nowrap'
                 }}
               >
-                <item.icon size={20} />
-                <span>{item.label}</span>
-              </button>
-            )}
-          </div>
-        ))}
-      </nav>
-
-      {/* Sección de Usuario Footer UI */}
-      <div style={{ padding: '16px', marginTop: 'auto', borderTop: '1px solid var(--border-color)' }}>
-        <div
-          className="glass-card"
-          onClick={() => setActiveView('perfil')}
-          style={{
-            padding: '12px',
-            borderRadius: '16px',
-            background: activeView === 'perfil' ? 'rgba(255,190,0,0.1)' : 'rgba(255,190,0,0.03)',
-            border: activeView === 'perfil' ? '1px solid rgba(255,190,0,0.3)' : '1px solid rgba(255,190,0,0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}
-        >
-          <div style={{
-            width: 40,
-            height: 40,
-            borderRadius: '12px',
-            background: 'linear-gradient(135deg, #FFBD00, #FF0058)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            fontWeight: 800,
-            fontSize: '1.1rem'
-          }}>
-            {session.user.user_metadata?.nombre_completo?.[0] || 'A'}
-          </div>
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text-main)', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-              {session.user.user_metadata?.nombre_completo || 'Usuario'}
+                {session.user.user_metadata?.nombre_completo || 'Alexander Cordova'}
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Building2 size={12} style={{ color: 'var(--primary)', opacity: 0.8 }} />
+                <select
+                  value={selectedEmpresa?.id || ''}
+                  onChange={(e) => setSelectedEmpresa(empresas.find(emp => emp.id === e.target.value) || null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-sec)',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    outline: 'none',
+                    cursor: 'pointer',
+                    padding: '0 12px 0 0',
+                    margin: 0,
+                    maxWidth: '150px',
+                    textOverflow: 'ellipsis'
+                  }}
+                >
+                  {empresas.map(emp => (
+                    <option key={emp.id} value={emp.id} style={{ background: 'var(--bg-color)', color: 'var(--text-main)' }}>{emp.nombre_empresa}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-sec)', fontWeight: 600 }}>Plan Contador</div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
+
+            {/* Logout button */}
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                supabase.auth.signOut();
-              }}
+              onClick={() => supabase.auth.signOut()}
               style={{
-                padding: '6px',
+                padding: '8px',
                 background: 'transparent',
                 border: 'none',
                 color: 'var(--error)',
                 cursor: 'pointer',
                 opacity: 0.7,
-                transition: 'opacity 0.2s'
+                transition: 'opacity 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
               title="Cerrar Sesión"
             >
               <LogOut size={18} />
             </button>
           </div>
+
+        </div>
+
+        {/* ROW 2: SUB-NAVIGATION (Only if parent has children) */}
+        {activeParent.children && activeParent.children.length > 0 && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '100%',
+            padding: '10px 0 12px 0',
+            borderTop: '1px solid var(--border-color)',
+            background: 'var(--submenu-bg)',
+            gap: '8px',
+            overflowX: 'auto',
+            scrollbarWidth: 'none'
+          }}>
+            {activeParent.children.map((child) => {
+              const isChildActive = activeView === child.id;
+              return (
+                <button
+                  key={child.id}
+                  onClick={() => setActiveView(child.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    background: isChildActive ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+                    border: isChildActive ? '1px solid var(--border-color)' : 'none',
+                    color: isChildActive ? 'var(--primary)' : 'var(--text-sec)',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    fontWeight: isChildActive ? 700 : 500,
+                    transition: 'all 0.2s',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <child.icon size={14} />
+                  <span>{child.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </aside>
+    );
+  }
+
+  // Mobile/Tablet layout
+  return (
+    <aside className="sidebar custom-scrollbar" style={{ overflow: 'visible', borderBottom: '1px solid var(--border-color)' }}>
+      {/* ROW 1: BRAND & USER PROFILE */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
+        {/* Brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
+          }}>
+            <img src="/logo-pymes.png" alt="Prospera Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </div>
+          <div>
+            <h2 style={{ fontSize: '1rem', fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>Prospera</h2>
+            <div style={{ fontSize: '0.65rem', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>Pymes</div>
+          </div>
+        </div>
+
+        {/* User profile avatar & logout */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <SoporteChat />
+          <NotificationBellPymes />
+          <div
+            onClick={() => setActiveView('perfil')}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: '8px',
+              background: 'linear-gradient(135deg, #FFBD00, #FF0058)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              fontWeight: 800,
+              fontSize: '0.9rem',
+              cursor: 'pointer'
+            }}
+          >
+            {session.user.user_metadata?.nombre_completo?.[0] || 'A'}
+          </div>
+          <button
+            onClick={() => supabase.auth.signOut()}
+            style={{
+              padding: '6px',
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--error)',
+              cursor: 'pointer',
+              opacity: 0.7
+            }}
+            title="Cerrar Sesión"
+          >
+            <LogOut size={18} />
+          </button>
         </div>
       </div>
+
+      {/* ROW 2: CLIENT SELECTOR (Full Width on Mobile) */}
+      <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-color)' }}>
+        <div style={{
+          padding: '6px 12px',
+          border: '1px solid var(--border-color)',
+          borderRadius: '10px',
+          background: 'rgba(255,255,255,0.02)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <Building2 size={14} style={{ color: 'var(--text-sec)', opacity: 0.6 }} />
+          <select
+            value={selectedEmpresa?.id || ''}
+            onChange={(e) => setSelectedEmpresa(empresas.find(emp => emp.id === e.target.value) || null)}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-main)',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              outline: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            {empresas.map(emp => (
+              <option key={emp.id} value={emp.id} style={{ background: 'var(--bg-color)', color: 'var(--text-main)' }}>{emp.nombre_empresa}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* ROW 3: SCROLLABLE MAIN CATEGORIES */}
+      <nav style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 12px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+        {MENU_STRUCTURE.map((item) => {
+          const isSelected = activeParent.id === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => handleParentClick(item)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                background: isSelected ? 'var(--primary-light)' : 'transparent',
+                border: isSelected ? '1px solid rgba(0, 214, 143, 0.15)' : 'none',
+                color: isSelected ? 'var(--primary)' : 'var(--text-sec)',
+                cursor: 'pointer',
+                fontSize: '0.8rem',
+                fontWeight: isSelected ? 700 : 600,
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <item.icon size={14} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* ROW 4: SCROLLABLE SUB-NAVIGATION (if parent has children) */}
+      {activeParent.children && activeParent.children.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '6px 12px 10px 12px',
+          borderTop: '1px solid var(--border-color)',
+          background: 'var(--submenu-bg)',
+          gap: '6px',
+          overflowX: 'auto',
+          scrollbarWidth: 'none'
+        }}>
+          {activeParent.children.map((child) => {
+            const isChildActive = activeView === child.id;
+            return (
+              <button
+                key={child.id}
+                onClick={() => setActiveView(child.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  background: isChildActive ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+                  border: isChildActive ? '1px solid var(--border-color)' : 'none',
+                  color: isChildActive ? 'var(--primary)' : 'var(--text-sec)',
+                  cursor: 'pointer',
+                  fontSize: '0.75rem',
+                  fontWeight: isChildActive ? 700 : 500,
+                  transition: 'all 0.2s',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <child.icon size={12} />
+                <span>{child.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </aside>
   );
 };

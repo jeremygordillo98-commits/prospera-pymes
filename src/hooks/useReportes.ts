@@ -14,6 +14,8 @@ export interface Movement {
   debe: number; 
   haber: number; 
   fecha?: string; 
+  tipo_comprobante?: string;
+  numero_comprobante?: string;
   entidad?: { id: string; ruc_cedula: string; razon_social: string } | null;
 }
 
@@ -75,7 +77,7 @@ export const isDescendant = (parentCode: string, childCode: string) => {
 
 export const useReportes = (empresaId: string) => {
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'balance' | 'resultado' | 'general' | 'mayor' | 'cartera' | 'flujo' | 'retenciones' | 'comprasventas'>('balance');
+  const [activeTab, setActiveTab] = useState<'balance' | 'resultado' | 'general' | 'mayor' | 'cartera' | 'flujo' | 'retenciones' | 'comprasventas'>('mayor');
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [carteraDocs, setCarteraDocs] = useState<CarteraDoc[]>([]);
@@ -124,7 +126,7 @@ export const useReportes = (empresaId: string) => {
       try {
         const [accRes, movRes, carteraRes, tesoRes, sriRes, txAnuladasRes] = await Promise.all([
           supabase.from('plan_cuentas').select('id,codigo_cuenta,nombre,tipo').eq('id_empresa', empresaId).order('codigo_cuenta'),
-          supabase.from('movimientos').select('id_cuenta,debe,haber,transacciones(fecha, entidades(id, ruc_cedula, razon_social))').eq('id_empresa', empresaId),
+          supabase.from('movimientos').select('id_cuenta,debe,haber,transacciones(fecha, tipo_comprobante, numero_comprobante, entidades(id, ruc_cedula, razon_social))').eq('id_empresa', empresaId),
           supabase.from('tesoreria_documentos').select('id,fecha_emision,fecha_vencimiento,tipo_documento,referencia,concepto,saldo_pendiente,total,estado,entidades(id,razon_social,tipo_entidad,ruc_cedula)').eq('id_empresa', empresaId),
           supabase.from('tesoreria_movimientos').select('id,fecha,tipo_movimiento,concepto,monto,estado,referencia,cuentas_financieras(nombre),entidades(razon_social)').eq('id_empresa', empresaId),
           supabase.from('documentos_sri').select('id, es_compra, base_12, base_0, base_no_objeto, clave_acceso_xml, monto_iva, retenciones_aplicadas, transacciones(fecha, concepto, tipo_comprobante, numero_comprobante, entidades(ruc_cedula, razon_social))').eq('id_empresa', empresaId),
@@ -140,6 +142,8 @@ export const useReportes = (empresaId: string) => {
               debe: Number(m.debe || 0),
               haber: Number(m.haber || 0),
               fecha: tx?.fecha,
+              tipo_comprobante: tx?.tipo_comprobante,
+              numero_comprobante: tx?.numero_comprobante,
               entidad: tx?.entidades
             };
           }));
@@ -173,7 +177,18 @@ export const useReportes = (empresaId: string) => {
       map.set(acc.id, { debeIni: 0, haberIni: 0, debePer: 0, haberPer: 0 });
     });
 
+    // Mapear tipos de cuenta para excluir asientos de cierre en las cuentas de resultados
+    const accountTypes = new Map<string, string>();
+    accounts.forEach(a => accountTypes.set(a.id, a.tipo));
+
     movements.forEach(m => {
+      // Excluir los asientos de cierre de las cuentas de resultados (Ingreso/Gasto)
+      // para que el Estado de Resultados muestre la información histórica real pre-cierre
+      const tipoCuenta = accountTypes.get(m.id_cuenta);
+      if (m.tipo_comprobante === 'Asiento de Cierre' && (tipoCuenta === 'Ingreso' || tipoCuenta === 'Gasto')) {
+        return;
+      }
+
       // Filtrar por entidad si está configurado
       if (entityFilter) {
         const ent = m.entidad;
@@ -199,6 +214,38 @@ export const useReportes = (empresaId: string) => {
     });
     return map;
   }, [movements, accounts, desde, hasta, entityFilter]);
+
+  // Calcular la utilidad del período dinámicamente antes del ledger
+  const utilidadPeriodo = useMemo(() => {
+    let ing = 0;
+    let gas = 0;
+    accounts.forEach(acc => {
+      // Evitar duplicar sumas saltando cuentas agrupadoras (padres)
+      const isParent = accounts.some(other => other.codigo_cuenta !== acc.codigo_cuenta && isDescendant(acc.codigo_cuenta, other.codigo_cuenta));
+      if (isParent) return;
+
+      const raw = rawAccountMap.get(acc.id);
+      if (raw) {
+        const debeTotal = raw.debePer;
+        const haberTotal = raw.haberPer;
+        if (acc.tipo === 'Ingreso') {
+          ing += (haberTotal - debeTotal);
+        } else if (acc.tipo === 'Gasto') {
+          gas += (debeTotal - haberTotal);
+        }
+      }
+    });
+    return ing - gas;
+  }, [accounts, rawAccountMap]);
+
+  // Verificar si ya existe un asiento de cierre físico registrado en la base de datos para el período
+  const tieneCierreFisico = useMemo(() => {
+    return movements.some(m => {
+      const f = m.fecha || '';
+      const isInPeriod = (!desde || f >= desde) && (!hasta || f <= hasta);
+      return isInPeriod && m.numero_comprobante?.startsWith('CIERRE-RESULTADOS-');
+    });
+  }, [movements, desde, hasta]);
 
   // Generar Balance Acumulado y Flujos Jerárquicos
   const ledger = useMemo(() => {
@@ -226,7 +273,16 @@ export const useReportes = (empresaId: string) => {
 
       const esDeudora = ['Activo', 'Gasto'].includes(acc.tipo);
       const saldoIni = esDeudora ? (debeIni - haberIni) : (haberIni - debeIni);
-      const saldoFin = esDeudora ? (debeIni + debePer - (haberIni + haberPer)) : (haberIni + haberPer - (debeIni + debePer));
+      let saldoFin = esDeudora ? (debeIni + debePer - (haberIni + haberPer)) : (haberIni + haberPer - (debeIni + debePer));
+
+      // Inyectar utilidad del ejercicio dinámicamente en 3.1.7.1 y sus ancestros si la cuenta existe y no hay cierre físico
+      const tieneCuentaResultado = accounts.some(a => a.codigo_cuenta === '3.1.7.1');
+      if (tieneCuentaResultado && !tieneCierreFisico && isDescendant(acc.codigo_cuenta, '3.1.7.1')) {
+        saldoFin += utilidadPeriodo;
+        if (utilidadPeriodo !== 0) {
+          hasMov = true;
+        }
+      }
 
       const isParent = accounts.some(other => other.codigo_cuenta !== acc.codigo_cuenta && isDescendant(acc.codigo_cuenta, other.codigo_cuenta));
 
@@ -242,7 +298,7 @@ export const useReportes = (empresaId: string) => {
         isParent
       };
     });
-  }, [accounts, rawAccountMap]);
+  }, [accounts, rawAccountMap, utilidadPeriodo, tieneCierreFisico]);
 
   const rootAccounts = useMemo(() => {
     return ledger.filter(acc => {
@@ -251,8 +307,8 @@ export const useReportes = (empresaId: string) => {
   }, [ledger, accounts]);
 
   const totals = useMemo(() => {
-    const ingresos = rootAccounts.filter((item) => item.tipo === 'Ingreso').reduce((acc, item) => acc + item.saldo, 0);
-    const gastos = rootAccounts.filter((item) => item.tipo === 'Gasto').reduce((acc, item) => acc + item.saldo, 0);
+    const ingresos = rootAccounts.filter((item) => item.tipo === 'Ingreso').reduce((acc, item) => acc + (item.haber - item.debe), 0);
+    const gastos = rootAccounts.filter((item) => item.tipo === 'Gasto').reduce((acc, item) => acc + (item.debe - item.haber), 0);
     const activos = rootAccounts.filter((item) => item.tipo === 'Activo').reduce((acc, item) => acc + item.saldo, 0);
     const pasivos = rootAccounts.filter((item) => item.tipo === 'Pasivo').reduce((acc, item) => acc + item.saldo, 0);
     const patrimonio = rootAccounts.filter((item) => item.tipo === 'Patrimonio').reduce((acc, item) => acc + item.saldo, 0);

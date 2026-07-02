@@ -39,6 +39,8 @@ export const useSRIAutomation = ({ tipo, empresaId }: UseSRIAutomationProps) => 
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterTipo, setFilterTipo] = useState('');
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const prevUploadOpen = useRef(false);
@@ -329,7 +331,12 @@ export const useSRIAutomation = ({ tipo, empresaId }: UseSRIAutomationProps) => 
     const matchSearch = !search || concepto.includes(search.toLowerCase()) || numero.includes(search.toLowerCase()) || entidad.includes(search.toLowerCase());
     const matchTipo = !filterTipo || doc.transacciones?.tipo_comprobante === filterTipo;
     const notAnulado = doc.transacciones?.tipo_comprobante !== 'Anulado';
-    return matchSearch && matchTipo && notAnulado;
+    
+    const f = doc.transacciones?.fecha || '';
+    const matchDesde = !desde || f >= desde;
+    const matchHasta = !hasta || f <= hasta;
+    
+    return matchSearch && matchTipo && notAnulado && matchDesde && matchHasta;
   });
 
   return {
@@ -341,6 +348,10 @@ export const useSRIAutomation = ({ tipo, empresaId }: UseSRIAutomationProps) => 
     setSearchTerm: setSearch,
     filterTipo,
     setFilterTipo,
+    desde,
+    setDesde,
+    hasta,
+    setHasta,
     currentPage,
     setCurrentPage,
     deletingId,

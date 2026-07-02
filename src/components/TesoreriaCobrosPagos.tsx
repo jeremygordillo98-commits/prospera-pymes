@@ -50,6 +50,7 @@ export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
   handleOpenEditModal,
   handleAnularMovimientoTesoreria
 }) => {
+  const decimals = parseInt(localStorage.getItem('pref_decimals') || '2', 10);
   const [searchAccount, setSearchAccount] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -132,7 +133,7 @@ export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
             
             <div className="glass-card" style={{ padding: '16px 24px', textAlign: 'right', border: `1px solid ${color}33`, background: `${color}11` }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 800, color, textTransform: 'uppercase' }}>Total {isCobro ? 'Por Cobrar' : 'Por Pagar'}</div>
-                <div style={{ fontSize: '2rem', fontWeight: 900 }}>${isCobro ? summary.porCobrar.toFixed(2) : summary.porPagar.toFixed(2)}</div>
+                <div style={{ fontSize: '2rem', fontWeight: 900 }}>${isCobro ? summary.porCobrar.toFixed(decimals) : summary.porPagar.toFixed(decimals)}</div>
             </div>
         </header>
 
@@ -184,7 +185,7 @@ export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
                                     <span style={{ color: 'var(--error)', marginLeft: 8, fontWeight: 800 }}>⚠️</span>}
                             </td>
                             <td style={{ padding: '14px 16px', fontWeight: 800, textAlign: 'right', color: doc.saldo_pendiente > 0 ? color : 'var(--text-main)' }}>
-                                ${Number(doc.saldo_pendiente || 0).toFixed(2)}
+                                ${Number(doc.saldo_pendiente || 0).toFixed(decimals)}
                             </td>
                             <td style={{ padding: '14px 16px', textAlign: 'center' }}>
                                 <span style={{ fontSize: '0.7rem', textTransform: 'uppercase', padding: '4px 8px', borderRadius: 999, background: doc.estado === 'Liquidado' ? 'rgba(16,185,129,0.1)' : 'var(--primary-light)', color: doc.estado === 'Liquidado' ? 'var(--success)' : 'var(--primary)', fontWeight: 800 }}>{doc.estado}</span>
@@ -214,7 +215,7 @@ export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
                                 setMovForm({...movForm, id_documento: e.target.value, id_entidad: doc?.entidades?.id || movForm.id_entidad, monto: doc ? String(doc.saldo_pendiente) : movForm.monto});
                             }} style={inputStyle}>
                                 <option value="">Selecciona (Factura/Deuda)</option>
-                                {docsFiltrados.filter(d => d.saldo_pendiente > 0).map(doc => <option key={doc.id} value={doc.id}>{doc.entidades?.razon_social} - {doc.referencia} (${Number(doc.saldo_pendiente).toFixed(2)})</option>)}
+                                {docsFiltrados.filter(d => d.saldo_pendiente > 0).map(doc => <option key={doc.id} value={doc.id}>{doc.entidades?.razon_social} - {doc.referencia} (${Number(doc.saldo_pendiente).toFixed(decimals)})</option>)}
                             </select>
                         </div>
                         
@@ -456,7 +457,7 @@ export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
                               <div>
                                 <span style={{ color: 'var(--text-sec)' }}>Total Factura:</span>{' '}
                                 <strong style={{ color: 'var(--text-main)' }}>
-                                  ${Number(doc.total || 0).toFixed(2)}
+                                  ${Number(doc.total || 0).toFixed(decimals)}
                                 </strong>
                               </div>
                               <div style={{ fontSize: '0.78rem', color: 'var(--text-sec)' }}>
@@ -491,7 +492,7 @@ export const TesoreriaCobrosPagos: React.FC<TesoreriaCobrosPagosProps> = ({
                             fontSize: '1.05rem', 
                             color: isCobro ? 'var(--success)' : 'var(--error)' 
                           }}>
-                            {isCobro ? '+' : '-'}${Number(mov.monto).toFixed(2)}
+                            {isCobro ? '+' : '-'}${Number(mov.monto).toFixed(decimals)}
                           </div>
                           <div style={{ fontSize: '0.7rem', color: 'var(--text-sec)', textTransform: 'uppercase', fontWeight: 700, marginTop: 2 }}>
                             {isCobro ? 'Monto Cobrado' : 'Monto Pagado'}

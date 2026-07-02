@@ -71,20 +71,71 @@ export const SoporteChat = () => {
 
   return (
     <>
-      <button onClick={() => { setIsOpen(!isOpen); setHasUnread(false); }} style={{ ...btnBase, position: 'fixed', bottom: 24, right: 24, width: 56, height: 56, borderRadius: 18, background: 'var(--primary)', boxShadow: '0 8px 24px rgba(0,214,143,0.35)', zIndex: 9000, transition: 'transform 0.3s cubic-bezier(0.175,0.885,0.32,1.275)' }} onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.1) translateY(-3px)')} onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')} title="Soporte Prospera">
-        {isOpen ? <X size={22} color="#000" strokeWidth={2.5} /> : <MessageCircle size={22} color="#000" strokeWidth={2.5} />}
-        {!isOpen && hasUnread && <span style={{ position: 'absolute', top: -4, right: -4, width: 18, height: 18, borderRadius: '50%', background: 'var(--error)', border: '3px solid var(--bg-color)', animation: 'chatPulse 2s infinite' }} />}
+      <button 
+        onClick={() => { setIsOpen(!isOpen); setHasUnread(false); }} 
+        style={{ 
+          ...btnBase, 
+          position: 'relative', 
+          background: 'transparent',
+          border: '1px solid var(--border-color)', 
+          borderRadius: 12,
+          padding: '8px 10px', 
+          color: 'var(--text-main)',
+          transition: 'all 0.2s',
+          width: 38,
+          height: 38,
+        }} 
+        onMouseEnter={e => e.currentTarget.style.background = 'var(--primary-light)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        title="Soporte y Ayuda"
+      >
+        <MessageCircle size={18} />
+        {hasUnread && (
+          <span style={{ 
+            position: 'absolute', 
+            top: -3, 
+            right: -3, 
+            width: 10, 
+            height: 10, 
+            borderRadius: '50%', 
+            background: 'var(--primary)', 
+            border: '2px solid var(--bg-color)', 
+            animation: 'chatPulse 2s infinite' 
+          }} />
+        )}
       </button>
 
       {isOpen && (
-        <div style={{ position: 'fixed', bottom: 92, right: 24, width: 360, maxHeight: '70vh', display: 'flex', flexDirection: 'column', background: 'var(--nav-bg)', backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)', borderRadius: 24, border: '1px solid var(--border-color)', boxShadow: '0 24px 60px rgba(0,0,0,0.35)', zIndex: 9000, overflow: 'hidden', animation: 'chatSlideUp 0.4s cubic-bezier(0.16,1,0.3,1)' }}>
+        <div style={{ 
+          position: 'fixed', 
+          bottom: 24, 
+          right: 24, 
+          width: 360, 
+          maxHeight: '80vh', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          background: 'var(--nav-bg)', 
+          backdropFilter: 'blur(40px)', 
+          WebkitBackdropFilter: 'blur(40px)', 
+          borderRadius: 24, 
+          border: '1px solid var(--border-color)', 
+          boxShadow: '0 24px 60px rgba(0,0,0,0.35)', 
+          zIndex: 9999, 
+          overflow: 'hidden', 
+          animation: 'chatSlideUp 0.4s cubic-bezier(0.16,1,0.3,1)' 
+        }}>
 
-          <div style={{ padding: '16px 20px', background: 'linear-gradient(135deg, var(--primary) 0%, #0EA5E9 100%)', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🧑‍💼</div>
-            <div>
-              <div style={{ fontWeight: 900, color: '#000', fontSize: '0.95rem' }}>Soporte Prospera Pymes</div>
-              <div style={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.65)', fontWeight: 600 }}>Equipo disponible · Respuesta en minutos</div>
+          <div style={{ padding: '16px 20px', background: 'linear-gradient(135deg, var(--primary) 0%, #0EA5E9 100%)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🧑‍💼</div>
+              <div>
+                <div style={{ fontWeight: 900, color: '#000', fontSize: '0.95rem' }}>Soporte Prospera Pymes</div>
+                <div style={{ fontSize: '0.72rem', color: 'rgba(0,0,0,0.65)', fontWeight: 600 }}>Equipo disponible · Respuesta en minutos</div>
+              </div>
             </div>
+            <button onClick={() => setIsOpen(false)} style={{ background: 'rgba(0,0,0,0.1)', border: 'none', cursor: 'pointer', width: 28, height: 28, borderRadius: '50%', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.2)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.1)'}>
+              <X size={16} strokeWidth={2.5} />
+            </button>
           </div>
 
           <div style={{ padding: '8px 16px', background: 'var(--card-bg)', borderBottom: '1px solid var(--border-color)', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-sec)' }}>

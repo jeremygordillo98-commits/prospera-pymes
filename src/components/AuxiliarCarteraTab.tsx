@@ -23,35 +23,89 @@ export const AuxiliarCarteraTab: React.FC<Props> = ({ empresaId, carteraAgrupada
   const totalPorCobrar = clientes.reduce((s, c) => s + c.saldo, 0);
   const totalPorPagar = proveedores.reduce((s, p) => s + p.saldo, 0);
 
-  const exportCSV = () => {
+  const escapeHtml = (str: string | undefined | null) => {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
+  const exportExcel = () => {
     if (!permisoReportesPdf) {
       onPremiumBlock();
       return;
     }
-    const rows = [
-      ['Auxiliar de Cartera'],
-      ['Descargado el', `${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`],
-      [],
-      ['Auxiliar de Cartera - Clientes (Cuentas por Cobrar)'],
-      ['Razón Social', 'RUC/ID', 'Total Facturado', 'Saldo Pendiente']
-    ];
-    clientes.forEach(c => {
-      rows.push([`"${c.razonSocial}"`, c.ruc, c.total.toFixed(2), c.saldo.toFixed(2)]);
-    });
-    rows.push(['TOTAL POR COBRAR', '', '', totalPorCobrar.toFixed(2)]);
-    rows.push([]);
-    rows.push(['Auxiliar de Cartera - Proveedores (Cuentas por Pagar)']);
-    rows.push(['Proveedor', 'RUC/ID', 'Total Facturado', 'Saldo Pendiente']);
-    proveedores.forEach(p => {
-      rows.push([`"${p.razonSocial}"`, p.ruc, p.total.toFixed(2), p.saldo.toFixed(2)]);
-    });
-    rows.push(['TOTAL POR PAGAR', '', '', totalPorPagar.toFixed(2)]);
+    
+    const headers = ['Razón Social', 'RUC/ID', 'Total Facturado', 'Saldo Pendiente'];
+    const dataRows: string[] = [];
 
-    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map(r => r.join(',')).join('\n');
-    const a = document.createElement('a');
-    a.href = encodeURI(csvContent);
-    a.download = `Auxiliar_Cartera_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
+    // Clientes Section
+    dataRows.push(`<tr><td colspan="4" style="font-weight:bold; color: #1e3a8a; font-size: 11pt;">Auxiliar de Cartera - Clientes (Cuentas por Cobrar)</td></tr>`);
+    clientes.forEach(c => {
+      dataRows.push(`<tr>
+        <td>${escapeHtml(c.razonSocial)}</td>
+        <td class="text">${escapeHtml(c.ruc)}</td>
+        <td class="number">${Number(c.total || 0).toFixed(2)}</td>
+        <td class="number">${Number(c.saldo || 0).toFixed(2)}</td>
+      </tr>`);
+    });
+    dataRows.push(`<tr><td style="font-weight:bold;">TOTAL POR COBRAR</td><td></td><td></td><td class="number" style="font-weight:bold;">${totalPorCobrar.toFixed(2)}</td></tr>`);
+    
+    // Spacer row
+    dataRows.push(`<tr><td style="border:none;"></td></tr>`);
+    
+    // Proveedores Section
+    dataRows.push(`<tr><td colspan="4" style="font-weight:bold; color: #1e3a8a; font-size: 11pt;">Auxiliar de Cartera - Proveedores (Cuentas por Pagar)</td></tr>`);
+    proveedores.forEach(p => {
+      dataRows.push(`<tr>
+        <td>${escapeHtml(p.razonSocial)}</td>
+        <td class="text">${escapeHtml(p.ruc)}</td>
+        <td class="number">${Number(p.total || 0).toFixed(2)}</td>
+        <td class="number">${Number(p.saldo || 0).toFixed(2)}</td>
+      </tr>`);
+    });
+    dataRows.push(`<tr><td style="font-weight:bold;">TOTAL POR PAGAR</td><td></td><td></td><td class="number" style="font-weight:bold;">${totalPorPagar.toFixed(2)}</td></tr>`);
+
+    const excelHtml = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
+        <style>
+          table { border-collapse: collapse; }
+          th, td { border: 0.5pt solid #D1D5DB; padding: 6px 10px; font-family: 'Segoe UI', Calibri, sans-serif; font-size: 10pt; }
+          th { background-color: #F3F4F6; font-weight: bold; color: #374151; }
+          .text { mso-number-format:"\\@"; }
+          .number { mso-number-format:"0\\.00"; text-align: right; }
+          .title { font-size: 16pt; font-weight: bold; border: none; color: #111827; }
+          .subtitle { font-size: 10.5pt; color: #4B5563; border: none; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <tr><td class="title" colspan="4">Auxiliar de Cartera</td></tr>
+          <tr><td class="subtitle" colspan="4">Descargado el: ${escapeHtml(new Date().toLocaleDateString('es-EC'))} ${escapeHtml(new Date().toLocaleTimeString('es-EC'))}</td></tr>
+          <tr><td style="border:none;"></td></tr>
+          <tr>
+            ${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}
+          </tr>
+          ${dataRows.join('\n')}
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Auxiliar_Cartera_${new Date().toISOString().split('T')[0]}.xls`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   const exportPDF = async () => {
@@ -213,8 +267,8 @@ export const AuxiliarCarteraTab: React.FC<Props> = ({ empresaId, carteraAgrupada
       <div className="glass-card" style={{ padding: '14px 20px', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <h3 style={{ margin: 0, flex: 1 }}>Auxiliar de Cartera (Cuentas por Cobrar y Pagar)</h3>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={exportCSV} className="btn" style={{ padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
-            <Download size={14} /> CSV
+          <button onClick={exportExcel} className="btn" style={{ padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
+            <Download size={14} /> Excel
           </button>
           <button onClick={exportPDF} className="btn btn-primary" style={{ padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 700 }}>
             <Download size={14} /> PDF

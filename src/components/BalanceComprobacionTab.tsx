@@ -32,6 +32,7 @@ export const BalanceComprobacionTab: React.FC<Props> = ({
   exportBalanceCSV,
   exportBalancePDF
 }) => {
+  const decimals = parseInt(localStorage.getItem('pref_decimals') || '2', 10);
   return (
     <section className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
       {/* Toolbar */}
@@ -50,7 +51,7 @@ export const BalanceComprobacionTab: React.FC<Props> = ({
           color: cuadrado ? 'var(--success)' : totalDebe === 0 ? 'var(--text-sec)' : 'var(--error)'
         }}>
           {cuadrado ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
-          {cuadrado ? 'Cuadrado ✓' : totalDebe === 0 ? 'Sin datos' : `Descuadre Período: $${Math.abs(totalDebe - totalHaber).toFixed(2)}`}
+          {cuadrado ? 'Cuadrado ✓' : totalDebe === 0 ? 'Sin datos' : `Descuadre Período: $${Math.abs(totalDebe - totalHaber).toFixed(decimals)}`}
         </div>
         
         
@@ -98,16 +99,16 @@ export const BalanceComprobacionTab: React.FC<Props> = ({
                     </span>
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: item.saldoIni !== 0 ? 'var(--text-main)' : 'var(--text-sec)' }}>
-                    ${item.saldoIni.toFixed(2)}
+                    ${item.saldoIni.toFixed(decimals)}
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: item.debe > 0 ? 'var(--text-main)' : 'var(--text-sec)' }}>
-                    ${item.debe.toFixed(2)}
+                    ${item.debe.toFixed(decimals)}
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', color: item.haber > 0 ? 'var(--text-main)' : 'var(--text-sec)' }}>
-                    ${item.haber.toFixed(2)}
+                    ${item.haber.toFixed(decimals)}
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, color: 'var(--primary)' }}>
-                    ${item.saldo.toFixed(2)}
+                    ${item.saldo.toFixed(decimals)}
                   </td>
                 </tr>
               );
@@ -116,10 +117,10 @@ export const BalanceComprobacionTab: React.FC<Props> = ({
           <tfoot>
             <tr style={{ background: 'var(--primary-light)', fontWeight: 900, borderTop: '2px solid var(--border-color)' }}>
               <td colSpan={3} style={{ padding: '12px', textAlign: 'right', fontSize: '0.82rem', textTransform: 'uppercase' }}>TOTALES DEL PERÍODO</td>
-              <td style={{ padding: '12px', textAlign: 'right', color: 'var(--primary)' }}>${totalDebe.toFixed(2)}</td>
-              <td style={{ padding: '12px', textAlign: 'right', color: 'var(--primary)' }}>${totalHaber.toFixed(2)}</td>
+              <td style={{ padding: '12px', textAlign: 'right', color: 'var(--primary)' }}>${totalDebe.toFixed(decimals)}</td>
+              <td style={{ padding: '12px', textAlign: 'right', color: 'var(--primary)' }}>${totalHaber.toFixed(decimals)}</td>
               <td style={{ padding: '12px', textAlign: 'right', color: cuadrado ? 'var(--success)' : 'var(--error)' }}>
-                {cuadrado ? '✓ Cuadrado' : `Δ $${Math.abs(totalDebe - totalHaber).toFixed(2)}`}
+                {cuadrado ? '✓ Cuadrado' : `Δ $${Math.abs(totalDebe - totalHaber).toFixed(decimals)}`}
               </td>
             </tr>
           </tfoot>

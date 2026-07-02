@@ -9,6 +9,8 @@ export interface BatchSaveItem {
   idCuentaIva: string;
   idCuentaRetencion: string;
   retencionCodigo: string;
+  detalle?: string;
+  file?: File;
 }
 
 // Helper para calcular el siguiente secuencial contable
@@ -62,17 +64,23 @@ export const saveXMLBatchToSupabase = async (
     const isNC = parsed.tipoDocumento === 'NOTA_CREDITO';
 
     let totalComprobante = 0;
-    let concepto = '';
+    let concepto = item.detalle || '';
 
     if (isFact) {
       totalComprobante = parsed.total;
-      concepto = `Factura: ${parsed.razonSocialEmisor} - ${parsed.numeroComprobante}`;
+      if (!concepto) {
+        concepto = `Factura: ${parsed.razonSocialEmisor} - ${parsed.numeroComprobante}`;
+      }
     } else if (isRet) {
       totalComprobante = parsed.totalRetenido;
-      concepto = `Retención: ${parsed.razonSocialEmisor} - ${parsed.numeroComprobante}`;
+      if (!concepto) {
+        concepto = `Retención: ${parsed.razonSocialEmisor} - ${parsed.numeroComprobante}`;
+      }
     } else if (isNC) {
       totalComprobante = parsed.valorModificacion;
-      concepto = `NC: ${parsed.razonSocialEmisor} - Mod: ${parsed.numDocModificado}`;
+      if (!concepto) {
+        concepto = `NC: ${parsed.razonSocialEmisor} - Mod: ${parsed.numDocModificado}`;
+      }
     }
 
     // 1. Crear transacción contable
@@ -225,6 +233,24 @@ export const saveXMLBatchToSupabase = async (
       throw new Error(`Error al guardar en documentos_sri: ${sriError.message} (${sriError.code})`);
     }
 
+    // 3.5. Subir archivo XML original a Supabase Storage
+    if (item.file) {
+      try {
+        const storagePath = `${empresaId}/${parsed.claveAcceso}.xml`;
+        const { error: uploadError } = await supabase.storage
+          .from('xml-documents')
+          .upload(storagePath, item.file, {
+            contentType: 'text/xml',
+            upsert: true
+          });
+        if (uploadError) {
+          console.error('Error uploading XML to storage:', uploadError);
+        }
+      } catch (uploadErr) {
+        console.error('Unexpected error uploading XML to storage:', uploadErr);
+      }
+    }
+
     // 4. Registrar en Tesorería
     if (isFact) {
       const { data: empData } = await supabase.from('empresas_gestionadas').select('ruc_empresa').eq('id', empresaId).single();
@@ -239,7 +265,7 @@ export const saveXMLBatchToSupabase = async (
         tipo_documento: tipoTesoreria,
         fecha_emision: new Date(parsed.fechaEmision.split('/').reverse().join('-')).toISOString().slice(0, 10),
         fecha_vencimiento: new Date(parsed.fechaEmision.split('/').reverse().join('-')).toISOString().slice(0, 10),
-        concepto: `[Automático] Factura #${parsed.numeroComprobante}`,
+        concepto: item.detalle ? `[Automático] ${item.detalle}` : `[Automático] Factura #${parsed.numeroComprobante}`,
         referencia: parsed.numeroComprobante,
         total: totalComprobante,
         saldo_pendiente: totalComprobante,

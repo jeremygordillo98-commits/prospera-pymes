@@ -26,6 +26,10 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
     setSearchTerm,
     filterTipo,
     setFilterTipo,
+    desde,
+    setDesde,
+    hasta,
+    setHasta,
     currentPage,
     setCurrentPage,
     deletingId,
@@ -50,6 +54,43 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
     handleAnular,
     filtered
   } = useSRIAutomation({ tipo, empresaId });
+
+  const totals = React.useMemo(() => {
+    let baseGrav = 0;
+    let iva = 0;
+    let retencion = 0;
+    let total = 0;
+
+    filtered.forEach(doc => {
+      const tc = doc.transacciones?.tipo_comprobante || '';
+      const isRet = tc.toLowerCase().includes('retención') || tc.toLowerCase().includes('retencion');
+      
+      let docBase = 0;
+      let docIva = 0;
+      let docRet = 0;
+      let docTotal = 0;
+
+      if (isRet) {
+        const rets = doc.retenciones_aplicadas || [];
+        docBase = rets.reduce((sum, r) => sum + (r.base || 0), 0);
+        docIva = rets.filter(r => r.tipo === 'IVA').reduce((sum, r) => sum + (r.valor || 0), 0);
+        docRet = rets.reduce((sum, r) => sum + (r.valor || 0), 0);
+        docTotal = rets.reduce((sum, r) => sum + (r.valor || 0), 0);
+      } else {
+        docBase = (doc.base_12 || 0) + (doc.base_0 || 0) + (doc.base_no_objeto || 0);
+        docIva = doc.monto_iva || 0;
+        docRet = doc.retenciones_aplicadas ? doc.retenciones_aplicadas.reduce((sum, r) => sum + (r.valor || 0), 0) : 0;
+        docTotal = docBase + docIva;
+      }
+
+      baseGrav += docBase;
+      iva += docIva;
+      retencion += docRet;
+      total += docTotal;
+    });
+
+    return { baseGrav, iva, retencion, total };
+  }, [filtered]);
 
   // Body scroll lock when modals are open
   useEffect(() => {
@@ -160,6 +201,24 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
                     style={{ width: '100%', paddingLeft: 36, padding: '10px 12px 10px 36px', borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '0.9rem', boxSizing: 'border-box' }}
                   />
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-sec)', fontWeight: 700 }}>Desde:</span>
+                  <input
+                    type="date"
+                    value={desde}
+                    onChange={e => { setDesde(e.target.value); setCurrentPage(1); }}
+                    style={{ padding: '8px 12px', borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-sec)', fontWeight: 700 }}>Hasta:</span>
+                  <input
+                    type="date"
+                    value={hasta}
+                    onChange={e => { setHasta(e.target.value); setCurrentPage(1); }}
+                    style={{ padding: '8px 12px', borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                  />
+                </div>
                 <div style={{ position: 'relative' }}>
                   <Filter size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-sec)' }} />
                   <select
@@ -194,6 +253,7 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
                   setEditingDoc={setEditingDoc}
                   totalPages={totalPages}
                   setCurrentPage={setCurrentPage}
+                  totals={totals}
                 />
               )}
             </motion.div>

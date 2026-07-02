@@ -30,10 +30,9 @@ const LibroDiario = React.lazy(() => import('./views/LibroDiario').then(m => ({ 
 const Tesoreria = React.lazy(() => import('./views/Tesoreria').then(m => ({ default: m.Tesoreria })));
 const UpdatePassword = React.lazy(() => import('./views/UpdatePassword').then(m => ({ default: m.UpdatePassword })));
 const ATS = React.lazy(() => import('./views/ATS').then(m => ({ default: m.ATS })));
-const SoporteChat = React.lazy(() => import('./components/SoporteChat').then(m => ({ default: m.SoporteChat })));
-const NotificationBellPymes = React.lazy(() => import('./components/NotificationBellPymes').then(m => ({ default: m.NotificationBellPymes })));
 const Terms = React.lazy(() => import('./views/Terms').then(m => ({ default: m.Terms })));
 const Comunicados = React.lazy(() => import('./views/Comunicados').then(m => ({ default: m.Comunicados })));
+const CierrePeriodo = React.lazy(() => import('./views/CierrePeriodo').then(m => ({ default: m.CierrePeriodo })));
 
 import { ImageUploader } from './components/ImageUploader';
 
@@ -330,6 +329,7 @@ const App = () => {
       case 'reportes': return <Reportes empresaId={selectedEmpresa.id} permisoReportesPdf={permisoReportesPdf} />;
       case 'reportes-fiscales': return <ATS empresaId={selectedEmpresa.id} permisoDescargaAts={permisoDescargaAts} />;
       case 'comunicados': return <Comunicados empresaId={selectedEmpresa.id} permisoComunicacionCliente={permisoComunicacionCliente} />;
+      case 'cierre-periodo': return <CierrePeriodo empresaId={selectedEmpresa.id} />;
       case 'config': return <Configuracion />;
       case 'perfil': 
         return (
@@ -475,17 +475,6 @@ const App = () => {
         )}
       </main>
 
-      {/* Chat de Soporte flotante — visible en todas las vistas */}
-      <Suspense fallback={null}>
-        <SoporteChat />
-      </Suspense>
-
-      {/* Campana de Notificaciones Flotante */}
-      <Suspense fallback={null}>
-        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 9999 }}>
-          <NotificationBellPymes />
-        </div>
-      </Suspense>
 
       <nav className="mobile-nav">
         <button

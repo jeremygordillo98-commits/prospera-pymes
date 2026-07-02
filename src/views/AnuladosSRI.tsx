@@ -289,6 +289,8 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
     const [filterTipo, setFilterTipo] = useState<'todos' | 'compras' | 'ventas' | 'pagos' | 'cobros'>('todos');
     const [currentPage, setCurrentPage] = useState(1);
     const [viewingDoc, setViewingDoc] = useState<DocAnulado | null>(null);
+    const [desde, setDesde] = useState('');
+    const [hasta, setHasta] = useState('');
 
     const fetchAnulados = useCallback(async () => {
         if (!empresaId) return;
@@ -391,8 +393,23 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
         if (filterTipo === 'pagos') matchTipo = tipo === 'Pago a Proveedor';
         if (filterTipo === 'cobros') matchTipo = tipo === 'Cobro a Cliente';
 
-        return matchSearch && matchTipo;
+        const f = doc.transacciones?.fecha || '';
+        const matchDesde = !desde || f >= desde;
+        const matchHasta = !hasta || f <= hasta;
+
+        return matchSearch && matchTipo && matchDesde && matchHasta;
     });
+
+    const sumTotalOrig = React.useMemo(() => {
+        return filtered.reduce((sum, doc) => {
+            const valOrig = parseConceptoAnulado(doc.transacciones?.concepto || '').valoresOriginales;
+            if (valOrig) {
+                const total = valOrig.total !== undefined ? valOrig.total : (valOrig.base_12||0) + (valOrig.base_0||0) + (valOrig.base_no_objeto||0) + (valOrig.monto_iva||0);
+                return sum + (total || 0);
+            }
+            return sum;
+        }, 0);
+    }, [filtered]);
 
     const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
     const paginated = filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -459,6 +476,24 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
                                 onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
                                 placeholder="Buscar por entidad, número..."
                                 style={{ width: '100%', paddingLeft: 36, padding: '10px 12px 10px 36px', borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-sec)', fontWeight: 700 }}>Desde:</span>
+                            <input
+                                type="date"
+                                value={desde}
+                                onChange={e => { setDesde(e.target.value); setCurrentPage(1); }}
+                                style={{ padding: '8px 12px', borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-sec)', fontWeight: 700 }}>Hasta:</span>
+                            <input
+                                type="date"
+                                value={hasta}
+                                onChange={e => { setHasta(e.target.value); setCurrentPage(1); }}
+                                style={{ padding: '8px 12px', borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '0.85rem' }}
                             />
                         </div>
                         <div style={{ position: 'relative' }}>
@@ -625,9 +660,18 @@ export const AnuladosSRI: React.FC<AnuladosSRIProps> = ({ empresaId }) => {
                                              );
                                          })}
                                      </tbody>
-                                 </AnimatePresence>
-                             </table>
-                         </div>
+                                </AnimatePresence>
+                                <tfoot>
+                                    <tr style={{ background: 'var(--primary-light)', fontWeight: 900, borderTop: '2px solid var(--border-color)', borderBottom: '2px solid var(--border-color)' }}>
+                                        <td colSpan={2} style={{ padding: '12px 12px', fontSize: '0.78rem', textTransform: 'uppercase', color: 'var(--text-main)' }}>TOTAL ORIGINAL FILTRADO</td>
+                                        <td style={{ padding: '12px 12px', textAlign: 'center', color: '#6b7280', textDecoration: 'line-through' }}>
+                                            ${sumTotalOrig.toFixed(2)}
+                                        </td>
+                                        <td colSpan={3}></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                      )}
 
                      {/* Paginación */}

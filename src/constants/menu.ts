@@ -13,7 +13,8 @@ import {
   BarChart, 
   FileText,
   Mail,
-  Ban
+  Ban,
+  Calendar
 } from 'lucide-react';
 
 export const MENU_STRUCTURE = [
@@ -28,6 +29,7 @@ export const MENU_STRUCTURE = [
       { id: 'entidades', label: 'Entidades (Terceros)', icon: Users },
       { id: 'libro-diario', label: 'Libro Diario', icon: FileText },
       { id: 'asientos', label: 'Asientos Manuales', icon: Grid },
+      { id: 'cierre-periodo', label: 'Cierre de Ejercicio', icon: Calendar },
     ]
   },
   {

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileDown,
+  FileSpreadsheet,
   Calendar,
   RefreshCw,
   CheckCircle2,
@@ -19,6 +20,7 @@ import {
 import { supabase } from '../services/supabase';
 import JSZip from 'jszip';
 import { buildATSXml, getSRIDocumentNumber } from '../utils/atsXmlBuilder';
+import { exportATSToExcel } from '../utils/atsExcelExporter';
 
 interface ATSProps { 
   empresaId: string; 
@@ -314,6 +316,15 @@ export const ATS: React.FC<ATSProps> = ({ empresaId, permisoDescargaAts }) => {
     }
   };
 
+  const generarExcel = () => {
+    if (!permisoDescargaAts) {
+      setShowUpgradeModal(true);
+      return;
+    }
+    if (!empresa) return;
+    exportATSToExcel(empresa, anio, mes, docs);
+  };
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(xmlStringPreview);
     setCopied(true);
@@ -331,14 +342,6 @@ export const ATS: React.FC<ATSProps> = ({ empresaId, permisoDescargaAts }) => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <header style={{ marginBottom: 40 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--primary)', fontWeight: 800, textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '2px', marginBottom: 8 }}>
-          <FileText size={14} /> Módulo Fiscal
-        </div>
-        <h1 className="h1" style={{ fontSize: '2.5rem', fontWeight: 900 }}>Anexo Transaccional (ATS)</h1>
-        <p className="text-sec" style={{ fontSize: '1.1rem' }}>Genera y pre-audita el anexo tributario XML para la declaración mensual ante el SRI.</p>
-      </header>
 
       {/* Selector Periodo + Acciones */}
       <div className="glass-card" style={{ padding: '20px 24px', marginBottom: 24, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -353,6 +356,14 @@ export const ATS: React.FC<ATSProps> = ({ empresaId, permisoDescargaAts }) => {
           <RefreshCw size={15} /> Cargar Periodo
         </button>
         <div style={{ flex: 1 }} />
+        <button
+          onClick={generarExcel}
+          disabled={docs.length === 0 || alertasCriticas.length > 0}
+          className="btn"
+          style={{ padding: '10px 22px', borderRadius: 14, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, opacity: (docs.length === 0 || alertasCriticas.length > 0) ? 0.5 : 1, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)' }}
+        >
+          <FileSpreadsheet size={18} style={{ color: '#10b981' }} /> Descargar ATS Excel
+        </button>
         <button
           onClick={generarXML}
           disabled={docs.length === 0 || alertasCriticas.length > 0}

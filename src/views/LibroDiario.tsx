@@ -48,6 +48,8 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView 
     incorrectTxsCount
   } = useLibroDiario({ empresaId, activeView });
 
+  const decimals = parseInt(localStorage.getItem('pref_decimals') || '2', 10);
+
   return (
     <div className="libro-diario-container">
       <LibroDiarioToolbar
@@ -176,7 +178,7 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView 
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-sec)', fontWeight: 800 }}>Monto Operación</div>
                       <div style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--primary)' }}>
-                        ${tx.movimientos.reduce((acc, m) => acc + m.debe, 0).toFixed(2)}
+                        ${tx.movimientos.reduce((acc, m) => acc + m.debe, 0).toFixed(decimals)}
                       </div>
                     </div>
                     <button
@@ -235,8 +237,8 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView 
                             <tr key={m.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                               <td style={{ padding: '12px 0', fontSize: '0.85rem', color: 'var(--text-sec)', fontStyle: 'italic' }}>{m.plan_cuentas?.codigo_cuenta}</td>
                               <td style={{ padding: '12px 0', fontSize: '0.9rem', fontWeight: 600 }}>{m.plan_cuentas?.nombre}</td>
-                              <td style={{ padding: '12px 0', fontSize: '0.9rem', textAlign: 'right', fontWeight: m.debe > 0 ? 900 : 400, color: m.debe > 0 ? 'var(--text-main)' : 'var(--text-sec)' }}>{m.debe > 0 ? `$${m.debe.toFixed(2)}` : '-'}</td>
-                              <td style={{ padding: '12px 0', fontSize: '0.9rem', textAlign: 'right', fontWeight: m.haber > 0 ? 900 : 400, color: m.haber > 0 ? 'var(--text-main)' : 'var(--text-sec)' }}>{m.haber > 0 ? `$${m.haber.toFixed(2)}` : '-'}</td>
+                              <td style={{ padding: '12px 0', fontSize: '0.9rem', textAlign: 'right', fontWeight: m.debe > 0 ? 900 : 400, color: m.debe > 0 ? 'var(--text-main)' : 'var(--text-sec)' }}>{m.debe > 0 ? `$${m.debe.toFixed(decimals)}` : '-'}</td>
+                              <td style={{ padding: '12px 0', fontSize: '0.9rem', textAlign: 'right', fontWeight: m.haber > 0 ? 900 : 400, color: m.haber > 0 ? 'var(--text-main)' : 'var(--text-sec)' }}>{m.haber > 0 ? `$${m.haber.toFixed(decimals)}` : '-'}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -244,10 +246,10 @@ export const LibroDiario: React.FC<LibroDiarioProps> = ({ empresaId, activeView 
                           <tr style={{ fontWeight: 900, background: isAnulado ? 'rgba(239, 68, 68, 0.05)' : 'rgba(99, 102, 241, 0.05)' }}>
                             <td colSpan={2} style={{ padding: '16px 12px', textAlign: 'right', fontSize: '0.8rem', textTransform: 'uppercase', borderRadius: '12px 0 0 12px' }}>Cuadre de Asiento</td>
                             <td style={{ padding: '16px 12px', textAlign: 'right', borderTop: isAnulado ? '2px solid var(--error)' : '2px solid var(--primary)', color: isAnulado ? 'var(--error)' : 'var(--primary)' }}>
-                              ${tx.movimientos.reduce((acc, m) => acc + m.debe, 0).toFixed(2)}
+                              ${tx.movimientos.reduce((acc, m) => acc + m.debe, 0).toFixed(decimals)}
                             </td>
                             <td style={{ padding: '16px 12px', textAlign: 'right', borderTop: isAnulado ? '2px solid var(--error)' : '2px solid var(--primary)', color: isAnulado ? 'var(--error)' : 'var(--primary)', borderRadius: '0 12px 12px 0' }}>
-                              ${tx.movimientos.reduce((acc, m) => acc + m.haber, 0).toFixed(2)}
+                              ${tx.movimientos.reduce((acc, m) => acc + m.haber, 0).toFixed(decimals)}
                             </td>
                           </tr>
                         </tfoot>

@@ -17,36 +17,81 @@ export const getDocDetails = (tx: Transaction) => {
   return `Comprobante #${tx.numero_comprobante}`;
 };
 
+const escapeHtml = (str: string | undefined | null) => {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 export const exportToExcel = (filteredTransactions: Transaction[], filterDate: string) => {
-  const metadata = [
-    ['Libro Diario General'],
-    [`Período: ${filterDate || 'Histórico Completo'}`],
-    [`Descargado el: ${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`],
-    []
-  ];
-  const rows = [
-    ['Fecha', 'Concepto', 'Comprobante', 'Entidad', 'Codigo Cuenta', 'Nombre Cuenta', 'Debe', 'Haber']
-  ];
-  filteredTransactions.forEach(tx => {
+  const headers = ['Fecha', 'Concepto', 'Comprobante', 'Entidad', 'Codigo Cuenta', 'Nombre Cuenta', 'Debe', 'Haber'];
+  
+  const rowsHtml: string[] = [];
+  
+  filteredTransactions.forEach((tx, txIdx) => {
+    if (txIdx > 0) {
+      rowsHtml.push('<tr><td style="border:none; height: 18px;" colspan="8"></td></tr>');
+    }
     tx.movimientos.forEach(m => {
-      rows.push([
-        tx.fecha,
-        `"${tx.concepto.replace(/"/g, '""')}"`,
-        `"${getDocDetails(tx)}"`,
-        `"${tx.entidades?.razon_social || ''}"`,
-        m.plan_cuentas?.codigo_cuenta || '',
-        `"${m.plan_cuentas?.nombre || ''}"`,
-        m.debe.toString(),
-        m.haber.toString()
-      ]);
+      const cells = [
+        { val: tx.fecha, isText: true },
+        { val: tx.concepto || '', isText: false },
+        { val: getDocDetails(tx), isText: true },
+        { val: tx.entidades?.razon_social || '', isText: false },
+        { val: m.plan_cuentas?.codigo_cuenta || '', isText: true },
+        { val: m.plan_cuentas?.nombre || '', isText: false },
+        { val: Number(m.debe || 0), isNumber: true },
+        { val: Number(m.haber || 0), isNumber: true }
+      ];
+
+      const row = `<tr>${cells.map(c => {
+        if (c.isText) return `<td class="text">${escapeHtml(String(c.val))}</td>`;
+        if (c.isNumber) return `<td class="number">${Number(c.val || 0).toFixed(2)}</td>`;
+        return `<td>${escapeHtml(String(c.val))}</td>`;
+      }).join('')}</tr>`;
+      
+      rowsHtml.push(row);
     });
   });
-  const csvString = "sep=,\n" + metadata.map(e => e.join(",")).join("\n") + "\n" + rows.map(e => e.join(",")).join("\n");
-  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvString], { type: 'text/csv;charset=utf-8;' });
+
+  const excelHtml = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
+      <style>
+        table { border-collapse: collapse; }
+        th, td { border: 0.5pt solid #D1D5DB; padding: 6px 10px; font-family: 'Segoe UI', Calibri, sans-serif; font-size: 10pt; }
+        th { background-color: #F3F4F6; font-weight: bold; color: #374151; }
+        .text { mso-number-format:"\\@"; }
+        .number { mso-number-format:"0\\.00"; text-align: right; }
+        .title { font-size: 16pt; font-weight: bold; border: none; color: #111827; }
+        .subtitle { font-size: 10.5pt; color: #4B5563; border: none; }
+      </style>
+    </head>
+    <body>
+      <table>
+        <tr><td class="title" colspan="8">Libro Diario General</td></tr>
+        <tr><td class="subtitle" colspan="8">Período: ${escapeHtml(filterDate || 'Histórico Completo')}</td></tr>
+        <tr><td class="subtitle" colspan="8">Descargado el: ${escapeHtml(new Date().toLocaleDateString('es-EC'))} ${escapeHtml(new Date().toLocaleTimeString('es-EC'))}</td></tr>
+        <tr><td style="border:none;"></td></tr>
+        <tr>
+          ${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}
+        </tr>
+        ${rowsHtml.join('\n')}
+      </table>
+    </body>
+    </html>
+  `;
+
+  const blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.setAttribute("href", url);
-  link.setAttribute("download", `Libro_Diario_${filterDate || 'Historico'}.csv`);
+  link.setAttribute("download", `Libro_Diario_${filterDate || 'Historico'}.xls`);
   document.body.appendChild(link);
   link.click();
   link.remove();

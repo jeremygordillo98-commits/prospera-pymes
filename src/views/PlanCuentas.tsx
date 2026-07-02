@@ -278,7 +278,7 @@ export const PlanCuentas = ({ empresaId }: { empresaId: string }) => {
               onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
             >
-              Expandir Todo
+              Expandir
             </button>
             <button 
               onClick={collapseAll}
@@ -300,7 +300,7 @@ export const PlanCuentas = ({ empresaId }: { empresaId: string }) => {
               onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
             >
-              Colapsar Todo
+              Contraer
             </button>
           </div>
         </div>
