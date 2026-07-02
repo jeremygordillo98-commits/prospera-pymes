@@ -49,6 +49,8 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId, permisoReportesPdf, o
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
+  const decimals = parseInt(localStorage.getItem('pref_decimals') || '2', 10);
+
   // Totales aggregados por cuenta (para el listado)
   const [totalesMap, setTotalesMap] = useState<Map<string, { debe: number; haber: number }>>(new Map());
 
@@ -198,7 +200,7 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId, permisoReportesPdf, o
         '—',
         '0.00',
         '0.00',
-        saldoInicial.toFixed(2)
+        saldoInicial.toFixed(decimals)
       ]);
     }
     linesConSaldo.forEach(l => {
@@ -209,10 +211,10 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId, permisoReportesPdf, o
         `"${(l.transacciones?.concepto || '').replace(/"/g, '""')}"`,
         `${l.transacciones?.tipo_comprobante || ''} ${l.transacciones?.numero_comprobante || ''}`,
         `"${tercero}${ruc}"`,
-        l.debe.toFixed(2), l.haber.toFixed(2), l.saldoAcum.toFixed(2)
+        l.debe.toFixed(decimals), l.haber.toFixed(decimals), l.saldoAcum.toFixed(decimals)
       ]);
     });
-    rows.push(['', 'TOTALES', '', '', totalDebe.toFixed(2), totalHaber.toFixed(2), '']);
+    rows.push(['', 'TOTALES', '', '', totalDebe.toFixed(decimals), totalHaber.toFixed(decimals), '']);
     const csv = 'data:text/csv;charset=utf-8,\uFEFF' + metadata.map(r => r.join(',')).join('\n') + '\n' + rows.map(r => r.join(',')).join('\n');
     const a = document.createElement('a');
     a.href = encodeURI(csv);
@@ -235,7 +237,7 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId, permisoReportesPdf, o
         '—',
         '—',
         '—',
-        `$${saldoInicial.toFixed(2)}`
+        `$${saldoInicial.toFixed(decimals)}`
       ]);
     }
     linesConSaldo.forEach(l => {
@@ -245,17 +247,17 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId, permisoReportesPdf, o
         l.transacciones?.fecha ? new Date(l.transacciones.fecha + 'T12:00:00').toLocaleDateString('es-EC') : '—',
         `${l.transacciones?.concepto || '—'}${tercero}${ruc}`,
         `${l.transacciones?.tipo_comprobante || ''} ${l.transacciones?.numero_comprobante || ''}`.trim() || '—',
-        `$${l.debe.toFixed(2)}`,
-        `$${l.haber.toFixed(2)}`,
-        `$${l.saldoAcum.toFixed(2)}`
+        `$${l.debe.toFixed(decimals)}`,
+        `$${l.haber.toFixed(decimals)}`,
+        `$${l.saldoAcum.toFixed(decimals)}`
       ]);
     });
 
     const foot = [[
       '', 'TOTALES', '',
-      `$${totalDebe.toFixed(2)}`,
-      `$${totalHaber.toFixed(2)}`,
-      `$${(linesConSaldo[linesConSaldo.length - 1]?.saldoAcum ?? saldoInicial).toFixed(2)}`
+      `$${totalDebe.toFixed(decimals)}`,
+      `$${totalHaber.toFixed(decimals)}`,
+      `$${(linesConSaldo[linesConSaldo.length - 1]?.saldoAcum ?? saldoInicial).toFixed(decimals)}`
     ]];
 
     let subtitle = `Cuenta: ${selected.codigo_cuenta} - ${selected.nombre}`;
@@ -310,7 +312,7 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId, permisoReportesPdf, o
                 <div style={{ fontSize: '0.85rem', fontWeight: isActive ? 800 : 600, marginTop: 2 }}>{acc.nombre}</div>
                 {t && (
                   <div style={{ fontSize: '0.72rem', color: 'var(--text-sec)', marginTop: 3 }}>
-                    D: ${t.debe.toFixed(2)} · H: ${t.haber.toFixed(2)}
+                    D: ${t.debe.toFixed(decimals)} · H: ${t.haber.toFixed(decimals)}
                   </div>
                 )}
               </div>
@@ -423,7 +425,7 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId, permisoReportesPdf, o
                           <td style={{ padding: '11px 14px', textAlign: 'right', fontSize: '0.88rem', color: 'var(--text-sec)' }}>—</td>
                           <td style={{ padding: '11px 14px', textAlign: 'right', fontSize: '0.88rem', color: 'var(--text-sec)' }}>—</td>
                           <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 900, fontSize: '0.9rem', color: saldoInicial >= 0 ? 'var(--primary)' : 'var(--error)', whiteSpace: 'nowrap' }}>
-                            ${saldoInicial.toFixed(2)}
+                            ${saldoInicial.toFixed(decimals)}
                           </td>
                         </tr>
                       )}
@@ -446,13 +448,13 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId, permisoReportesPdf, o
                             {l.transacciones?.tipo_comprobante} {l.transacciones?.numero_comprobante}
                           </td>
                           <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: l.debe > 0 ? 800 : 400, color: l.debe > 0 ? 'var(--text-main)' : 'var(--text-sec)', fontSize: '0.88rem' }}>
-                            {l.debe > 0 ? `$${l.debe.toFixed(2)}` : '—'}
+                            {l.debe > 0 ? `$${l.debe.toFixed(decimals)}` : '—'}
                           </td>
                           <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: l.haber > 0 ? 800 : 400, color: l.haber > 0 ? 'var(--text-main)' : 'var(--text-sec)', fontSize: '0.88rem' }}>
-                            {l.haber > 0 ? `$${l.haber.toFixed(2)}` : '—'}
+                            {l.haber > 0 ? `$${l.haber.toFixed(decimals)}` : '—'}
                           </td>
                           <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 900, fontSize: '0.9rem', color: l.saldoAcum >= 0 ? 'var(--primary)' : 'var(--error)', whiteSpace: 'nowrap' }}>
-                            ${l.saldoAcum.toFixed(2)}
+                            ${l.saldoAcum.toFixed(decimals)}
                           </td>
                         </tr>
                       ))}
@@ -462,10 +464,10 @@ export const MayorGeneral: React.FC<Props> = ({ empresaId, permisoReportesPdf, o
                         <td colSpan={3} style={{ padding: '13px 14px', fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           Totales del período — {linesConSaldo.length} movimientos
                         </td>
-                        <td style={{ padding: '13px 14px', textAlign: 'right', color: 'var(--text-main)' }}>${totalDebe.toFixed(2)}</td>
-                        <td style={{ padding: '13px 14px', textAlign: 'right', color: 'var(--text-main)' }}>${totalHaber.toFixed(2)}</td>
+                        <td style={{ padding: '13px 14px', textAlign: 'right', color: 'var(--text-main)' }}>${totalDebe.toFixed(decimals)}</td>
+                        <td style={{ padding: '13px 14px', textAlign: 'right', color: 'var(--text-main)' }}>${totalHaber.toFixed(decimals)}</td>
                         <td style={{ padding: '13px 14px', textAlign: 'right', color: 'var(--primary)' }}>
-                          ${linesConSaldo[linesConSaldo.length - 1]?.saldoAcum.toFixed(2) ?? '0.00'}
+                          ${linesConSaldo[linesConSaldo.length - 1]?.saldoAcum.toFixed(decimals) ?? '0.00'}
                         </td>
                       </tr>
                     </tfoot>

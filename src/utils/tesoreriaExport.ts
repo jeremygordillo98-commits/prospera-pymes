@@ -1,38 +1,75 @@
 import { generatePDFReport } from './pdfGenerator';
 
+const escapeHtml = (str: string | undefined | null) => {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 export const exportCuentasExcel = (docs: any[], type: 'cobrar' | 'pagar') => {
   const isCobrar = type === 'cobrar';
   const labelTercero = isCobrar ? 'Cliente' : 'Proveedor';
   const title = isCobrar ? 'Cuentas por Cobrar (Facturas de Clientes)' : 'Cuentas por Pagar (Facturas de Proveedores)';
-  const metadata = [
-    [title],
-    [`Descargado el: ${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`],
-    []
-  ];
-  const rows = [
-    [labelTercero, 'Referencia', 'Concepto', 'Fecha Emisión', 'Fecha Vencimiento', 'Total ($)', 'Saldo Pendiente ($)', 'Estado']
-  ];
   
-  docs.forEach(doc => {
-    rows.push([
-      `"${(doc.entidades?.razon_social || '').replace(/"/g, '""')}"`,
-      `"${doc.referencia || ''}"`,
-      `"${(doc.concepto || '').replace(/"/g, '""')}"`,
-      `"${doc.fecha_emision || ''}"`,
-      `"${doc.fecha_vencimiento || ''}"`,
-      `"${Number(doc.total || 0).toFixed(2)}"`,
-      `"${Number(doc.saldo_pendiente || 0).toFixed(2)}"`,
-      `"${doc.estado || ''}"`
-    ]);
-  });
+  const headers = [labelTercero, 'Referencia', 'Concepto', 'Fecha Emisión', 'Fecha Vencimiento', 'Total ($)', 'Saldo Pendiente ($)', 'Estado'];
+  
+  const rowsHtml = docs.map(doc => {
+    const cells = [
+      { val: doc.entidades?.razon_social || '', isText: false },
+      { val: doc.referencia || '', isText: true },
+      { val: doc.concepto || '', isText: false },
+      { val: doc.fecha_emision || '', isText: true },
+      { val: doc.fecha_vencimiento || '', isText: true },
+      { val: Number(doc.total || 0), isNumber: true },
+      { val: Number(doc.saldo_pendiente || 0), isNumber: true },
+      { val: doc.estado || '', isText: false }
+    ];
 
-  const csvString = "sep=,\n" + metadata.map(e => e.join(",")).join("\n") + "\n" + rows.map(e => e.join(",")).join("\n");
-  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvString], { type: 'text/csv;charset=utf-8;' });
+    return `<tr>${cells.map(c => {
+      if (c.isText) return `<td class="text">${escapeHtml(String(c.val))}</td>`;
+      if (c.isNumber) return `<td class="number">${Number(c.val || 0).toFixed(2)}</td>`;
+      return `<td>${escapeHtml(String(c.val))}</td>`;
+    }).join('')}</tr>`;
+  }).join('\n');
+
+  const excelHtml = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
+      <style>
+        table { border-collapse: collapse; }
+        th, td { border: 0.5pt solid #D1D5DB; padding: 6px 10px; font-family: 'Segoe UI', Calibri, sans-serif; font-size: 10pt; }
+        th { background-color: #F3F4F6; font-weight: bold; color: #374151; }
+        .text { mso-number-format:"\\@"; }
+        .number { mso-number-format:"0\\.00"; text-align: right; }
+        .title { font-size: 16pt; font-weight: bold; border: none; color: #111827; }
+        .subtitle { font-size: 10.5pt; color: #4B5563; border: none; }
+      </style>
+    </head>
+    <body>
+      <table>
+        <tr><td class="title" colspan="8">${escapeHtml(title)}</td></tr>
+        <tr><td class="subtitle" colspan="8">Descargado el: ${escapeHtml(new Date().toLocaleDateString('es-EC'))} ${escapeHtml(new Date().toLocaleTimeString('es-EC'))}</td></tr>
+        <tr><td style="border:none;"></td></tr>
+        <tr>
+          ${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}
+        </tr>
+        ${rowsHtml}
+      </table>
+    </body>
+    </html>
+  `;
+
+  const blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.setAttribute("href", url);
   const fileNameTitle = isCobrar ? 'Cuentas_por_Cobrar' : 'Cuentas_por_Pagar';
-  link.setAttribute("download", `${fileNameTitle}_${new Date().toISOString().split('T')[0]}.csv`);
+  link.setAttribute("download", `${fileNameTitle}_${new Date().toISOString().split('T')[0]}.xls`);
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -64,34 +101,61 @@ export const exportHistorialExcel = (movimientos: any[], type: 'cobro' | 'pago')
   const isCobro = type === 'cobro';
   const labelTercero = isCobro ? 'Cliente' : 'Proveedor';
   const title = isCobro ? 'Historial de Cobros Aplicados' : 'Historial de Pagos Aplicados';
-  const metadata = [
-    [title],
-    [`Descargado el: ${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`],
-    []
-  ];
-  const rows = [
-    ['Fecha', labelTercero, 'Factura Relacionada', 'Cuenta Financiera', 'Concepto', 'Referencia de Pago', 'Monto Aplicado ($)']
-  ];
+
+  const headers = ['Fecha', labelTercero, 'Factura Relacionada', 'Cuenta Financiera', 'Concepto', 'Referencia de Pago', 'Monto Aplicado ($)'];
   
-  movimientos.forEach(m => {
-    rows.push([
-      `"${m.fecha || ''}"`,
-      `"${(m.entidades?.razon_social || '').replace(/"/g, '""')}"`,
-      `"${m.documento?.referencia || 'Anticipo / Sin Factura'}"`,
-      `"${(m.cuenta_financiera?.nombre || '—').replace(/"/g, '""')}"`,
-      `"${(m.concepto || '').replace(/"/g, '""')}"`,
-      `"${(m.referencia || '').replace(/"/g, '""')}"`,
-      `"${Number(m.monto || 0).toFixed(2)}"`
-    ]);
-  });
-  
-  const csvString = "sep=,\n" + metadata.map(e => e.join(",")).join("\n") + "\n" + rows.map(e => e.join(",")).join("\n");
-  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvString], { type: 'text/csv;charset=utf-8;' });
+  const rowsHtml = movimientos.map(m => {
+    const cells = [
+      { val: m.fecha || '', isText: true },
+      { val: m.entidades?.razon_social || '', isText: false },
+      { val: m.documento?.referencia || 'Anticipo / Sin Factura', isText: true },
+      { val: m.cuenta_financiera?.nombre || '—', isText: false },
+      { val: m.concepto || '', isText: false },
+      { val: m.referencia || '', isText: true },
+      { val: Number(m.monto || 0), isNumber: true }
+    ];
+
+    return `<tr>${cells.map(c => {
+      if (c.isText) return `<td class="text">${escapeHtml(String(c.val))}</td>`;
+      if (c.isNumber) return `<td class="number">${Number(c.val || 0).toFixed(2)}</td>`;
+      return `<td>${escapeHtml(String(c.val))}</td>`;
+    }).join('')}</tr>`;
+  }).join('\n');
+
+  const excelHtml = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
+      <style>
+        table { border-collapse: collapse; }
+        th, td { border: 0.5pt solid #D1D5DB; padding: 6px 10px; font-family: 'Segoe UI', Calibri, sans-serif; font-size: 10pt; }
+        th { background-color: #F3F4F6; font-weight: bold; color: #374151; }
+        .text { mso-number-format:"\\@"; }
+        .number { mso-number-format:"0\\.00"; text-align: right; }
+        .title { font-size: 16pt; font-weight: bold; border: none; color: #111827; }
+        .subtitle { font-size: 10.5pt; color: #4B5563; border: none; }
+      </style>
+    </head>
+    <body>
+      <table>
+        <tr><td class="title" colspan="7">${escapeHtml(title)}</td></tr>
+        <tr><td class="subtitle" colspan="7">Descargado el: ${escapeHtml(new Date().toLocaleDateString('es-EC'))} ${escapeHtml(new Date().toLocaleTimeString('es-EC'))}</td></tr>
+        <tr><td style="border:none;"></td></tr>
+        <tr>
+          ${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}
+        </tr>
+        ${rowsHtml}
+      </table>
+    </body>
+    </html>
+  `;
+
+  const blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.setAttribute("href", url);
   const fileNameTitle = isCobro ? 'Historial_de_Cobros' : 'Historial_de_Pagos';
-  link.setAttribute("download", `${fileNameTitle}_${new Date().toISOString().split('T')[0]}.csv`);
+  link.setAttribute("download", `${fileNameTitle}_${new Date().toISOString().split('T')[0]}.xls`);
   document.body.appendChild(link);
   link.click();
   link.remove();

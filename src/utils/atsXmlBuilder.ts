@@ -49,12 +49,31 @@ export const getSRIDocumentNumber = (d: DocSRI): string => {
   return numComp;
 };
 
+const escapeHtml = (str: string | undefined | null): string => {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 const mapIdProv = (tipoId: string | undefined): string => {
   if (!tipoId) return '01';
   if (tipoId === '04') return '01';
   if (tipoId === '05') return '02';
   if (tipoId === '06' || tipoId === '08') return '03';
   return tipoId;
+};
+
+const mapTipoComprobante = (tipo: string | undefined): string => {
+  if (!tipo) return '01';
+  if (tipo.includes('Factura')) return '01';
+  if (tipo.includes('Nota de Crédito') || tipo.includes('Nota de Credito')) return '04';
+  if (tipo.includes('Retención') || tipo.includes('Retencion')) return '07';
+  if (tipo.includes('Liquidación') || tipo.includes('Liquidacion')) return '03';
+  return '01';
 };
 
 const formatDateForSRI = (dateString: string | undefined): string => {
@@ -110,7 +129,7 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
       const ent = v.transacciones?.entidades;
       const idCliente = ent?.ruc_cedula || '9999999999999';
       const isNC = v.transacciones?.tipo_comprobante === 'Nota de Crédito';
-      const tipoComp = isNC ? '04' : '01';
+      const tipoComp = isNC ? '04' : '18';
       const key = `${idCliente}_${tipoComp}`;
 
       if (!acc[key]) {
@@ -165,7 +184,7 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
   xml += `<iva>\n`;
   xml += `  <TipoIDInformante>R</TipoIDInformante>\n`;
   xml += `  <IdInformante>${empresa.ruc_empresa}</IdInformante>\n`;
-  xml += `  <razonSocial>${empresa.nombre_empresa.replace(/&/g, '&amp;')}</razonSocial>\n`;
+  xml += `  <razonSocial>${escapeHtml(empresa.nombre_empresa)}</razonSocial>\n`;
   xml += `  <Anio>${anio}</Anio>\n`;
   xml += `  <Mes>${mesStr}</Mes>\n`;
   xml += `  <numEstabRuc>${numEstabs}</numEstabRuc>\n`;
@@ -213,7 +232,7 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
     xml += `      <puntoEmision>${ptoEmi}</puntoEmision>\n`;
     xml += `      <secuencial>${sec}</secuencial>\n`;
     xml += `      <fechaEmision>${fechaFormat}</fechaEmision>\n`;
-    xml += `      <autorizacion>${d.clave_acceso_xml || ''}</autorizacion>\n`;
+    xml += `      <autorizacion>${escapeHtml(d.clave_acceso_xml || '')}</autorizacion>\n`;
     xml += `      <baseNoGraIva>${(d.base_no_objeto || 0).toFixed(2)}</baseNoGraIva>\n`;
     xml += `      <baseImponible>${(d.base_0 || 0).toFixed(2)}</baseImponible>\n`;
     xml += `      <baseImpGrav>${(d.base_12 || 0).toFixed(2)}</baseImpGrav>\n`;
@@ -227,26 +246,48 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
     xml += `      <valorRetServicios>${ret70.toFixed(2)}</valorRetServicios>\n`;
     xml += `      <valRetServ100>${ret100.toFixed(2)}</valRetServ100>\n`;
     xml += `      <totbasesImpReemb>0.00</totbasesImpReemb>\n`;
-    xml += `      <pagoExterior>\n        <pagoLocExt>01</pagoLocExt>\n      </pagoExterior>\n`;
-    xml += `      <formasDePago>\n        <formaPago>${fp}</formaPago>\n      </formasDePago>\n`;
-    
-    if (retRenta.length > 0) {
-      const activeRenta = retRenta.filter(r => r.valor > 0 || r.porcentaje > 0);
-      if (activeRenta.length > 0) {
-        xml += `      <air>\n`;
-        activeRenta.forEach((r: any) => {
-          xml += `        <detalleAir>\n`;
-          xml += `          <codRetAir>${r.codigo || '332'}</codRetAir>\n`;
-          xml += `          <baseImpAir>${(r.base || d.base_12 || 0).toFixed(2)}</baseImpAir>\n`;
-          xml += `          <porcentajeAir>${r.porcentaje || 0}</porcentajeAir>\n`;
-          xml += `          <valRetAir>${(r.valor || 0).toFixed(2)}</valRetAir>\n`;
-          xml += `        </detalleAir>\n`;
-        });
-        xml += `      </air>\n`;
-      }
+      
+    const isForeign = mapIdProv(ent?.tipo_identificacion) === '03';
+    xml += `      <pagoExterior>\n`;
+    xml += `        <pagoLocExt>${isForeign ? '02' : '01'}</pagoLocExt>\n`;
+    xml += `        <paisEfecPago>${isForeign ? '999' : 'NA'}</paisEfecPago>\n`;
+    xml += `        <aplicConvDobTrib>${isForeign ? 'NO' : 'NA'}</aplicConvDobTrib>\n`;
+    xml += `        <pagExtSujRetNorLeg>${isForeign ? 'NO' : 'NA'}</pagExtSujRetNorLeg>\n`;
+    xml += `      </pagoExterior>\n`;
+      
+    const totBases = (d.base_no_objeto || 0) + (d.base_0 || 0) + (d.base_12 || 0);
+    if (totBases >= 1000) {
+      xml += `      <formasDePago>\n        <formaPago>${fp}</formaPago>\n      </formasDePago>\n`;
     }
+      
+    const activeRenta = retRenta.filter(r => r.valor > 0 || r.porcentaje > 0);
+    xml += `      <air>\n`;
+    if (activeRenta.length > 0) {
+      activeRenta.forEach((r: any) => {
+        xml += `        <detalleAir>\n`;
+        xml += `          <codRetAir>${r.codigo || '332'}</codRetAir>\n`;
+        xml += `          <baseImpAir>${(r.base || d.base_12 || 0).toFixed(2)}</baseImpAir>\n`;
+        xml += `          <porcentajeAir>${(r.porcentaje || 0).toFixed(2)}</porcentajeAir>\n`;
+        xml += `          <valRetAir>${(r.valor || 0).toFixed(2)}</valRetAir>\n`;
+        xml += `        </detalleAir>\n`;
+      });
+    } else {
+      xml += `        <detalleAir>\n`;
+      xml += `          <codRetAir>332</codRetAir>\n`;
+      xml += `          <baseImpAir>${totBases.toFixed(2)}</baseImpAir>\n`;
+      xml += `          <porcentajeAir>0.00</porcentajeAir>\n`;
+      xml += `          <valRetAir>0.00</valRetAir>\n`;
+      xml += `        </detalleAir>\n`;
+    }
+    xml += `      </air>\n`;
 
-    // Inyección de referencias del comprobante de retención emitido en compra
+    // Inyección de referencias del comprobante de retención emitido en compra (siempre presente en la plantilla oficial)
+    let estabRet = '999';
+    let ptoEmiRet = '999';
+    let secRet = '999999999';
+    let autRetVal = '9999999999';
+    let fechaRetFormat = fechaFormat;
+
     const tieneRetencion = retRenta.some(r => r.valor > 0) || retIVA.some(r => r.valor > 0);
     const numRet = metadataObj?.numero_retencion;
     const autRet = metadataObj?.clave_retencion;
@@ -255,18 +296,19 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
     if (tieneRetencion && numRet && numRet !== 'Manual') {
       const partesRet = numRet.split('-');
       if (partesRet.length === 3) {
-        const estabRet = partesRet[0].padStart(3, '0');
-        const ptoEmiRet = partesRet[1].padStart(3, '0');
-        const secRet = partesRet[2].padStart(9, '0');
-        const fechaRetFormat = formatDateForSRI(fechaRet);
-
-        xml += `      <estabRetencion1>${estabRet}</estabRetencion1>\n`;
-        xml += `      <ptoEmiRetencion1>${ptoEmiRet}</ptoEmiRetencion1>\n`;
-        xml += `      <secRetencion1>${secRet}</secRetencion1>\n`;
-        xml += `      <autRetencion1>${autRet || '9999999999999999999999999999999999999999999999999'}</autRetencion1>\n`;
-        xml += `      <fechaEmiRet1>${fechaRetFormat}</fechaEmiRet1>\n`;
+        estabRet = partesRet[0].padStart(3, '0');
+        ptoEmiRet = partesRet[1].padStart(3, '0');
+        secRet = partesRet[2].padStart(9, '0');
+        autRetVal = autRet || '9999999999999999999999999999999999999999999999999';
+        fechaRetFormat = formatDateForSRI(fechaRet);
       }
     }
+
+    xml += `      <estabRetencion1>${estabRet}</estabRetencion1>\n`;
+    xml += `      <ptoEmiRetencion1>${ptoEmiRet}</ptoEmiRetencion1>\n`;
+    xml += `      <secRetencion1>${secRet}</secRetencion1>\n`;
+    xml += `      <autRetencion1>${autRetVal}</autRetencion1>\n`;
+    xml += `      <fechaEmiRet1>${fechaRetFormat}</fechaEmiRet1>\n`;
 
     // Inyección de referencias de documento original modificado en Nota de Crédito
     if (isNC) {
@@ -299,7 +341,9 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
     xml += `    <detalleVentas>\n`;
     xml += `      <tpIdCliente>${v.tipoId}</tpIdCliente>\n`;
     xml += `      <idCliente>${v.ruc}</idCliente>\n`;
-    xml += `      <parteRelVentas>NO</parteRelVentas>\n`;
+    if (v.ruc !== '9999999999999' && v.tipoId !== '07') {
+      xml += `      <parteRelVtas>NO</parteRelVtas>\n`;
+    }
     xml += `      <tipoComprobante>${v.tipoComprobante}</tipoComprobante>\n`;
     xml += `      <numeroComprobantes>${v.numeroComprobantes}</numeroComprobantes>\n`;
     xml += `      <baseNoGraIva>${v.baseNoObjeto.toFixed(2)}</baseNoGraIva>\n`;
@@ -345,12 +389,12 @@ export const buildATSXml = (empresa: EmpresaInfo, anio: number, mes: number, doc
     const sec    = partes[2]?.padStart(9, '0') || '000000001';
 
     xml += `    <detalleAnulados>\n`;
-    xml += `      <tipoComprobante>01</tipoComprobante>\n`;
+    xml += `      <tipoComprobante>${mapTipoComprobante(d.transacciones?.tipo_comprobante)}</tipoComprobante>\n`;
     xml += `      <establecimiento>${estab}</establecimiento>\n`;
     xml += `      <puntoEmision>${ptoEmi}</puntoEmision>\n`;
     xml += `      <secuencialInicio>${sec}</secuencialInicio>\n`;
     xml += `      <secuencialFin>${sec}</secuencialFin>\n`;
-    xml += `      <autorizacion>${d.clave_acceso_xml || ''}</autorizacion>\n`;
+    xml += `      <autorizacion>${escapeHtml(d.clave_acceso_xml || '')}</autorizacion>\n`;
     xml += `    </detalleAnulados>\n`;
   });
   xml += `  </anulados>\n`;

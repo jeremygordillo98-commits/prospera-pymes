@@ -32,7 +32,8 @@ export const EditMappingSRIModal: React.FC<EditMappingSRIModalProps> = ({
         idCuentaHaber: '',
         retencionCodigo: '',
         retencionIvaCodigo: '',
-        idCuentaRetencion: ''
+        idCuentaRetencion: '',
+        concepto: ''
     });
 
     useEffect(() => {
@@ -87,7 +88,8 @@ export const EditMappingSRIModal: React.FC<EditMappingSRIModalProps> = ({
                     idCuentaHaber,
                     retencionCodigo: retCodigo,
                     retencionIvaCodigo: retIvaCodigo,
-                    idCuentaRetencion
+                    idCuentaRetencion,
+                    concepto: editingDoc.transacciones?.concepto || ''
                 });
             } catch (err) {
                 console.error("Error fetching current mapping:", err);
@@ -203,6 +205,13 @@ export const EditMappingSRIModal: React.FC<EditMappingSRIModalProps> = ({
             
             if (sriErr) throw sriErr;
 
+            const { error: txErr } = await supabase
+                .from('transacciones')
+                .update({ concepto: editFormData.concepto })
+                .eq('id', idTransaccion);
+            
+            if (txErr) throw txErr;
+
             const netoAPagar = parseFloat((totalFactura - totalRetenido).toFixed(2));
 
             await supabase.from('movimientos').delete().eq('id_transaccion', idTransaccion);
@@ -310,6 +319,19 @@ export const EditMappingSRIModal: React.FC<EditMappingSRIModalProps> = ({
                         </div>
                     ) : (
                         <>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-sec)' }}>
+                                    Detalle / Descripción del Documento
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editFormData.concepto}
+                                    onChange={e => setEditFormData(prev => ({ ...prev, concepto: e.target.value }))}
+                                    style={inputStyle}
+                                    placeholder="Escribir detalle del documento..."
+                                />
+                            </div>
+
                             <div>
                                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-sec)' }}>
                                     Cuenta del Debe (Gasto, Activo o Inventario)*

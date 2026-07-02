@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  BarChart3, 
-  TrendingUp, 
-  FileSpreadsheet, 
-  Landmark, 
-  BookCopy, 
   Loader2,
   Lock
 } from 'lucide-react';
@@ -62,7 +57,6 @@ export const Reportes: React.FC<Props> = ({ empresaId, permisoReportesPdf }) => 
     soloConMov,
     setSoloConMov,
     expandedAccounts,
-    totals,
     filteredLedger,
     rootAccounts,
     carteraAgrupada,
@@ -109,19 +103,8 @@ export const Reportes: React.FC<Props> = ({ empresaId, permisoReportesPdf }) => 
     );
   }
 
-  const decimals = parseInt(localStorage.getItem('pref_decimals') || '2', 10);
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <header className="flex-between" style={{ gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--primary)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.5, fontSize: '0.8rem', marginBottom: 8 }}>
-            <BarChart3 size={14} /> Centro de Analítica Financiera
-          </div>
-          <h1 className="h1" style={{ fontSize: '2.2rem' }}>Informes & Balances</h1>
-          <p className="text-sec">Analiza la contabilidad de tu PYME estructurada con normas locales en tiempo real.</p>
-        </div>
-      </header>
 
       {/* Dynamic Filter Panel (Siigo Contifico style with premium glassmorphism) */}
       <div className="glass-card" style={{ padding: '16px 20px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-end', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '16px' }}>
@@ -192,35 +175,15 @@ export const Reportes: React.FC<Props> = ({ empresaId, permisoReportesPdf }) => 
 
       {/* Tabs Multi-Reportes */}
       <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid var(--border-color)', paddingBottom: 10, overflowX: 'auto', maxWidth: '100%' }} className="custom-scrollbar">
-        <button style={tabStyle(activeTab === 'balance')} onClick={() => setActiveTab('balance')}>Balance de Comprobación</button>
-        <button style={tabStyle(activeTab === 'resultado')} onClick={() => setActiveTab('resultado')}>Estado de Resultados</button>
-        <button style={tabStyle(activeTab === 'general')} onClick={() => setActiveTab('general')}>Balance General</button>
         <button style={tabStyle(activeTab === 'mayor')} onClick={() => setActiveTab('mayor')}>Mayor General</button>
+        <button style={tabStyle(activeTab === 'balance')} onClick={() => setActiveTab('balance')}>Balance de Comprobación</button>
+        <button style={tabStyle(activeTab === 'general')} onClick={() => setActiveTab('general')}>Balance General</button>
+        <button style={tabStyle(activeTab === 'resultado')} onClick={() => setActiveTab('resultado')}>Estado de Resultados</button>
         <button style={tabStyle(activeTab === 'cartera')} onClick={() => setActiveTab('cartera')}>Auxiliar de Cartera</button>
         <button style={tabStyle(activeTab === 'flujo')} onClick={() => setActiveTab('flujo')}>Flujo de Caja</button>
         <button style={tabStyle(activeTab === 'retenciones')} onClick={() => setActiveTab('retenciones')}>Retenciones SRI</button>
         <button style={tabStyle(activeTab === 'comprasventas')} onClick={() => setActiveTab('comprasventas')}>Compras y Ventas</button>
       </div>
-
-      {/* Tarjetas de Resumen */}
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 16 }}>
-        {[
-          { label: 'Ingresos Operativos', value: totals.ingresos, icon: TrendingUp },
-          { label: 'Egresos Contables', value: totals.gastos, icon: FileSpreadsheet },
-          { label: 'Utilidad Bruta', value: totals.utilidad, icon: Landmark, color: totals.utilidad >= 0 ? 'var(--success)' : 'var(--error)' },
-          { label: 'Activos Totales', value: totals.activos, icon: BookCopy },
-        ].map((item) => (
-          <div className="glass-card" key={item.label}>
-            <div className="flex-between">
-              <div>
-                <div className="text-sec" style={{ textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1, fontSize: '0.75rem' }}>{item.label}</div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 900, marginTop: 6, color: item.color || 'var(--text-main)' }}>${item.value.toFixed(decimals)}</div>
-              </div>
-              <div style={{ width: 48, height: 48, borderRadius: 16, background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><item.icon size={24} /></div>
-            </div>
-          </div>
-        ))}
-      </section>
 
       {/* ── 1. TAB: BALANCE DE COMPROBACIÓN ── */}
       {activeTab === 'balance' && (

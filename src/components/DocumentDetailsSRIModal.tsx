@@ -1,11 +1,13 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { X, FileText, Download } from 'lucide-react';
+import { supabase } from '../services/supabase';
 import { useDocumentDetailsSRI } from '../hooks/useDocumentDetailsSRI';
 import { SRIIdentificacionDocumento } from './SRIIdentificacionDocumento';
 import { SRIValoresFactura } from './SRIValoresFactura';
 import { SRIAsientoContable } from './SRIAsientoContable';
 import { SRIRetencionAplicada } from './SRIRetencionAplicada';
+import { generateRIDEFromXML } from '../utils/rideGenerator';
 import { generateSingleSRIDocumentPDF } from '../utils/pdfGenerator';
 
 interface DocumentDetailsSRIModalProps {
@@ -195,6 +197,92 @@ export const DocumentDetailsSRIModal: React.FC<DocumentDetailsSRIModalProps> = (
           gap: '12px',
           backgroundColor: '#0c101b'
         }}>
+          <button 
+            onClick={async () => {
+              if (!doc?.clave_acceso_xml) {
+                showAlert("No hay una clave de acceso asociada a este comprobante.", "error");
+                return;
+              }
+              try {
+                const storagePath = `${empresaId}/${doc.clave_acceso_xml}.xml`;
+                const { data, error } = await supabase.storage
+                  .from('xml-documents')
+                  .download(storagePath);
+                  
+                if (error) throw error;
+                
+                const blob = new Blob([data], { type: 'text/xml' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${doc.clave_acceso_xml}.xml`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                showAlert("Archivo XML descargado exitosamente.", "success");
+              } catch (err: any) {
+                console.error("Error downloading XML:", err);
+                showAlert("El archivo XML original no está disponible en la nube.", "error");
+              }
+            }}
+            className="btn btn-secondary" 
+            style={{ 
+              padding: '12px 28px', 
+              fontSize: '0.95rem', 
+              fontWeight: 800, 
+              borderRadius: '12px', 
+              background: 'rgba(255,255,255,0.05)', 
+              border: '1px solid rgba(255,255,255,0.1)', 
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <Download size={16} /> Descargar XML
+          </button>
+          {doc.transacciones?.tipo_comprobante === 'Factura' && (
+            <button 
+              onClick={async () => {
+                if (!doc?.clave_acceso_xml) {
+                  showAlert("No hay una clave de acceso asociada a este comprobante.", "error");
+                  return;
+                }
+                try {
+                  const storagePath = `${empresaId}/${doc.clave_acceso_xml}.xml`;
+                  const { data, error } = await supabase.storage
+                    .from('xml-documents')
+                    .download(storagePath);
+                    
+                  if (error) throw error;
+                  
+                  const xmlText = await data.text();
+                  generateRIDEFromXML(xmlText);
+                  showAlert("Factura RIDE PDF generada exitosamente.", "success");
+                } catch (err: any) {
+                  console.error("Error generating RIDE PDF:", err);
+                  showAlert("El archivo XML original no está disponible en la nube para generar el RIDE.", "error");
+                }
+              }}
+              className="btn btn-secondary" 
+              style={{ 
+                padding: '12px 28px', 
+                fontSize: '0.95rem', 
+                fontWeight: 800, 
+                borderRadius: '12px', 
+                background: 'rgba(255,255,255,0.05)', 
+                border: '1px solid rgba(255,255,255,0.1)', 
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <FileText size={16} style={{ color: 'var(--primary)' }} /> Descargar Factura RIDE
+            </button>
+          )}
           <button 
             onClick={async () => {
               try {

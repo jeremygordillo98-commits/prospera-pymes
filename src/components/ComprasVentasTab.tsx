@@ -138,13 +138,14 @@ export const ComprasVentasTab: React.FC<Props> = ({
               No se encontraron documentos SRI registrados en el período seleccionado.
             </div>
           ) : (
-            <table className="data-table" style={{ minWidth: 900 }}>
+            <table className="data-table" style={{ minWidth: 1000 }}>
               <thead>
                 <tr>
                   <th>F. Emisión</th>
                   <th>Tipo</th>
                   <th>RUC</th>
                   <th>Razón Social</th>
+                  <th>Detalle</th>
                   <th>No. Comprobante</th>
                   <th style={{ textAlign: 'right' }}>Subtotal</th>
                   <th style={{ textAlign: 'right' }}>IVA</th>
@@ -182,10 +183,19 @@ export const ComprasVentasTab: React.FC<Props> = ({
                         </span>
                       </td>
                       <td>{ent.ruc_cedula || '—'}</td>
-                      <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ent.razon_social}>
+                      <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ent.razon_social}>
                         {ent.razon_social || '—'}
                       </td>
-                      <td>{tx.concepto?.match(/\d{3}-\d{3}-\d{9}/)?.[0] || doc.clave_acceso_xml?.substring(24, 39) || '—'}</td>
+                      <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={tx.concepto}>
+                        {tx.concepto || '—'}
+                      </td>
+                      <td>
+                        {doc.clave_acceso_xml && doc.clave_acceso_xml.length === 49 ? (
+                          `${doc.clave_acceso_xml.slice(24, 27)}-${doc.clave_acceso_xml.slice(27, 30)}-${doc.clave_acceso_xml.slice(30, 39)}`
+                        ) : (
+                          tx.concepto?.match(/\d{3}-\d{3}-\d{9}/)?.[0] || doc.clave_acceso_xml?.substring(24, 39) || '—'
+                        )}
+                      </td>
                       <td style={{ textAlign: 'right' }}>${subtotal.toFixed(2)}</td>
                       <td style={{ textAlign: 'right' }}>${iva.toFixed(2)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 600 }}>${total.toFixed(2)}</td>

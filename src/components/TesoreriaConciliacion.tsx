@@ -10,6 +10,7 @@ export const TesoreriaConciliacion: React.FC<TesoreriaConciliacionProps> = ({
   cuentas,
   movimientos
 }) => {
+  const decimals = parseInt(localStorage.getItem('pref_decimals') || '2', 10);
   return (
     <div className="space-y-6" style={{ animation: 'fadeIn 0.5s ease' }}>
       <header>
@@ -38,16 +39,16 @@ export const TesoreriaConciliacion: React.FC<TesoreriaConciliacionProps> = ({
                      <div key={c.id} style={{ padding: 20, borderBottom: '1px solid var(--border-color)' }}>
                          <div style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: 12 }}>{c.nombre}</div>
                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 6 }}>
-                             <span className="text-sec">Inicial:</span> <span>${Number(c.saldo_inicial).toFixed(2)}</span>
+                             <span className="text-sec">Inicial:</span> <span>${Number(c.saldo_inicial).toFixed(decimals)}</span>
                          </div>
                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 6, color: 'var(--success)' }}>
-                             <span>Ingresos:</span> <span>+${ingresos.toFixed(2)}</span>
+                             <span>Ingresos:</span> <span>+${ingresos.toFixed(decimals)}</span>
                          </div>
                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 12, color: 'var(--error)' }}>
-                             <span>Egresos:</span> <span>-${egresos.toFixed(2)}</span>
+                             <span>Egresos:</span> <span>-${egresos.toFixed(decimals)}</span>
                          </div>
                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 900, paddingTop: 12, borderTop: '1px dashed var(--border-color)' }}>
-                             <span>Calculado:</span> <span>${saldoFinal.toFixed(2)}</span>
+                             <span>Calculado:</span> <span>${saldoFinal.toFixed(decimals)}</span>
                          </div>
                      </div>
                      );
@@ -77,10 +78,10 @@ export const TesoreriaConciliacion: React.FC<TesoreriaConciliacionProps> = ({
                                       <div style={{ fontSize: '0.75rem', color: 'var(--text-sec)' }}>{mov.entidades?.razon_social}</div>
                                   </td>
                                   <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: 'var(--success)' }}>
-                                      {mov.tipo_movimiento === 'Cobro' ? `$${Number(mov.monto).toFixed(2)}` : ''}
+                                      {mov.tipo_movimiento === 'Cobro' ? `$${Number(mov.monto).toFixed(decimals)}` : ''}
                                   </td>
                                   <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: 'var(--error)' }}>
-                                      {mov.tipo_movimiento === 'Pago' ? `$${Number(mov.monto).toFixed(2)}` : ''}
+                                      {mov.tipo_movimiento === 'Pago' ? `$${Number(mov.monto).toFixed(decimals)}` : ''}
                                   </td>
                               </tr>
                           ))}

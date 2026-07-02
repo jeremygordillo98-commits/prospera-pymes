@@ -10,22 +10,49 @@ const formatDate = (dateStr: string | undefined | null) => {
   return dateStr;
 };
 
-// Helper to clean and format strings for CSV
-const csvStr = (str: string | undefined | null) => {
-  if (!str) return '""';
-  return `"${str.replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
+// Extract voucher number from clave_acceso_xml
+const getInvoiceNumberFromClave = (clave: string | undefined | null, tipoComprobante: string) => {
+  if (!clave || clave.length !== 49) return '';
+  const establishment = clave.slice(24, 27);
+  const emissionPoint = clave.slice(27, 30);
+  const sequential = clave.slice(30, 39);
+  
+  const isNC = tipoComprobante === 'Nota de Crédito';
+  const isRet = tipoComprobante === 'Comprobante de Retención';
+  const prefix = isNC ? 'NCT' : isRet ? 'RET' : 'FAC';
+  
+  return `${prefix} ${establishment}-${emissionPoint}-${sequential}`;
 };
 
-// Extract voucher number from concept
-const getInvoiceNumber = (concepto: string) => {
-  const match = concepto.match(/\d{3}-\d{3}-\d{9}/);
-  if (match) {
-    const isNC = concepto.toLowerCase().includes('nc:') || concepto.toLowerCase().includes('nota');
-    const isRet = concepto.toLowerCase().includes('retención') || concepto.toLowerCase().includes('retencion');
-    const prefix = isNC ? 'NCT' : isRet ? 'RET' : 'FAC';
-    return `${prefix} ${match[0]}`;
+// Helper to escape HTML characters
+const escapeHtml = (str: string | undefined | null) => {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
+// Format Cod. Sustento to show with leading zeros if numeric
+const formatCodSustento = (val: string | number | undefined | null) => {
+  if (val === undefined || val === null || val === '') return '-';
+  const str = String(val).trim();
+  if (str === '-') return '-';
+  if (/^\d+$/.test(str)) {
+    return str.padStart(2, '0');
   }
-  return concepto;
+  return str;
+};
+
+// Helper to extract raw invoice number for payment matching
+const extractRawInvoiceNum = (concepto: string, numComp: string) => {
+  const match = concepto.match(/\d{3}-\d{3}-\d{9}/);
+  if (match) return match[0];
+  const matchNum = numComp.match(/\d{3}-\d{3}-\d{9}/);
+  if (matchNum) return matchNum[0];
+  return numComp;
 };
 
 export const exportComprasVentasExcel = async (empresaId: string, desde: string, hasta: string, sriDocs: any[]) => {
@@ -37,6 +64,17 @@ export const exportComprasVentasExcel = async (empresaId: string, desde: string,
     .single();
 
   const empresaNombre = empresa?.nombre_empresa || 'Empresa';
+
+  // Fetch tesoreria documents and movements to match payment/cobro details
+  const { data: tesoDocs } = await supabase
+    .from('tesoreria_documentos')
+    .select('id, referencia')
+    .eq('id_empresa', empresaId);
+
+  const { data: tesoMovs } = await supabase
+    .from('tesoreria_movimientos')
+    .select('id_documento, concepto')
+    .eq('id_empresa', empresaId);
 
   // Format date range string
   let periodText = 'Histórico Completo';
@@ -77,8 +115,8 @@ export const exportComprasVentasExcel = async (empresaId: string, desde: string,
     'Subtotal', 'Total Retenciones'
   ];
 
-  const buildSectionRows = (docs: any[]) => {
-    return docs.map(d => {
+  const buildSectionRowsHtml = (docs: any[]) => {
+    const allRowsCells = docs.map(d => {
       const tx = d.transacciones || {};
       const ent = tx.entidades || {};
       
@@ -107,7 +145,6 @@ export const exportComprasVentasExcel = async (empresaId: string, desde: string,
       let autorizacionRetencion = '';
 
       if (Array.isArray(d.retenciones_aplicadas)) {
-        // Extract metadata first
         const metadata = d.retenciones_aplicadas.find((r: any) => r.cod_sustento || r.numero_retencion || r.fecha_retencion);
         if (metadata) {
           codSustento = metadata.cod_sustento || '-';
@@ -169,99 +206,155 @@ export const exportComprasVentasExcel = async (empresaId: string, desde: string,
       const subtotalFuenteRet = retFuente1 + retFuente1_75 + retFuente2 + retFuente2_75 + retFuente8 + retFuente10 + retFuente0 + retFuenteOtros;
       const totalRetenciones = subtotalIvaRet + subtotalFuenteRet;
 
+      // Extract payment/cobro details
+      const rawInvoiceNum = extractRawInvoiceNum(tx.concepto || '', tx.numero_comprobante || '');
+      const matchingTesoDoc = tesoDocs?.find(td => {
+        if (!td.referencia) return false;
+        const cleanRef = td.referencia.replace(/\s+/g, '');
+        return cleanRef.includes(rawInvoiceNum) || rawInvoiceNum.includes(cleanRef);
+      });
+
+      let detail = tx.concepto || '';
+      const isDefaultConcept = /^(factura|nota de cr|nota de dd|liquidaci|retenci):/i.test(detail);
+      if (isDefaultConcept && matchingTesoDoc) {
+        const matchingMovs = tesoMovs?.filter(tm => tm.id_documento === matchingTesoDoc.id) || [];
+        const paymentDetails = matchingMovs.map(m => m.concepto).filter(Boolean).join(' | ');
+        if (paymentDetails) {
+          detail = paymentDetails;
+        }
+      }
+
       return [
-        csvStr(formatDate(tx.fecha)),
-        csvStr(ent.ruc_cedula || ''),
-        csvStr(ent.razon_social || ''),
-        csvStr(tx.concepto || ''),
-        csvStr(getInvoiceNumber(tx.concepto || '')),
-        csvStr(d.clave_acceso_xml || ''),
-        csvStr(codSustento),
-        csvStr(tx.numero_comprobante || ''),
-        csvStr(''), // Centro Costo
-        subtotal12,
-        0, // 5%
-        0, // IVA dif
-        subtotal0,
-        subtotalNoObj,
-        subtotal,
-        ivaVal,
-        ivaGastoVal,
-        0, // ICE
-        total,
-        retIva10,
-        retIva20,
-        retIva30,
-        retIva50,
-        retIva70,
-        retIva100,
-        subtotalIvaRet,
-        csvStr(fechaRetencion),
-        csvStr(numeroRetencion),
-        csvStr(autorizacionRetencion),
-        retFuente1,
-        csvStr(codFuente1),
-        retFuente1_75,
-        csvStr(codFuente1_75),
-        retFuente2,
-        csvStr(codFuente2),
-        retFuente2_75,
-        csvStr(codFuente2_75),
-        retFuente8,
-        csvStr(codFuente8),
-        retFuente10,
-        csvStr(codFuente10),
-        retFuente0,
-        csvStr(codFuente0),
-        retFuenteOtros,
-        csvStr(codFuenteOtros),
-        subtotalFuenteRet,
-        totalRetenciones
+        { val: formatDate(tx.fecha), isText: true },
+        { val: ent.ruc_cedula || '', isText: true },
+        { val: ent.razon_social || '', isText: false },
+        { val: detail, isText: false },
+        { val: getInvoiceNumberFromClave(d.clave_acceso_xml, tx.tipo_comprobante || ''), isText: true },
+        { val: d.clave_acceso_xml || '', isText: true },
+        { val: formatCodSustento(codSustento), isText: true },
+        { val: tx.numero_comprobante || '', isText: true },
+        { val: '', isText: true }, // Centro Costo
+        { val: subtotal12, isNumber: true },
+        { val: 0, isNumber: true }, // 5%
+        { val: 0, isNumber: true }, // IVA dif
+        { val: subtotal0, isNumber: true },
+        { val: subtotalNoObj, isNumber: true },
+        { val: subtotal, isNumber: true },
+        { val: ivaVal, isNumber: true },
+        { val: ivaGastoVal, isNumber: true },
+        { val: 0, isNumber: true }, // ICE
+        { val: total, isNumber: true },
+        { val: retIva10, isNumber: true },
+        { val: retIva20, isNumber: true },
+        { val: retIva30, isNumber: true },
+        { val: retIva50, isNumber: true },
+        { val: retIva70, isNumber: true },
+        { val: retIva100, isNumber: true },
+        { val: subtotalIvaRet, isNumber: true },
+        { val: fechaRetencion, isText: true },
+        { val: numeroRetencion, isText: true },
+        { val: autorizacionRetencion, isText: true },
+        { val: retFuente1, isNumber: true },
+        { val: codFuente1, isText: true },
+        { val: retFuente1_75, isNumber: true },
+        { val: codFuente1_75, isText: true },
+        { val: retFuente2, isNumber: true },
+        { val: codFuente2, isText: true },
+        { val: retFuente2_75, isNumber: true },
+        { val: codFuente2_75, isText: true },
+        { val: retFuente8, isNumber: true },
+        { val: codFuente8, isText: true },
+        { val: retFuente10, isNumber: true },
+        { val: codFuente10, isText: true },
+        { val: retFuente0, isNumber: true },
+        { val: codFuente0, isText: true },
+        { val: retFuenteOtros, isNumber: true },
+        { val: codFuenteOtros, isText: true },
+        { val: subtotalFuenteRet, isNumber: true },
+        { val: totalRetenciones, isNumber: true }
       ];
     });
+
+    const dataRowsHtml = allRowsCells.map(cells => {
+      return `<tr>${cells.map(c => {
+        if (c.isText) {
+          return `<td class="text">${escapeHtml(String(c.val))}</td>`;
+        }
+        if (c.isNumber) {
+          const num = Number(c.val || 0);
+          return `<td class="number">${num.toFixed(2)}</td>`;
+        }
+        return `<td>${escapeHtml(String(c.val))}</td>`;
+      }).join('')}</tr>`;
+    }).join('\n');
+
+    // Build Totales row
+    const numericIndices = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 29, 31, 33, 35, 37, 39, 41, 43, 45, 46];
+    const totalsCells: string[] = [];
+    for (let i = 0; i < 47; i++) {
+      if (numericIndices.includes(i)) {
+        const sum = allRowsCells.reduce((acc, cells) => acc + Number(cells[i].val || 0), 0);
+        totalsCells.push(`<td class="number" style="font-weight:bold; background-color: #F3F4F6; color: #111827;">${sum.toFixed(2)}</td>`);
+      } else if (i === 2) {
+        totalsCells.push(`<td style="font-weight:bold; background-color: #F3F4F6; color: #111827;">TOTALES</td>`);
+      } else {
+        totalsCells.push(`<td style="background-color: #F3F4F6;"></td>`);
+      }
+    }
+    const totalsRowHtml = `<tr>${totalsCells.join('')}</tr>`;
+
+    return dataRowsHtml + '\n' + totalsRowHtml;
   };
 
-  const csvRows: any[][] = [];
+  const comprasHtml = buildSectionRowsHtml(compras);
+  const ventasHtml = buildSectionRowsHtml(ventas);
 
-  // Metadata
-  csvRows.push([csvStr(empresaNombre)]);
-  csvRows.push([csvStr('DETALLE DE VENTAS Y COMPRAS PARA FORMULARIOS 103 Y 104')]);
-  csvRows.push([csvStr(periodText)]);
-  csvRows.push([csvStr(`Descargado el: ${new Date().toLocaleDateString('es-EC')} ${new Date().toLocaleTimeString('es-EC')}`)]);
-  csvRows.push([]);
-  csvRows.push([]);
+  const excelHtml = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
+      <style>
+        table { border-collapse: collapse; }
+        th, td { border: 0.5pt solid #D1D5DB; padding: 6px 10px; font-family: 'Segoe UI', Calibri, sans-serif; font-size: 10pt; }
+        th { background-color: #F3F4F6; font-weight: bold; color: #374151; }
+        .text { mso-number-format:"\\@"; }
+        .number { mso-number-format:"0\\.00"; text-align: right; }
+        .title { font-size: 16pt; font-weight: bold; border: none; color: #111827; }
+        .subtitle { font-size: 10.5pt; color: #4B5563; border: none; }
+      </style>
+    </head>
+    <body>
+      <table>
+        <tr><td class="title" colspan="6">${escapeHtml(empresaNombre)}</td></tr>
+        <tr><td class="subtitle" colspan="6">DETALLE DE VENTAS Y COMPRAS PARA FORMULARIOS 103 Y 104</td></tr>
+        <tr><td class="subtitle" colspan="6">${escapeHtml(periodText)}</td></tr>
+        <tr><td class="subtitle" colspan="6">Descargado el: ${escapeHtml(new Date().toLocaleDateString('es-EC'))} ${escapeHtml(new Date().toLocaleTimeString('es-EC'))}</td></tr>
+        <tr><td style="border:none;"></td></tr>
+        
+        <tr><td class="title" colspan="6" style="color: #D97706; font-size: 13pt; font-weight: bold;">COMPRAS</td></tr>
+        <tr>
+          ${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}
+        </tr>
+        ${comprasHtml}
+        
+        <tr><td style="border:none;"></td></tr>
+        <tr><td style="border:none;"></td></tr>
+        
+        <tr><td class="title" colspan="6" style="color: #6D28D9; font-size: 13pt; font-weight: bold;">VENTAS</td></tr>
+        <tr>
+          ${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}
+        </tr>
+        ${ventasHtml}
+      </table>
+    </body>
+    </html>
+  `;
 
-  // Compras Section
-  csvRows.push([csvStr('COMPRAS')]);
-  csvRows.push(headers.map(h => csvStr(h)));
-  const comprasRows = buildSectionRows(compras);
-  comprasRows.forEach(r => csvRows.push(r));
-
-  // Spacing
-  csvRows.push([]);
-  csvRows.push([]);
-
-  // Ventas Section
-  csvRows.push([csvStr('VENTAS')]);
-  csvRows.push(headers.map(h => csvStr(h)));
-  const ventasRows = buildSectionRows(ventas);
-  ventasRows.forEach(r => csvRows.push(r));
-
-  // Build CSV string
-  const csvString = "sep=,\n" + csvRows.map(row => {
-    // Fill empty cells up to max length so row lengths look uniform
-    const padded = [...row];
-    while (padded.length < headers.length) {
-      padded.push('');
-    }
-    return padded.join(",");
-  }).join("\n");
-
-  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvString], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.setAttribute("href", url);
-  link.setAttribute("download", `Reporte_Compras_Ventas_${empresaNombre.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
+  link.setAttribute("download", `Reporte_Compras_Ventas_${empresaNombre.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xls`);
   document.body.appendChild(link);
   link.click();
   link.remove();

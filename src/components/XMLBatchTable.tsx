@@ -220,6 +220,30 @@ export const XMLBatchTable: React.FC<XMLBatchTableProps> = ({
                   }} title={`Autorización / Clave de Acceso:\n${p.claveAcceso}`}>
                     Aut: {p.claveAcceso}
                   </div>
+                  <div style={{ marginTop: '8px' }}>
+                    <label style={{ fontSize: '8px', color: 'var(--text-sec)', display: 'block', marginBottom: '2px', fontWeight: 'bold' }}>DETALLE / CONCEPTO:</label>
+                    <input
+                      type="text"
+                      placeholder="Escribir detalle del documento..."
+                      value={item.detalle || ''}
+                      onChange={(e) => {
+                        onChangeItem(idx, { ...item, detalle: e.target.value });
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        fontSize: '10px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--input-bg)',
+                        color: 'var(--text-main)',
+                        outline: 'none',
+                        transition: 'border-color 0.2s ease',
+                      }}
+                      onFocus={e => e.currentTarget.style.borderColor = 'var(--primary)'}
+                      onBlur={e => e.currentTarget.style.borderColor = 'var(--border-color)'}
+                    />
+                  </div>
                 </td>
 
                 {/* Total */}

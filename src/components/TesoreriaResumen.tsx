@@ -69,6 +69,7 @@ export const TesoreriaResumen: React.FC<TesoreriaResumenProps> = ({
   handleCrearCuenta,
   saving
 }) => {
+  const decimals = parseInt(localStorage.getItem('pref_decimals') || '2', 10);
   return (
     <div className="space-y-6" style={{ animation: 'fadeIn 0.5s ease' }}>
       <header>
@@ -90,7 +91,7 @@ export const TesoreriaResumen: React.FC<TesoreriaResumenProps> = ({
             <div className="flex-between">
               <div>
                 <div style={cardTitle}>{item.label}</div>
-                <div style={{ fontSize: '1.8rem', fontWeight: 900, marginTop: 8, color: item.value < 0 ? 'var(--error)' : 'var(--text-main)' }}>${item.value.toFixed(2)}</div>
+                <div style={{ fontSize: '1.8rem', fontWeight: 900, marginTop: 8, color: item.value < 0 ? 'var(--error)' : 'var(--text-main)' }}>${item.value.toFixed(decimals)}</div>
               </div>
               <div style={{ width: 48, height: 48, borderRadius: 16, background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <item.icon size={24} />
@@ -248,7 +249,7 @@ export const TesoreriaResumen: React.FC<TesoreriaResumenProps> = ({
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontWeight: 900, fontSize: '1rem' }}>${Number(c.saldo_inicial).toFixed(2)}</div>
+                      <div style={{ fontWeight: 900, fontSize: '1rem' }}>${Number(c.saldo_inicial).toFixed(decimals)}</div>
                       <div style={{ fontSize: '0.65rem', color: 'var(--text-sec)' }}>saldo inicial</div>
                     </div>
                   </div>
@@ -265,8 +266,8 @@ export const TesoreriaResumen: React.FC<TesoreriaResumenProps> = ({
                 <p className="text-sec" style={{ margin: '6px 0 0' }}>Últimas entradas y salidas de dinero.</p>
               </div>
               <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>
-                  <span style={{ color: 'var(--success)', marginRight: 16 }}>Entró: ${summary.cobradoMes.toFixed(2)}</span>
-                  <span style={{ color: 'var(--warning)' }}>Salió: ${summary.pagadoMes.toFixed(2)}</span>
+                  <span style={{ color: 'var(--success)', marginRight: 16 }}>Entró: ${summary.cobradoMes.toFixed(decimals)}</span>
+                  <span style={{ color: 'var(--warning)' }}>Salió: ${summary.pagadoMes.toFixed(decimals)}</span>
               </div>
             </div>
             <div style={{ overflowX: 'auto' }}>
@@ -279,7 +280,7 @@ export const TesoreriaResumen: React.FC<TesoreriaResumenProps> = ({
                       <td style={{ padding: '12px 16px', fontWeight: 600 }}>{mov.entidades?.razon_social || 'N/A'}</td>
                       <td style={{ padding: '12px 16px' }}>{mov.concepto}</td>
                       <td style={{ padding: '12px 16px', fontWeight: 800, color: mov.tipo_movimiento === 'Cobro' ? 'var(--success)' : 'var(--text-main)', textAlign: 'right' }}>
-                          {mov.tipo_movimiento === 'Cobro' ? '+' : '-'}${Number(mov.monto).toFixed(2)}
+                          {mov.tipo_movimiento === 'Cobro' ? '+' : '-'}${Number(mov.monto).toFixed(decimals)}
                       </td>
                     </tr>
                   ))}

@@ -24,6 +24,7 @@ interface Props {
   setEditingDoc: (doc: DocSRI | null) => void;
   totalPages: number;
   setCurrentPage: React.Dispatch<React.SetStateAction<number>>;
+  totals?: { baseGrav: number; iva: number; retencion: number; total: number };
 }
 
 export const SRIDocumentListTable: React.FC<Props> = ({
@@ -36,7 +37,8 @@ export const SRIDocumentListTable: React.FC<Props> = ({
   setViewingDoc,
   setEditingDoc,
   totalPages,
-  setCurrentPage
+  setCurrentPage,
+  totals
 }) => {
   const getTipoIcon = (tipo: string) => {
     if (tipo?.includes('Retención') || tipo?.includes('Retencion')) return <Receipt size={14} />;
@@ -250,6 +252,18 @@ export const SRIDocumentListTable: React.FC<Props> = ({
                 })}
               </tbody>
             </AnimatePresence>
+            {totals && (
+              <tfoot>
+                <tr style={{ background: 'var(--primary-light)', fontWeight: 900, borderTop: '2px solid var(--border-color)', borderBottom: '2px solid var(--border-color)' }}>
+                  <td colSpan={4} style={{ padding: '12px 12px', fontSize: '0.78rem', textTransform: 'uppercase', color: 'var(--text-main)' }}>TOTALES FILTRADOS</td>
+                  <td style={{ padding: '12px 12px', textAlign: 'right', color: 'var(--text-main)' }}>${totals.baseGrav.toFixed(2)}</td>
+                  <td style={{ padding: '12px 12px', textAlign: 'right', color: 'var(--primary)' }}>${totals.iva.toFixed(2)}</td>
+                  <td style={{ padding: '12px 12px', textAlign: 'right', color: 'var(--warning)' }}>${totals.retencion.toFixed(2)}</td>
+                  <td style={{ padding: '12px 12px', textAlign: 'right', color: 'var(--success)', fontSize: '0.92rem' }}>${totals.total.toFixed(2)}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       )}
