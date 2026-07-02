@@ -5,6 +5,7 @@ import { XMLUploadModal } from '../components/XMLUploadModal';
 import { WithholdingUploadModal } from '../components/WithholdingUploadModal';
 import { DocumentDetailsSRIModal } from '../components/DocumentDetailsSRIModal';
 import { EditMappingSRIModal } from '../components/EditMappingSRIModal';
+import { SyncXMLHistoryModal } from '../components/SyncXMLHistoryModal';
 import { CustomModal } from '../components/CustomModal';
 import { useSRIAutomation } from '../hooks/useSRIAutomation';
 import { SRIDocumentListTable } from '../components/SRIDocumentListTable';
@@ -54,6 +55,8 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
     handleAnular,
     filtered
   } = useSRIAutomation({ tipo, empresaId });
+
+  const [isSyncOpen, setIsSyncOpen] = React.useState(false);
 
   const totals = React.useMemo(() => {
     let baseGrav = 0;
@@ -141,6 +144,24 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
                 title="Refrescar"
               >
                 <RefreshCw size={18} />
+              </button>
+              <button
+                onClick={() => setIsSyncOpen(true)}
+                className="btn"
+                style={{ 
+                  padding: '14px 28px', 
+                  borderRadius: '18px', 
+                  fontSize: '1rem', 
+                  fontWeight: 800, 
+                  letterSpacing: '0.5px', 
+                  background: 'rgba(255,255,255,0.05)', 
+                  border: '1px solid rgba(255,255,255,0.1)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px' 
+                }}
+              >
+                <RefreshCw size={18} /> Sincronizar Históricos
               </button>
               <button
                 onClick={() => setIsUploadOpen(true)}
@@ -366,6 +387,16 @@ export const SRIAutomation: React.FC<SRIAutomationProps> = ({ tipo, empresaId })
               fetchDocumentos();
             }}
             showAlert={showAlert}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isSyncOpen && (
+          <SyncXMLHistoryModal
+            isOpen={isSyncOpen}
+            onClose={() => setIsSyncOpen(false)}
+            empresaId={empresaId}
           />
         )}
       </AnimatePresence>
