@@ -44,6 +44,8 @@ export const Entidades: React.FC<{ empresaId: string }> = ({ empresaId }) => {
     return '04';
   };
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; razon_social: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const { data: entidades = [], isLoading: loading } = useQuery({
     queryKey: ['entidades', empresaId],
@@ -119,16 +121,22 @@ export const Entidades: React.FC<{ empresaId: string }> = ({ empresaId }) => {
     }
   };
 
-  const handleDelete = async (id: string, razon_social: string) => {
-    if (window.confirm(`¿Estás seguro de eliminar a ${razon_social}?`)) {
-      const { error } = await supabase.from('entidades').delete().eq('id', id);
-      if (error) {
-        console.error("Error deleting:", error);
-        alert("Error al eliminar. Podría estar en uso.");
-      } else {
-        await queryClient.invalidateQueries({ queryKey: ['entidades', empresaId] });
-      }
+  const handleDelete = (id: string, razon_social: string) => {
+    setConfirmDelete({ id, razon_social });
+  };
+
+  const confirmDeleteAction = async () => {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    const { error } = await supabase.from('entidades').delete().eq('id', confirmDelete.id);
+    if (error) {
+      console.error('Error deleting:', error);
+      alert('Error al eliminar. Podría estar en uso.');
+    } else {
+      await queryClient.invalidateQueries({ queryKey: ['entidades', empresaId] });
     }
+    setDeleting(false);
+    setConfirmDelete(null);
   };
 
   return (
@@ -390,6 +398,52 @@ export const Entidades: React.FC<{ empresaId: string }> = ({ empresaId }) => {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de confirmación de eliminación */}
+      <AnimatePresence>
+        {confirmDelete && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 16 }}
+              transition={{ duration: 0.2 }}
+              style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '20px', padding: '32px', width: '100%', maxWidth: '420px', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', textAlign: 'center' }}>
+                <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(239,68,68,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Trash2 size={26} color="#ef4444" />
+                </div>
+                <div>
+                  <h3 style={{ margin: '0 0 8px 0', fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)' }}>Eliminar Tercero</h3>
+                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-sec)', lineHeight: 1.6 }}>
+                    ¿Estás seguro de que deseas eliminar a{' '}
+                    <strong style={{ color: 'var(--text-main)' }}>{confirmDelete.razon_social}</strong>?{' '}
+                    Esta acción no se puede deshacer.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '12px', width: '100%', marginTop: '8px' }}>
+                  <button
+                    onClick={() => setConfirmDelete(null)}
+                    disabled={deleting}
+                    style={{ flex: 1, padding: '11px 0', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-sec)', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmDeleteAction}
+                    disabled={deleting}
+                    style={{ flex: 1, padding: '11px 0', borderRadius: '12px', border: 'none', background: '#ef4444', color: '#fff', fontWeight: 800, fontSize: '0.9rem', cursor: deleting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: deleting ? 0.7 : 1 }}
+                  >
+                    {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                    {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
