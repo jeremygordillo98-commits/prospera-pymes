@@ -6,33 +6,43 @@ import {
   Moon, 
   Layout,
   Eye,
-  Volume2,
   Bell,
   Mail,
   LogOut,
   Hash,
-  Sparkles
+  Sparkles,
+  Clock,
+  Save,
+  CheckCircle,
+  Loader2
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-export const Configuracion = () => {
+interface ConfiguracionProps {
+  empresaId: string;
+  userEmail?: string;
+}
+
+interface ConfigNotif {
+  reporte_semanal: boolean;
+  reporte_mensual_iva: boolean;
+  alerta_vencimiento: boolean;
+  dias_anticipacion: number;
+  email_destino: string;
+}
+
+export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps) => {
   const { isDark, toggleTheme } = useTheme();
-  
-  // States stored in localStorage for full functionality
+  const queryClient = useQueryClient();
+
+  // ── Preferencias visuales (localStorage) ─────────────────────────
   const [decimals, setDecimals] = useState(() => {
     return localStorage.getItem('pref_decimals') || '2';
   });
   
   const [density, setDensity] = useState(() => {
     return localStorage.getItem('pref_table_density') || 'normal';
-  });
-
-  const [soundAlerts, setSoundAlerts] = useState(() => {
-    return localStorage.getItem('pref_sound_alerts') === 'true';
-  });
-
-  const [emailReports, setEmailReports] = useState(() => {
-    return localStorage.getItem('pref_email_reports') !== 'false'; // default true
   });
 
   useEffect(() => {
@@ -44,17 +54,128 @@ export const Configuracion = () => {
     document.documentElement.setAttribute('data-density', density);
   }, [density]);
 
-  useEffect(() => {
-    localStorage.setItem('pref_sound_alerts', String(soundAlerts));
-  }, [soundAlerts]);
+  // ── Notificaciones (Supabase) ────────────────────────────────────
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [emailDestino, setEmailDestino] = useState(userEmail);
+
+  // ── Colaboradores (Supabase Multiusuario) ─────────────────────────
+  const [colaboradores, setColaboradores] = useState<any[]>([]);
+  const [loadingColab, setLoadingColab] = useState(false);
+
+
+
+  const fetchColaboradores = async () => {
+    if (!empresaId) return;
+    setLoadingColab(true);
+    const { data, error } = await supabase
+      .from('colaboradores_empresa')
+      .select('*')
+      .eq('id_empresa', empresaId);
+    if (!error && data) {
+      setColaboradores(data);
+    }
+    setLoadingColab(false);
+  };
+
+
 
   useEffect(() => {
-    localStorage.setItem('pref_email_reports', String(emailReports));
-  }, [emailReports]);
+    if (empresaId) {
+      fetchColaboradores();
+    }
+  }, [empresaId]);
+
+  const { data: configNotif, isLoading: loadingNotif } = useQuery<ConfigNotif>({
+    queryKey: ['config_notif', empresaId],
+    queryFn: async () => {
+      if (!empresaId) return null;
+      const { data, error } = await supabase
+        .from('configuracion_notificaciones')
+        .select('*')
+        .eq('id_empresa', empresaId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!empresaId,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // Sincronizar el email destino con el valor de la BD
+  useEffect(() => {
+    if (configNotif?.email_destino) {
+      setEmailDestino(configNotif.email_destino);
+    } else if (userEmail && !configNotif?.email_destino) {
+      setEmailDestino(userEmail);
+    }
+  }, [configNotif, userEmail]);
+
+  const upsertMutation = useMutation({
+    mutationFn: async (patch: Partial<ConfigNotif>) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No autenticado');
+      const { error } = await supabase
+        .from('configuracion_notificaciones')
+        .upsert({
+          id_empresa: empresaId,
+          id_usuario: user.id,
+          ...configNotif,
+          ...patch,
+          email_destino: emailDestino || userEmail,
+        }, { onConflict: 'id_empresa,id_usuario' });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['config_notif', empresaId] });
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2500);
+    },
+  });
+
+  const handleToggle = (field: keyof Pick<ConfigNotif, 'reporte_semanal' | 'reporte_mensual_iva' | 'alerta_vencimiento'>) => {
+    const current = configNotif?.[field] ?? false;
+    upsertMutation.mutate({ [field]: !current });
+  };
+
+  const handleSaveEmail = () => {
+    setSaveStatus('saving');
+    upsertMutation.mutate({ email_destino: emailDestino });
+  };
+
+  const handleDiasAnticipacion = (val: number) => {
+    upsertMutation.mutate({ dias_anticipacion: val });
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
+
+  const isOn = (field: keyof ConfigNotif) => Boolean(configNotif?.[field]);
+
+  // ── Toggle UI helper ────────────────────────────────────────────
+  const Toggle = ({ active, onClick, disabled }: { active: boolean; onClick: () => void; disabled?: boolean }) => (
+    <button
+      onClick={onClick}
+      disabled={disabled || loadingNotif || upsertMutation.isPending}
+      style={{
+        width: 48, height: 26, borderRadius: 999,
+        background: active ? 'var(--primary)' : 'var(--border-color)',
+        border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
+        position: 'relative', transition: 'background 0.3s',
+        opacity: disabled ? 0.5 : 1,
+        flexShrink: 0,
+      }}
+    >
+      <div style={{
+        position: 'absolute', top: 2,
+        left: active ? 24 : 2,
+        width: 22, height: 22, borderRadius: '50%',
+        background: '#fff',
+        transition: 'left 0.3s',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+      }} />
+    </button>
+  );
 
   return (
     <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 max-w-4xl mx-auto mt-6">
@@ -188,74 +309,199 @@ export const Configuracion = () => {
           </div>
         </div>
 
-        {/* 3. SECCIÓN: ALERTAS Y NOTIFICACIONES */}
-        <div className="glass-card">
-          <h3 className="flex items-center gap-2 mb-4" style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Bell size={20} className="text-primary" /> Alertas & Notificaciones
+        {/* 3. SECCIÓN: NOTIFICACIONES POR EMAIL */}
+        <div className="glass-card" style={{ gridColumn: 'span 1' }}>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Bell size={20} className="text-primary" /> Notificaciones por Email
           </h3>
-          <p className="text-sec" style={{ marginBottom: '24px' }}>
-            Configura las vías por las cuales el sistema te informará sobre transacciones nuevas o alertas de auditoría.
+          <p className="text-sec" style={{ marginBottom: '20px', fontSize: '0.85rem' }}>
+            Recibe reportes automáticos de tu contabilidad directo en tu correo.
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {/* Alertas Sonoras */}
-            <div className="flex-between p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <Volume2 size={18} className="text-sec" />
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Alertas de Sonido</div>
-                  <div className="text-sec" style={{ fontSize: '0.78rem' }}>Reproducir sonidos al registrar transacciones.</div>
-                </div>
-              </div>
-              <button
-                onClick={() => setSoundAlerts(!soundAlerts)}
-                style={{
-                  width: 48, height: 26, borderRadius: 999,
-                  background: soundAlerts ? 'var(--primary)' : 'var(--border-color)',
-                  border: 'none', cursor: 'pointer', position: 'relative',
-                  transition: 'background 0.3s',
-                }}
-              >
-                <div style={{
-                  position: 'absolute', top: 2,
-                  left: soundAlerts ? 24 : 2,
-                  width: 22, height: 22, borderRadius: '50%',
-                  background: '#fff',
-                  transition: 'left 0.3s',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                }} />
-              </button>
+          {loadingNotif ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
+              <Loader2 size={24} className="animate-spin" style={{ color: 'var(--primary)' }} />
             </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-            {/* Reportes por Email */}
-            <div className="flex-between p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <Mail size={18} className="text-sec" />
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Reportes Semanales</div>
-                  <div className="text-sec" style={{ fontSize: '0.78rem' }}>Recibir un resumen financiero semanal en mi correo.</div>
+              {/* Correo destino */}
+              <div className="p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
+                <div style={{ fontWeight: 700, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <Mail size={14} style={{ color: 'var(--primary)' }} /> Correo de Destino
                 </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="email"
+                    value={emailDestino}
+                    onChange={e => setEmailDestino(e.target.value)}
+                    placeholder="correo@ejemplo.com"
+                    style={{
+                      flex: 1,
+                      background: 'var(--input-bg)',
+                      border: '1px solid var(--border-color)',
+                      color: 'var(--text-main)',
+                      borderRadius: '8px',
+                      padding: '7px 12px',
+                      fontSize: '0.85rem',
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    onClick={handleSaveEmail}
+                    disabled={saveStatus === 'saving' || upsertMutation.isPending}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: '8px',
+                      background: saveStatus === 'saved' ? 'rgba(0,214,143,0.12)' : 'var(--primary)',
+                      color: saveStatus === 'saved' ? 'var(--primary)' : '#fff',
+                      border: saveStatus === 'saved' ? '1px solid var(--primary)' : 'none',
+                      fontWeight: 700,
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {saveStatus === 'saving' ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : saveStatus === 'saved' ? (
+                      <><CheckCircle size={14} /> Guardado</>
+                    ) : (
+                      <><Save size={14} /> Guardar</>
+                    )}
+                  </button>
+                </div>
+                <p className="text-sec" style={{ fontSize: '0.75rem', marginTop: '6px' }}>
+                  Todos los reportes automáticos se enviarán a esta dirección.
+                </p>
               </div>
-              <button
-                onClick={() => setEmailReports(!emailReports)}
-                style={{
-                  width: 48, height: 26, borderRadius: 999,
-                  background: emailReports ? 'var(--primary)' : 'var(--border-color)',
-                  border: 'none', cursor: 'pointer', position: 'relative',
-                  transition: 'background 0.3s',
-                }}
-              >
-                <div style={{
-                  position: 'absolute', top: 2,
-                  left: emailReports ? 24 : 2,
-                  width: 22, height: 22, borderRadius: '50%',
-                  background: '#fff',
-                  transition: 'left 0.3s',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                }} />
-              </button>
+
+              {/* Toggle: Reporte Semanal */}
+              <div className="flex-between p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Mail size={18} className="text-sec" />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Reporte Semanal</div>
+                    <div className="text-sec" style={{ fontSize: '0.78rem' }}>Resumen de ingresos, egresos y saldo — todos los lunes.</div>
+                  </div>
+                </div>
+                <Toggle active={isOn('reporte_semanal')} onClick={() => handleToggle('reporte_semanal')} />
+              </div>
+
+              {/* Toggle: Reporte Mensual IVA */}
+              <div className="flex-between p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Hash size={18} className="text-sec" />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Reporte Mensual de IVA</div>
+                    <div className="text-sec" style={{ fontSize: '0.78rem' }}>IVA cobrado vs pagado del mes anterior — el día 1 de cada mes.</div>
+                  </div>
+                </div>
+                <Toggle active={isOn('reporte_mensual_iva')} onClick={() => handleToggle('reporte_mensual_iva')} />
+              </div>
+
+              {/* Toggle: Alerta de Vencimiento SRI */}
+              <div className="p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
+                <div className="flex-between" style={{ marginBottom: isOn('alerta_vencimiento') ? '12px' : '0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <Clock size={18} className="text-sec" />
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Alerta de Vencimiento SRI</div>
+                      <div className="text-sec" style={{ fontSize: '0.78rem' }}>Recordatorio antes de la fecha de declaración mensual.</div>
+                    </div>
+                  </div>
+                  <Toggle active={isOn('alerta_vencimiento')} onClick={() => handleToggle('alerta_vencimiento')} />
+                </div>
+
+                {/* Selector de anticipación (solo si activo) */}
+                {isOn('alerta_vencimiento') && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingTop: '4px', flexWrap: 'wrap' }}
+                  >
+                    <span className="text-sec" style={{ fontSize: '0.8rem' }}>Notificarme con:</span>
+                    {[3, 5, 7].map(d => (
+                      <button
+                        key={d}
+                        onClick={() => handleDiasAnticipacion(d)}
+                        style={{
+                          padding: '4px 14px',
+                          borderRadius: '999px',
+                          border: '1.5px solid',
+                          borderColor: (configNotif?.dias_anticipacion ?? 3) === d ? 'var(--primary)' : 'var(--border-color)',
+                          background: (configNotif?.dias_anticipacion ?? 3) === d ? 'var(--primary-light)' : 'transparent',
+                          color: (configNotif?.dias_anticipacion ?? 3) === d ? 'var(--primary)' : 'var(--text-sec)',
+                          fontWeight: 700,
+                          fontSize: '0.82rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        {d} días
+                      </button>
+                    ))}
+                    <span className="text-sec" style={{ fontSize: '0.8rem' }}>de anticipación</span>
+                  </motion.div>
+                )}
+              </div>
+
             </div>
-          </div>
+          )}
+        </div>
+
+        {/* 5. SECCIÓN: COLABORADORES CONTABLES */}
+        <div className="glass-card" style={{ gridColumn: 'span 1' }}>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            👥 Acceso Compartido (Colaboradores)
+          </h3>
+          <p className="text-sec" style={{ marginBottom: '20px', fontSize: '0.85rem' }}>
+            Permite que otros contadores con su propio usuario accedan a esta empresa para trabajar.
+          </p>
+
+          {loadingColab ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
+              <Loader2 size={24} className="animate-spin" style={{ color: 'var(--primary)' }} />
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* Información sobre asignación de colaboradores */}
+              <div style={{ background: 'rgba(99,102,241,0.05)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(99,102,241,0.1)', fontSize: '0.82rem', color: '#818CF8' }}>
+                ℹ️ Para asignar o remover un colaborador de esta empresa, por favor contacte con administración.
+              </div>
+
+              {/* Lista de Colaboradores */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ fontWeight: 800, fontSize: '0.8rem', color: 'var(--text-sec)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Colaboradores con Acceso ({colaboradores.length})
+                </div>
+
+                {colaboradores.length === 0 ? (
+                  <div className="text-sec" style={{ fontSize: '0.82rem', fontStyle: 'italic', padding: '8px 0' }}>
+                    No hay colaboradores compartidos en esta empresa.
+                  </div>
+                ) : (
+                  colaboradores.map(col => (
+                    <div key={col.id} className="flex-between p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)' }}>{col.email_invitado}</span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-sec)', textTransform: 'capitalize' }}>Rol: {col.rol}</span>
+                      </div>
+                      
+
+                    </div>
+                  ))
+                )}
+              </div>
+
+            </div>
+          )}
         </div>
 
         {/* 4. SECCIÓN: SEGURIDAD DE LA SESIÓN */}

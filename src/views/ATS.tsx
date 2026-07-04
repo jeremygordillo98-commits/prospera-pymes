@@ -1,16 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  FileDown,
-  FileSpreadsheet,
-  Calendar,
   RefreshCw,
   CheckCircle2,
   FileText,
   Receipt,
   TrendingUp,
   TrendingDown,
-  ShieldAlert,
   Code2,
   Copy,
   ChevronDown,
@@ -21,6 +17,8 @@ import { supabase } from '../services/supabase';
 import JSZip from 'jszip';
 import { buildATSXml, getSRIDocumentNumber } from '../utils/atsXmlBuilder';
 import { exportATSToExcel } from '../utils/atsExcelExporter';
+import { SRIShieldDiagnostics } from '../components/SRIShieldDiagnostics';
+import { ATSPeriodSelector } from '../components/ATSPeriodSelector';
 
 interface ATSProps { 
   empresaId: string; 
@@ -343,36 +341,18 @@ export const ATS: React.FC<ATSProps> = ({ empresaId, permisoDescargaAts }) => {
   return (
     <div className="space-y-6">
 
-      {/* Selector Periodo + Acciones */}
-      <div className="glass-card" style={{ padding: '20px 24px', marginBottom: 24, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Calendar size={18} style={{ color: 'var(--primary)' }} />
-        <select value={mes} onChange={e => setMes(+e.target.value)} style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 700 }}>
-          {MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-        </select>
-        <select value={anio} onChange={e => setAnio(+e.target.value)} style={{ padding: '8px 14px', borderRadius: 10, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)', fontWeight: 700 }}>
-          {[2023, 2024, 2025, 2026].map(y => <option key={y}>{y}</option>)}
-        </select>
-        <button onClick={fetchData} className="btn" style={{ padding: '8px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <RefreshCw size={15} /> Cargar Periodo
-        </button>
-        <div style={{ flex: 1 }} />
-        <button
-          onClick={generarExcel}
-          disabled={docs.length === 0 || alertasCriticas.length > 0}
-          className="btn"
-          style={{ padding: '10px 22px', borderRadius: 14, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, opacity: (docs.length === 0 || alertasCriticas.length > 0) ? 0.5 : 1, border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-main)' }}
-        >
-          <FileSpreadsheet size={18} style={{ color: '#10b981' }} /> Descargar ATS Excel
-        </button>
-        <button
-          onClick={generarXML}
-          disabled={docs.length === 0 || alertasCriticas.length > 0}
-          className="btn btn-primary"
-          style={{ padding: '10px 22px', borderRadius: 14, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, opacity: (docs.length === 0 || alertasCriticas.length > 0) ? 0.5 : 1 }}
-        >
-          <FileDown size={18} /> Descargar ATS XML
-        </button>
-      </div>
+      <ATSPeriodSelector
+        mes={mes}
+        setMes={setMes}
+        anio={anio}
+        setAnio={setAnio}
+        fetchData={fetchData}
+        generarExcel={generarExcel}
+        generarXML={generarXML}
+        docsLength={docs.length}
+        hasCriticalErrors={alertasCriticas.length > 0}
+        MESES={MESES}
+      />
 
       {/* KPIs Fiscales */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
@@ -391,38 +371,11 @@ export const ATS: React.FC<ATSProps> = ({ empresaId, permisoDescargaAts }) => {
         ))}
       </div>
 
-      {/* Diagnóstico SRI-Shield */}
-      {(alertasCriticas.length > 0 || advertencias.length > 0) ? (
-        <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: `1px solid ${alertasCriticas.length > 0 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`, borderRadius: 20, padding: '20px 24px', marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900, color: alertasCriticas.length > 0 ? '#ef4444' : 'var(--warning)', marginBottom: 12 }}>
-            <ShieldAlert size={20} /> Diagnóstico Tributario Inteligente (Pre-Auditoría)
-          </div>
-
-          {alertasCriticas.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 800, marginBottom: 6 }}>🚨 ERRORES CRÍTICOS (Impiden la descarga):</div>
-              {alertasCriticas.map((err, i) => (
-                <p key={i} style={{ margin: '4px 0', fontSize: '0.82rem', color: 'var(--text-main)', paddingLeft: 12 }}>• {err}</p>
-              ))}
-            </div>
-          )}
-
-          {advertencias.length > 0 && (
-            <div>
-              <div style={{ color: 'var(--warning)', fontSize: '0.85rem', fontWeight: 800, marginBottom: 6 }}>⚠️ ADVERTENCIAS (Permiten descarga con cautela):</div>
-              {advertencias.map((warn, i) => (
-                <p key={i} style={{ margin: '4px 0', fontSize: '0.82rem', color: 'var(--text-sec)', paddingLeft: 12 }}>• {warn}</p>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        docs.length > 0 && (
-          <div style={{ background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 20, padding: '20px 24px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, color: '#10b981', fontWeight: 800 }}>
-            <CheckCircle2 size={20} /> ¡Tu ATS cumple con los requisitos iniciales del SRI para descarga!
-          </div>
-        )
-      )}
+      <SRIShieldDiagnostics
+        alertasCriticas={alertasCriticas}
+        advertencias={advertencias}
+        docsLength={docs.length}
+      />
 
       {/* Tabs de inspección */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
