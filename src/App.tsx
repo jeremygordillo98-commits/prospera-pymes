@@ -196,15 +196,41 @@ const App = () => {
   const fetchEmpresas = async () => {
     if (!session?.user?.id) return;
     setLoadingEmpresas(true);
-    const { data, error } = await supabase
+
+    // 1. Empresas donde el usuario es propietario
+    const { data: ownedData, error: ownedError } = await supabase
       .from('empresas_gestionadas')
       .select('*')
       .order('nombre_empresa');
 
-    if (!error && data) {
-      setEmpresas(data);
+    // 2. Empresas donde el usuario es colaborador
+    const { data: colabIds } = await supabase
+      .from('colaboradores_empresa')
+      .select('id_empresa')
+      .eq('id_usuario', session.user.id);
+
+    let colabEmpresas: any[] = [];
+    if (colabIds && colabIds.length > 0) {
+      const ids = colabIds.map((c: any) => c.id_empresa);
+      const ownedIds = (ownedData || []).map((e: any) => e.id);
+      // Solo buscar las que NO son propias (evitar duplicados)
+      const missingIds = ids.filter((id: string) => !ownedIds.includes(id));
+      if (missingIds.length > 0) {
+        const { data: colabData } = await supabase
+          .from('empresas_gestionadas')
+          .select('*')
+          .in('id', missingIds)
+          .order('nombre_empresa');
+        colabEmpresas = (colabData || []).map((e: any) => ({ ...e, es_colaborador: true }));
+      }
+    }
+
+    const allEmpresas = [...(ownedData || []), ...colabEmpresas];
+
+    if (!ownedError) {
+      setEmpresas(allEmpresas);
       const savedId = localStorage.getItem('pymes_selected_empresa_id');
-      const activeData = data.filter(e => e.estado !== 'pendiente_eliminacion');
+      const activeData = allEmpresas.filter(e => e.estado !== 'pendiente_eliminacion');
       const found = activeData.find(e => e.id === savedId);
       if (found) {
         setSelectedEmpresa(found);
