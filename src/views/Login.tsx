@@ -48,8 +48,20 @@ export const Login = () => {
                 if (error) throw error;
                 setMessage({ type: 'success', text: '¡Cuenta creada! Revisa tu correo electrónico para confirmar.' });
             } else if (view === 'login') {
-                const { error } = await supabase.auth.signInWithPassword({ email, password });
+                const { data, error } = await supabase.auth.signInWithPassword({ email, password });
                 if (error) throw error;
+                
+                if (data?.user) {
+                    const { data: profile } = await supabase
+                        .from('perfiles')
+                        .select('rol')
+                        .eq('id_usuario', data.user.id)
+                        .single();
+                    if (profile && profile.rol === 'admin') {
+                        await supabase.auth.signOut();
+                        throw new Error('Acceso denegado. Las cuentas de administrador no pueden ingresar al portal de Pymes.');
+                    }
+                }
             } else if (view === 'forgot') {
                 const { error } = await supabase.auth.resetPasswordForEmail(email, { 
                     redirectTo: `${window.location.origin}/update-password` 

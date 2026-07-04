@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './services/supabase';
 import { MENU_STRUCTURE } from './constants/menu';
 import type { Session } from '@supabase/supabase-js';
+import { useSystemConfig } from './hooks/useSystemConfig';
 
 import React, { Suspense } from 'react';
 
@@ -35,6 +36,14 @@ const Comunicados = React.lazy(() => import('./views/Comunicados').then(m => ({ 
 const CierrePeriodo = React.lazy(() => import('./views/CierrePeriodo').then(m => ({ default: m.CierrePeriodo })));
 
 import { ImageUploader } from './components/ImageUploader';
+import { 
+  CompanyCreateModal,
+  CompanyLimitModal,
+  CompanyEditModal,
+  CompanyDeleteConfirmModal,
+  CompanyResetConfirmModal,
+  CompanySuccessModal
+} from './components/CompanyModals';
 
 interface Empresa {
   id: string;
@@ -44,11 +53,16 @@ interface Empresa {
   permiso_reportes_pdf?: boolean;
   permiso_descarga_ats?: boolean;
   permiso_comunicacion_cliente?: boolean;
+  estado?: string | null;
 }
 
 const App = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
+  
+  // Cargar configuraciones del sistema
+  const { mantenimiento, banner, isLoading: loadingConfig } = useSystemConfig();
+
   // Leer desde sessionStorage (set en index.html ANTES que Supabase limpie el hash)
   // O verificar si la ruta es literalmente /update-password
   const [isResettingPassword, setIsResettingPassword] = useState(() => {
@@ -96,10 +110,14 @@ const App = () => {
   const [editingEmpresa, setEditingEmpresa] = useState<Empresa | null>(null);
   const [editForm, setEditForm] = useState({ nombre_empresa: '', ruc_empresa: '', logo_url: '' });
   const [showArchiveConfirm, setShowArchiveConfirm] = useState<Empresa | null>(null);
+  const [archiveStep, setArchiveStep] = useState(1);
+  const [archiveConfirmEmail, setArchiveConfirmEmail] = useState('');
+  const [submittingArchive, setSubmittingArchive] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState<Empresa | null>(null);
   const [resettingEmpresa, setResettingEmpresa] = useState(false);
   const [resetCounter, setResetCounter] = useState(0);
+  const [successModal, setSuccessModal] = useState<{ title: string; message: string; type?: 'success' | 'error' | 'info' } | null>(null);
   // ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -125,6 +143,10 @@ const App = () => {
 
   useEffect(() => {
     if (session?.user?.id) {
+      supabase.from('perfiles').update({
+        ultimo_acceso: new Date().toISOString()
+      }).eq('id_usuario', session.user.id).then();
+
       fetchEmpresas();
       fetchLimite();
     }
@@ -156,11 +178,17 @@ const App = () => {
   const fetchLimite = async () => {
     const { data, error } = await supabase
       .from('perfiles')
-      .select('limite_empresas')
+      .select('limite_empresas, rol')
       .eq('id_usuario', session?.user.id)
       .single();
 
     if (!error && data) {
+      if (data.rol === 'admin') {
+        alert('Acceso denegado. Las cuentas de administrador no pueden ingresar al portal de Pymes.');
+        await supabase.auth.signOut();
+        setSession(null);
+        return;
+      }
       setLimiteEmpresas(data.limite_empresas || 2);
     }
   };
@@ -171,17 +199,19 @@ const App = () => {
     const { data, error } = await supabase
       .from('empresas_gestionadas')
       .select('*')
-      .eq('id_usuario', session.user.id)
       .order('nombre_empresa');
 
     if (!error && data) {
       setEmpresas(data);
       const savedId = localStorage.getItem('pymes_selected_empresa_id');
-      const found = data.find(e => e.id === savedId);
+      const activeData = data.filter(e => e.estado !== 'pendiente_eliminacion');
+      const found = activeData.find(e => e.id === savedId);
       if (found) {
         setSelectedEmpresa(found);
-      } else if (data.length > 0 && !selectedEmpresa) {
-        setSelectedEmpresa(data[0]);
+      } else if (activeData.length > 0 && !selectedEmpresa) {
+        setSelectedEmpresa(activeData[0]);
+      } else if (activeData.length === 0) {
+        setSelectedEmpresa(null);
       }
     }
     setLoadingEmpresas(false);
@@ -252,15 +282,52 @@ const App = () => {
     setSavingEdit(false);
   };
 
-  // ── Archivar empresa ──────────────────────────────────────────────
-  const handleArchiveEmpresa = async (emp: Empresa) => {
-    const { error } = await supabase.from('empresas_gestionadas').delete().eq('id', emp.id);
-    if (!error) {
-      const remaining = empresas.filter(e => e.id !== emp.id);
-      setEmpresas(remaining);
-      if (selectedEmpresa?.id === emp.id) setSelectedEmpresa(remaining[0] || null);
+  // ── Solicitar eliminación segura de empresa ───────────────────────────
+  const handleRequestDeletion = async (emp: Empresa) => {
+    if (!archiveConfirmEmail.trim()) {
+      alert("Por favor ingresa un correo de contacto.");
+      return;
+    }
+    setSubmittingArchive(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No hay una sesión de usuario activa.");
+
+      const { error: insErr } = await supabase.from('solicitudes_eliminacion').insert({
+        id_empresa: emp.id,
+        id_usuario: user.id,
+        correo_contacto: archiveConfirmEmail.trim(),
+        estado: 'pendiente'
+      });
+      if (insErr) throw insErr;
+
+      const { error: updErr } = await supabase.from('empresas_gestionadas').update({
+        estado: 'pendiente_eliminacion'
+      }).eq('id', emp.id);
+      if (updErr) throw updErr;
+
+      setEmpresas(prev => prev.map(e => e.id === emp.id ? { ...e, estado: 'pendiente_eliminacion' } : e));
+      
+      const remainingActives = empresas.filter(e => e.id !== emp.id && e.estado !== 'pendiente_eliminacion');
+      if (selectedEmpresa?.id === emp.id) {
+        setSelectedEmpresa(remainingActives[0] || null);
+      }
+
+      setSuccessModal({
+        title: "Solicitud Registrada",
+        message: "Tu solicitud de eliminación ha sido registrada con éxito. Se enviará un respaldo ZIP completo de tus datos contables a tu correo de contacto antes del borrado físico definitivo.",
+        type: 'success'
+      });
       setShowArchiveConfirm(null);
-    } else { alert('Error al eliminar: ' + error.message); }
+    } catch (err: any) {
+      setSuccessModal({
+        title: "Error",
+        message: "Error al registrar solicitud: " + (err.message || err),
+        type: 'error'
+      });
+    } finally {
+      setSubmittingArchive(false);
+    }
   };
 
   // ── Resetear empresa ──────────────────────────────────────────────
@@ -295,14 +362,22 @@ const App = () => {
       const { error: errCuentasFin } = await supabase.from('cuentas_financieras').delete().eq('id_empresa', emp.id);
       if (errCuentasFin) throw errCuentasFin;
 
-      alert('¡Datos de la empresa reseteados con éxito! El plan de cuentas se ha conservado.');
+      setSuccessModal({
+        title: "Empresa Reseteada",
+        message: "¡Datos de la empresa reseteados con éxito! El plan de cuentas se ha conservado.",
+        type: 'success'
+      });
       
       // Forzar un reinicio completo de todas las vistas montadas
       setResetCounter(prev => prev + 1);
       setVisitedViews([activeView]);
       setShowResetConfirm(null);
     } catch (error: any) {
-      alert('Error al resetear datos: ' + (error.message || error));
+      setSuccessModal({
+        title: "Error",
+        message: "Error al resetear datos: " + (error.message || error),
+        type: 'error'
+      });
     } finally {
       setResettingEmpresa(false);
     }
@@ -330,13 +405,17 @@ const App = () => {
       case 'reportes-fiscales': return <ATS empresaId={selectedEmpresa.id} permisoDescargaAts={permisoDescargaAts} />;
       case 'comunicados': return <Comunicados empresaId={selectedEmpresa.id} permisoComunicacionCliente={permisoComunicacionCliente} />;
       case 'cierre-periodo': return <CierrePeriodo empresaId={selectedEmpresa.id} />;
-      case 'config': return <Configuracion />;
+      case 'config': return <Configuracion empresaId={selectedEmpresa.id} userEmail={session?.user?.email ?? ''} />;
       case 'perfil': 
         return (
           <Perfil 
             empresas={empresas}
             onEditEmpresa={openEditEmpresa}
-            onArchiveEmpresa={(emp) => setShowArchiveConfirm(emp)}
+            onArchiveEmpresa={(emp) => {
+              setArchiveStep(1);
+              setArchiveConfirmEmail('');
+              setShowArchiveConfirm(emp);
+            }}
             onResetEmpresa={(emp) => setShowResetConfirm(emp)}
             onAddNewEmpresa={() => setShowNewEmpresaModal(true)}
           />
@@ -398,7 +477,7 @@ const App = () => {
   }
 
   // Solo mostrar pantalla de carga completa en el primer load (sin datos previos)
-  if (loadingEmpresas && empresas.length === 0) {
+  if ((loadingAuth || loadingConfig || loadingEmpresas) && empresas.length === 0) {
     return (
       <div className="flex-center" style={{ height: '100vh', background: '#0f172a' }}>
         <Loader2 className="animate-spin text-primary" size={48} />
@@ -406,8 +485,32 @@ const App = () => {
     );
   }
 
+  // Pantalla de Mantenimiento Global
+  if (mantenimiento.activo) {
+    return (
+      <div className="flex-center" style={{ height: '100vh', background: '#0f172a', flexDirection: 'column', color: '#fff', textAlign: 'center', padding: '20px', fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ fontSize: '48px', marginBottom: '20px' }}>🛠️</div>
+        <h1 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 10px 0' }}>Servicio en Mantenimiento</h1>
+        <p style={{ color: '#94a3b8', fontSize: '15px', maxWidth: '400px', margin: 0, lineHeight: 1.6 }}>
+          {mantenimiento.mensaje || 'Estamos realizando mejoras programadas. Regresaremos en unos minutos.'}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="app-container">
+      {banner.activo && (
+        <div style={{
+          background: banner.tipo === 'warning' ? '#f59e0b' : banner.tipo === 'danger' ? '#ef4444' : banner.tipo === 'success' ? '#10b981' : '#3b82f6',
+          color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '13px', fontWeight: 700, padding: '10px 16px', textAlign: 'center',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000, flexShrink: 0
+        }}>
+          <span style={{ marginRight: '8px' }}>📢</span>
+          {banner.texto}
+        </div>
+      )}
       <div className="aurora-bg">
         <div className="orb orb-1"></div>
         <div className="orb orb-2"></div>
@@ -557,136 +660,55 @@ const App = () => {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {showNewEmpresaModal && (
-          <div className="modal-overlay" style={{ zIndex: 200 }}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="glass-card"
-              style={{ width: '90%', maxWidth: '400px', padding: '32px' }}
-            >
-              <h3>Nuevo Cliente Contable</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px', marginTop: '24px' }}>
-                <input
-                  autoFocus
-                  type="text"
-                  placeholder="Nombre de la empresa *"
-                  value={newEmpresaName}
-                  onChange={(e) => setNewEmpresaName(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }}
-                />
-                <input
-                  type="text"
-                  placeholder="RUC o Identificación"
-                  value={newEmpresaRuc}
-                  onChange={(e) => setNewEmpresaRuc(e.target.value)}
-                  style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }}
-                />
-                <ImageUploader
-                  storagePath={`empresas/empresa_${newEmpresaId}.webp`}
-                  currentLogoUrl={newEmpresaLogo}
-                  onUploadSuccess={(url: string) => setNewEmpresaLogo(url)}
-                  onRemove={() => setNewEmpresaLogo('')}
-                />
-              </div>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button className="btn flex-1" onClick={() => setShowNewEmpresaModal(false)}>Cancelar</button>
-                <button className="btn btn-primary flex-1" onClick={createEmpresa}>Crear Empresa</button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <CompanyCreateModal
+        isOpen={showNewEmpresaModal}
+        onClose={() => setShowNewEmpresaModal(false)}
+        newEmpresaName={newEmpresaName}
+        setNewEmpresaName={setNewEmpresaName}
+        newEmpresaRuc={newEmpresaRuc}
+        setNewEmpresaRuc={setNewEmpresaRuc}
+        newEmpresaLogo={newEmpresaLogo}
+        setNewEmpresaLogo={setNewEmpresaLogo}
+        newEmpresaId={newEmpresaId}
+        onCreate={createEmpresa}
+      />
 
-      <AnimatePresence>
-        {showLimitModal && (
-          <div className="modal-overlay" style={{ zIndex: 300 }}>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="glass-card"
-              style={{ width: '90%', maxWidth: '450px', padding: '40px', textAlign: 'center' }}
-            >
-              <div style={{ width: 64, height: 64, background: 'rgba(239, 68, 68, 0.1)', color: 'var(--error)', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-                <Building2 size={32} />
-              </div>
-              <h3>Límite Alcanzado</h3>
-              <p className="text-sec" style={{ marginBottom: '32px' }}>Contacta a soporte para ampliar el límite.</p>
-              <button className="btn btn-primary w-full" onClick={() => setShowLimitModal(false)}>Entendido</button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-      {/* ── Modal Editar Empresa ── */}
-      <AnimatePresence>
-        {editingEmpresa && (
-          <div className="modal-overlay" style={{ zIndex: 300 }}>
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="glass-card" style={{ width: '90%', maxWidth: '420px', padding: '32px' }}>
-              <h3 style={{ marginTop: 0, marginBottom: 24 }}>✏️ Editar Empresa</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
-                <input autoFocus type="text" placeholder="Nombre de la empresa *" value={editForm.nombre_empresa} onChange={e => setEditForm({ ...editForm, nombre_empresa: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }} />
-                <input type="text" placeholder="RUC o Identificación" value={editForm.ruc_empresa} onChange={e => setEditForm({ ...editForm, ruc_empresa: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--border-color)', color: 'var(--text-main)' }} />
-                <ImageUploader
-                  storagePath={`empresas/empresa_${editingEmpresa.id}.webp`}
-                  currentLogoUrl={editForm.logo_url}
-                  onUploadSuccess={(url: string) => setEditForm({ ...editForm, logo_url: url })}
-                  onRemove={() => setEditForm({ ...editForm, logo_url: '' })}
-                />
-              </div>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button className="btn flex-1" onClick={() => setEditingEmpresa(null)}>Cancelar</button>
-                <button className="btn btn-primary flex-1" onClick={handleSaveEdit} disabled={savingEdit}>{savingEdit ? 'Guardando...' : 'Guardar Cambios'}</button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <CompanyLimitModal
+        isOpen={showLimitModal}
+        onClose={() => setShowLimitModal(false)}
+      />
 
-      {/* ── Modal Confirmar Archivo/Eliminar ── */}
-      <AnimatePresence>
-        {showArchiveConfirm && (
-          <div className="modal-overlay" style={{ zIndex: 300 }}>
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '420px', padding: '40px', textAlign: 'center' }}>
-              <div style={{ width: 64, height: 64, background: 'rgba(239,68,68,0.1)', color: 'var(--error)', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: '2rem' }}>🗑️</div>
-              <h3 style={{ color: 'var(--error)', marginTop: 0 }}>Eliminar Empresa</h3>
-              <p style={{ color: 'var(--text-sec)', marginBottom: '28px' }}>
-                ¿Estás seguro de que deseas eliminar <strong>«{showArchiveConfirm.nombre_empresa}»</strong>?<br />
-                <span style={{ fontSize: '0.82rem' }}>Esta acción es irreversible y eliminará todos sus datos contables.</span>
-              </p>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button className="btn flex-1" onClick={() => setShowArchiveConfirm(null)}>Cancelar</button>
-                <button className="btn flex-1" style={{ background: 'var(--error)', color: '#fff', border: 'none' }} onClick={() => handleArchiveEmpresa(showArchiveConfirm)}>Sí, Eliminar</button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <CompanyEditModal
+        editingEmpresa={editingEmpresa}
+        onClose={() => setEditingEmpresa(null)}
+        editForm={editForm}
+        setEditForm={setEditForm}
+        onSave={handleSaveEdit}
+        savingEdit={savingEdit}
+      />
 
-      {/* ── Modal Confirmar Resetear Empresa ── */}
-      <AnimatePresence>
-        {showResetConfirm && (
-          <div className="modal-overlay" style={{ zIndex: 300 }}>
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card" style={{ width: '90%', maxWidth: '420px', padding: '40px', textAlign: 'center' }}>
-              <div style={{ width: 64, height: 64, background: 'rgba(245,158,11,0.1)', color: '#F59E0B', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: '2rem' }}>⚠️</div>
-              <h3 style={{ color: '#F59E0B', marginTop: 0 }}>Resetear Empresa</h3>
-              <p style={{ color: 'var(--text-sec)', marginBottom: '28px', fontSize: '0.9rem', lineHeight: '1.4' }}>
-                ¿Estás seguro de que deseas resetear los datos de <strong>«{showResetConfirm.nombre_empresa}»</strong>?<br /><br />
-                <span style={{ fontSize: '0.82rem', display: 'block', background: 'rgba(245,158,11,0.05)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(245,158,11,0.1)' }}>
-                  Se eliminarán de forma <strong>PERMANENTE</strong> todas las transacciones, asientos contables, documentos SRI, movimientos de tesorería, entidades y cuentas bancarias.<br /><br />
-                  🟢 El <strong>Plan de Cuentas</strong> se conservará intacto.
-                </span>
-              </p>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button className="btn flex-1" onClick={() => setShowResetConfirm(null)} disabled={resettingEmpresa}>Cancelar</button>
-                <button className="btn flex-1" style={{ background: '#F59E0B', color: '#fff', border: 'none' }} onClick={() => handleResetEmpresa(showResetConfirm)} disabled={resettingEmpresa}>
-                  {resettingEmpresa ? 'Reseteando...' : 'Sí, Resetear'}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <CompanyDeleteConfirmModal
+        showArchiveConfirm={showArchiveConfirm}
+        onClose={() => setShowArchiveConfirm(null)}
+        archiveStep={archiveStep}
+        setArchiveStep={setArchiveStep}
+        archiveConfirmEmail={archiveConfirmEmail}
+        setArchiveConfirmEmail={setArchiveConfirmEmail}
+        onSubmit={handleRequestDeletion}
+        submittingArchive={submittingArchive}
+      />
+
+      <CompanyResetConfirmModal
+        showResetConfirm={showResetConfirm}
+        onClose={() => setShowResetConfirm(null)}
+        onSubmit={handleResetEmpresa}
+        resettingEmpresa={resettingEmpresa}
+      />
+
+      <CompanySuccessModal
+        successModal={successModal}
+        onClose={() => setSuccessModal(null)}
+      />
 
     </div>
   );

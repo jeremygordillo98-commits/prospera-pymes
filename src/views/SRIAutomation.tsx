@@ -10,6 +10,7 @@ import { CustomModal } from '../components/CustomModal';
 import { useSRIAutomation } from '../hooks/useSRIAutomation';
 import { SRIDocumentListTable } from '../components/SRIDocumentListTable';
 
+
 interface SRIAutomationProps {
   tipo: 'Compras' | 'Ventas';
   empresaId: string;

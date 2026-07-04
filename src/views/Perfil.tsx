@@ -262,11 +262,28 @@ export const Perfil = ({
                                             {empresa.nombre_empresa}
                                         </h4>
                                         <div className="text-sec" style={{ fontSize: '0.8rem', fontWeight: 500 }}>RUC: {empresa.ruc_empresa || 'N/A'}</div>
+                                        {empresa.estado === 'pendiente_eliminacion' && (
+                                            <div style={{
+                                                display: 'inline-block',
+                                                background: 'rgba(239, 68, 68, 0.1)',
+                                                color: 'var(--error)',
+                                                fontSize: '0.68rem',
+                                                fontWeight: 800,
+                                                padding: '4px 8px',
+                                                borderRadius: '6px',
+                                                marginTop: '6px',
+                                                textTransform: 'uppercase',
+                                                letterSpacing: '0.5px'
+                                            }}>
+                                                ⚠️ Pendiente de Eliminación
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
                                 <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '4px' }}>
                                     <button
+                                        disabled={empresa.estado === 'pendiente_eliminacion'}
                                         onClick={() => onEditEmpresa(empresa)}
                                         title="Editar empresa"
                                         style={{ 
@@ -278,7 +295,9 @@ export const Perfil = ({
                                             color: '#818CF8', 
                                             fontSize: '0.75rem', 
                                             fontWeight: 700, 
-                                            cursor: 'pointer', 
+                                            cursor: empresa.estado === 'pendiente_eliminacion' ? 'not-allowed' : 'pointer', 
+                                            opacity: empresa.estado === 'pendiente_eliminacion' ? 0.4 : 1,
+                                            pointerEvents: empresa.estado === 'pendiente_eliminacion' ? 'none' : 'auto',
                                             display: 'flex', 
                                             alignItems: 'center', 
                                             justifyContent: 'center', 
@@ -291,6 +310,7 @@ export const Perfil = ({
                                         ✏️ Editar
                                     </button>
                                     <button
+                                        disabled={empresa.estado === 'pendiente_eliminacion'}
                                         onClick={() => onResetEmpresa(empresa)}
                                         title="Resetear todos los datos contables y mantener el plan de cuentas"
                                         style={{ 
@@ -302,7 +322,9 @@ export const Perfil = ({
                                             color: '#F59E0B', 
                                             fontSize: '0.75rem', 
                                             fontWeight: 700, 
-                                            cursor: 'pointer', 
+                                            cursor: empresa.estado === 'pendiente_eliminacion' ? 'not-allowed' : 'pointer', 
+                                            opacity: empresa.estado === 'pendiente_eliminacion' ? 0.4 : 1,
+                                            pointerEvents: empresa.estado === 'pendiente_eliminacion' ? 'none' : 'auto',
                                             display: 'flex', 
                                             alignItems: 'center', 
                                             justifyContent: 'center', 
@@ -315,6 +337,7 @@ export const Perfil = ({
                                         🔄 Resetear
                                     </button>
                                     <button
+                                        disabled={empresa.estado === 'pendiente_eliminacion'}
                                         onClick={() => onArchiveEmpresa(empresa)}
                                         title="Eliminar empresa"
                                         style={{ 
@@ -326,7 +349,9 @@ export const Perfil = ({
                                             color: 'var(--error)', 
                                             fontSize: '0.75rem', 
                                             fontWeight: 700, 
-                                            cursor: 'pointer', 
+                                            cursor: empresa.estado === 'pendiente_eliminacion' ? 'not-allowed' : 'pointer', 
+                                            opacity: empresa.estado === 'pendiente_eliminacion' ? 0.4 : 1,
+                                            pointerEvents: empresa.estado === 'pendiente_eliminacion' ? 'none' : 'auto',
                                             display: 'flex', 
                                             alignItems: 'center', 
                                             justifyContent: 'center', 

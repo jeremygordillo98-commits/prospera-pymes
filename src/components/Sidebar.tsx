@@ -33,9 +33,11 @@ export const Sidebar = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const activeParent = MENU_STRUCTURE.find(item => 
+  const filteredMenu = MENU_STRUCTURE;
+
+  const activeParent = filteredMenu.find(item => 
     item.id === activeView || (item.children && item.children.some(child => child.id === activeView))
-  ) || MENU_STRUCTURE[0];
+  ) || filteredMenu[0] || MENU_STRUCTURE[0];
 
   const handleParentClick = (item: any) => {
     if (item.children && item.children.length > 0) {
@@ -73,7 +75,7 @@ export const Sidebar = ({
 
           {/* Main Navigation (Horizontal list of parent tabs) */}
           <nav style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px', overflowX: 'auto', scrollbarWidth: 'none' }}>
-            {MENU_STRUCTURE.map((item) => {
+            {filteredMenu.map((item) => {
               const isSelected = activeParent.id === item.id;
               return (
                 <button
@@ -340,7 +342,7 @@ export const Sidebar = ({
 
       {/* ROW 3: SCROLLABLE MAIN CATEGORIES */}
       <nav style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 12px', overflowX: 'auto', scrollbarWidth: 'none' }}>
-        {MENU_STRUCTURE.map((item) => {
+        {filteredMenu.map((item) => {
           const isSelected = activeParent.id === item.id;
           return (
             <button
