@@ -145,7 +145,11 @@ const App = () => {
     if (session?.user?.id) {
       supabase.from('perfiles').update({
         ultimo_acceso: new Date().toISOString()
-      }).eq('id_usuario', session.user.id).then();
+      }).eq('id_usuario', session.user.id).then(({ error }) => {
+        if (error) {
+          console.warn('[Pymes Auth] No se pudo actualizar ultimo_acceso:', error.message);
+        }
+      });
 
       fetchEmpresas();
       fetchLimite();
