@@ -9,6 +9,7 @@ import { SRIAsientoContable } from './SRIAsientoContable';
 import { SRIRetencionAplicada } from './SRIRetencionAplicada';
 import { generateRIDEFromXML } from '../utils/rideGenerator';
 import { generateSingleSRIDocumentPDF } from '../utils/pdfGenerator';
+import { trackRidePdfDownload } from '../services/analytics';
 
 interface DocumentDetailsSRIModalProps {
   viewingDoc: any;
@@ -259,6 +260,7 @@ export const DocumentDetailsSRIModal: React.FC<DocumentDetailsSRIModalProps> = (
                   if (error) throw error;
                   
                   const xmlText = await data.text();
+                  trackRidePdfDownload(doc.transacciones?.tipo_comprobante || 'Factura');
                   generateRIDEFromXML(xmlText);
                   showAlert("Factura RIDE PDF generada exitosamente.", "success");
                 } catch (err: any) {

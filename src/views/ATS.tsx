@@ -19,6 +19,7 @@ import { buildATSXml, getSRIDocumentNumber } from '../utils/atsXmlBuilder';
 import { exportATSToExcel } from '../utils/atsExcelExporter';
 import { SRIShieldDiagnostics } from '../components/SRIShieldDiagnostics';
 import { ATSPeriodSelector } from '../components/ATSPeriodSelector';
+import { trackAtsGeneration, trackAtsExcelExport } from '../services/analytics';
 
 interface ATSProps { 
   empresaId: string; 
@@ -300,6 +301,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId, permisoDescargaAts }) => {
     const filename = `AT${mesStr}${anio}`;
     zip.file(`${filename}.xml`, xml);
 
+    trackAtsGeneration(`${anio}-${String(mes).padStart(2, '0')}`);
     try {
       const content = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(content);
@@ -320,6 +322,7 @@ export const ATS: React.FC<ATSProps> = ({ empresaId, permisoDescargaAts }) => {
       return;
     }
     if (!empresa) return;
+    trackAtsExcelExport(`${anio}-${String(mes).padStart(2, '0')}`);
     exportATSToExcel(empresa, anio, mes, docs);
   };
 

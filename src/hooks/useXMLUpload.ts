@@ -3,6 +3,7 @@ import { supabase } from '../services/supabase';
 import { parseSRIXML } from '../utils/sriParser';
 import { CATALOGO_RETENCIONES_RENTA } from '../utils/sriCatalog';
 import { saveXMLBatchToSupabase } from '../services/xmlSaveService';
+import { trackXmlUpload } from '../services/analytics';
 
 export interface Account {
   id: string;
@@ -462,6 +463,8 @@ export const useXMLUpload = (
         tipo,
         (progress) => setBatchProgress(progress)
       );
+
+      trackXmlUpload(readyItems.length, tipo.toLowerCase() as 'compras' | 'ventas');
 
       setTimeout(() => {
         onSuccess();
