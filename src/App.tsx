@@ -12,6 +12,7 @@ import { supabase } from './services/supabase';
 import { MENU_STRUCTURE } from './constants/menu';
 import type { Session } from '@supabase/supabase-js';
 import { useSystemConfig } from './hooks/useSystemConfig';
+import { trackPageView } from './services/analytics';
 
 import React, { Suspense } from 'react';
 
@@ -73,11 +74,12 @@ const App = () => {
   });
   const [visitedViews, setVisitedViews] = useState<string[]>(['dashboard']);
 
-  // Registrar la vista activa como visitada
+  // Registrar la vista activa como visitada y rastrear en GA4
   useEffect(() => {
     if (!visitedViews.includes(activeView)) {
       setVisitedViews((prev) => [...prev, activeView]);
     }
+    trackPageView(`/pymes/${activeView}`);
   }, [activeView]);
 
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
