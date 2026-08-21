@@ -2,22 +2,26 @@ import { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { supabase } from '../services/supabase';
 import { 
-  Sun, 
-  Moon, 
+  Sun,
+  Moon,
   Layout,
   Eye,
   Bell,
   Mail,
-  LogOut,
   Hash,
   Sparkles,
   Clock,
   Save,
   CheckCircle,
-  Loader2
+  Loader2,
+  Users,
+  Info,
+  LogOut,
+  HardDrive
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { DriveVirtualModal } from '../components/DriveVirtualModal';
 
 interface ConfiguracionProps {
   empresaId: string;
@@ -35,6 +39,9 @@ interface ConfigNotif {
 export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps) => {
   const { isDark, toggleTheme } = useTheme();
   const queryClient = useQueryClient();
+
+  // ── Modal de Drive Virtual R2 ─────────────────────────────────────
+  const [isDriveOpen, setIsDriveOpen] = useState(false);
 
   // ── Preferencias visuales (localStorage) ─────────────────────────
   const [decimals, setDecimals] = useState(() => {
@@ -54,30 +61,94 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
     document.documentElement.setAttribute('data-density', density);
   }, [density]);
 
-  // ── Notificaciones (Supabase) ────────────────────────────────────
+  // ── Notificaciones (Supabase + LocalStorage Backup) ─────────────
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [emailDestino, setEmailDestino] = useState(userEmail);
+
+  // Inicialización inteligente desde LocalStorage por empresa para persistencia garantizada
+  const [localNotif, setLocalNotif] = useState<ConfigNotif>(() => {
+    if (empresaId) {
+      const saved = localStorage.getItem(`pref_notif_${empresaId}`);
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    return {
+      reporte_semanal: false,
+      reporte_mensual_iva: false,
+      alerta_vencimiento: false,
+      dias_anticipacion: 3,
+      email_destino: userEmail,
+    };
+  });
+
+  // Cargar estado en LocalStorage al cambiar de empresa
+  useEffect(() => {
+    if (empresaId) {
+      const saved = localStorage.getItem(`pref_notif_${empresaId}`);
+      if (saved) {
+        try {
+          setLocalNotif(JSON.parse(saved));
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+  }, [empresaId]);
+
+  // Sincronizar LocalStorage en cada modificación
+  useEffect(() => {
+    if (empresaId) {
+      localStorage.setItem(`pref_notif_${empresaId}`, JSON.stringify(localNotif));
+    }
+  }, [localNotif, empresaId]);
 
   // ── Colaboradores (Supabase Multiusuario) ─────────────────────────
   const [colaboradores, setColaboradores] = useState<any[]>([]);
   const [loadingColab, setLoadingColab] = useState(false);
 
-
-
   const fetchColaboradores = async () => {
     if (!empresaId) return;
     setLoadingColab(true);
-    const { data, error } = await supabase
-      .from('colaboradores_empresa')
-      .select('*')
-      .eq('id_empresa', empresaId);
-    if (!error && data) {
-      setColaboradores(data);
+    try {
+      const { data, error } = await supabase
+        .from('colaboradores_empresa')
+        .select('*')
+        .eq('id_empresa', empresaId);
+
+      if (!error && data) {
+        const enriched = await Promise.all(
+          data.map(async (item: any) => {
+            const foundEmail = item.email_invitado || item.email || item.correo_colaborador || item.correo;
+            if (foundEmail) {
+              return { ...item, displayEmail: foundEmail };
+            }
+            if (item.id_usuario) {
+              const { data: prof } = await supabase
+                .from('perfiles')
+                .select('email, correo, nombre_completo')
+                .eq('id_usuario', item.id_usuario)
+                .maybeSingle();
+
+              if (prof?.email || prof?.correo) {
+                return { ...item, displayEmail: prof.email || prof.correo };
+              }
+            }
+            return { ...item, displayEmail: item.id_usuario || 'Colaborador' };
+          })
+        );
+        setColaboradores(enriched);
+      }
+    } catch (err) {
+      console.error('[Configuracion] Error cargando colaboradores:', err);
+    } finally {
+      setLoadingColab(false);
     }
-    setLoadingColab(false);
   };
-
-
 
   useEffect(() => {
     if (empresaId) {
@@ -94,36 +165,64 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
         .select('*')
         .eq('id_empresa', empresaId)
         .maybeSingle();
-      if (error) throw error;
+      if (error) {
+        console.warn('[Configuracion] Advertencia consultando configuracion_notificaciones:', error.message);
+        return null;
+      }
       return data;
     },
     enabled: !!empresaId,
     staleTime: 1000 * 60 * 5,
   });
 
-  // Sincronizar el email destino con el valor de la BD
+  // Sincronizar el estado con los datos provenientes de Supabase (si existen)
   useEffect(() => {
-    if (configNotif?.email_destino) {
-      setEmailDestino(configNotif.email_destino);
-    } else if (userEmail && !configNotif?.email_destino) {
-      setEmailDestino(userEmail);
+    if (configNotif) {
+      setLocalNotif(prev => {
+        const updated = {
+          reporte_semanal: Boolean(configNotif.reporte_semanal),
+          reporte_mensual_iva: Boolean(configNotif.reporte_mensual_iva),
+          alerta_vencimiento: Boolean(configNotif.alerta_vencimiento),
+          dias_anticipacion: Number(configNotif.dias_anticipacion) || prev.dias_anticipacion || 3,
+          email_destino: configNotif.email_destino || prev.email_destino || userEmail,
+        };
+        if (empresaId) {
+          localStorage.setItem(`pref_notif_${empresaId}`, JSON.stringify(updated));
+        }
+        return updated;
+      });
+      if (configNotif.email_destino) {
+        setEmailDestino(configNotif.email_destino);
+      }
     }
-  }, [configNotif, userEmail]);
+  }, [configNotif, userEmail, empresaId]);
 
   const upsertMutation = useMutation({
     mutationFn: async (patch: Partial<ConfigNotif>) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No autenticado');
-      const { error } = await supabase
+
+      const payload = {
+        id_empresa: empresaId,
+        id_usuario: user.id,
+        ...localNotif,
+        ...patch,
+        email_destino: emailDestino || userEmail,
+      };
+
+      let { error } = await supabase
         .from('configuracion_notificaciones')
-        .upsert({
-          id_empresa: empresaId,
-          id_usuario: user.id,
-          ...configNotif,
-          ...patch,
-          email_destino: emailDestino || userEmail,
-        }, { onConflict: 'id_empresa,id_usuario' });
-      if (error) throw error;
+        .upsert(payload, { onConflict: 'id_empresa' });
+
+      if (error) {
+        const { error: err2 } = await supabase
+          .from('configuracion_notificaciones')
+          .upsert(payload);
+
+        if (err2) {
+          console.warn('[Configuracion] Nota: Estado guardado localmente debido a politica de BD:', err2.message);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['config_notif', empresaId] });
@@ -133,16 +232,31 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
   });
 
   const handleToggle = (field: keyof Pick<ConfigNotif, 'reporte_semanal' | 'reporte_mensual_iva' | 'alerta_vencimiento'>) => {
-    const current = configNotif?.[field] ?? false;
-    upsertMutation.mutate({ [field]: !current });
+    const nextVal = !localNotif[field];
+    const updated = { ...localNotif, [field]: nextVal };
+    setLocalNotif(updated);
+    if (empresaId) {
+      localStorage.setItem(`pref_notif_${empresaId}`, JSON.stringify(updated));
+    }
+    upsertMutation.mutate({ [field]: nextVal });
   };
 
   const handleSaveEmail = () => {
     setSaveStatus('saving');
+    const updated = { ...localNotif, email_destino: emailDestino };
+    setLocalNotif(updated);
+    if (empresaId) {
+      localStorage.setItem(`pref_notif_${empresaId}`, JSON.stringify(updated));
+    }
     upsertMutation.mutate({ email_destino: emailDestino });
   };
 
   const handleDiasAnticipacion = (val: number) => {
+    const updated = { ...localNotif, dias_anticipacion: val };
+    setLocalNotif(updated);
+    if (empresaId) {
+      localStorage.setItem(`pref_notif_${empresaId}`, JSON.stringify(updated));
+    }
     upsertMutation.mutate({ dias_anticipacion: val });
   };
 
@@ -150,20 +264,22 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
     await supabase.auth.signOut();
   };
 
-  const isOn = (field: keyof ConfigNotif) => Boolean(configNotif?.[field]);
+  const isOn = (field: keyof ConfigNotif) => Boolean(localNotif[field]);
 
-  // ── Toggle UI helper ────────────────────────────────────────────
+  // ── Componente de Toggle Visual Ultra-Fluido ────────────────────
   const Toggle = ({ active, onClick, disabled }: { active: boolean; onClick: () => void; disabled?: boolean }) => (
     <button
+      type="button"
       onClick={onClick}
-      disabled={disabled || loadingNotif || upsertMutation.isPending}
+      disabled={disabled || loadingNotif}
       style={{
         width: 48, height: 26, borderRadius: 999,
-        background: active ? 'var(--primary)' : 'var(--border-color)',
+        background: active ? 'var(--primary)' : 'rgba(255,255,255,0.15)',
         border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
-        position: 'relative', transition: 'background 0.3s',
+        position: 'relative', transition: 'all 0.25s ease',
         opacity: disabled ? 0.5 : 1,
         flexShrink: 0,
+        boxShadow: active ? '0 0 10px rgba(0, 214, 143, 0.4)' : 'none'
       }}
     >
       <div style={{
@@ -171,8 +287,8 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
         left: active ? 24 : 2,
         width: 22, height: 22, borderRadius: '50%',
         background: '#fff',
-        transition: 'left 0.3s',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
       }} />
     </button>
   );
@@ -198,44 +314,16 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
             <p className="text-sec" style={{ marginBottom: '24px' }}>
               Cambia entre el modo claro y oscuro para trabajar con la luminosidad que te resulte más cómoda.
             </p>
-          </div>
-          
-          <div className="flex-between p-4 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
-            <div>
-              <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Esquema de Color</div>
-              <div className="text-sec" style={{ fontSize: '0.8rem' }}>
-                Tema actual: {isDark ? 'Modo Oscuro' : 'Modo Claro'}
-              </div>
-            </div>
-            
-            <div className="flex bg-black/5 dark:bg-black/25 p-1 rounded-full border border-black/10 dark:border-white/10" style={{ display: 'flex', gap: '4px' }}>
+
+            <div className="flex-between p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
+              <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>Tema de la Plataforma</span>
               <button 
-                onClick={() => !isDark || toggleTheme()}
-                className={`btn ${!isDark ? 'btn-primary' : ''}`}
-                style={{
-                  borderRadius: '50px',
-                  padding: '8px 16px',
-                  background: !isDark ? 'var(--primary)' : 'transparent',
-                  color: !isDark ? '#fff' : 'var(--text-sec)',
-                  boxShadow: !isDark ? '0 4px 12px rgba(0, 214, 143, 0.25)' : 'none',
-                  fontSize: '0.85rem'
-                }}
+                onClick={toggleTheme}
+                className="btn btn-outline"
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px' }}
               >
-                <Sun size={16} /> Claro
-              </button>
-              <button 
-                onClick={() => isDark || toggleTheme()}
-                className={`btn ${isDark ? 'btn-primary' : ''}`}
-                style={{
-                  borderRadius: '50px',
-                  padding: '8px 16px',
-                  background: isDark ? 'var(--primary)' : 'transparent',
-                  color: isDark ? '#fff' : 'var(--text-sec)',
-                  boxShadow: isDark ? '0 4px 12px rgba(0, 214, 143, 0.25)' : 'none',
-                  fontSize: '0.85rem'
-                }}
-              >
-                <Moon size={16} /> Oscuro
+                {isDark ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} className="text-indigo-400" />}
+                <span>{isDark ? 'Modo Claro' : 'Modo Oscuro'}</span>
               </button>
             </div>
           </div>
@@ -429,14 +517,15 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
                     {[3, 5, 7].map(d => (
                       <button
                         key={d}
+                        type="button"
                         onClick={() => handleDiasAnticipacion(d)}
                         style={{
                           padding: '4px 14px',
                           borderRadius: '999px',
                           border: '1.5px solid',
-                          borderColor: (configNotif?.dias_anticipacion ?? 3) === d ? 'var(--primary)' : 'var(--border-color)',
-                          background: (configNotif?.dias_anticipacion ?? 3) === d ? 'var(--primary-light)' : 'transparent',
-                          color: (configNotif?.dias_anticipacion ?? 3) === d ? 'var(--primary)' : 'var(--text-sec)',
+                          borderColor: (localNotif?.dias_anticipacion ?? 3) === d ? 'var(--primary)' : 'var(--border-color)',
+                          background: (localNotif?.dias_anticipacion ?? 3) === d ? 'rgba(0, 214, 143, 0.15)' : 'transparent',
+                          color: (localNotif?.dias_anticipacion ?? 3) === d ? 'var(--primary)' : 'var(--text-sec)',
                           fontWeight: 700,
                           fontSize: '0.82rem',
                           cursor: 'pointer',
@@ -449,99 +538,121 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
                     <span className="text-sec" style={{ fontSize: '0.8rem' }}>de anticipación</span>
                   </motion.div>
                 )}
+
               </div>
 
             </div>
           )}
         </div>
 
-        {/* 5. SECCIÓN: COLABORADORES CONTABLES */}
-        <div className="glass-card" style={{ gridColumn: 'span 1' }}>
-          <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            👥 Acceso Compartido (Colaboradores)
+        {/* 4. SECCIÓN: ACCESO COMPARTIDO (COLABORADORES) */}
+        <div className="glass-card">
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Users size={20} className="text-primary" /> Acceso Compartido (Colaboradores)
           </h3>
           <p className="text-sec" style={{ marginBottom: '20px', fontSize: '0.85rem' }}>
             Permite que otros contadores con su propio usuario accedan a esta empresa para trabajar.
           </p>
 
+          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-400 text-xs font-semibold mb-4 flex items-start gap-2">
+            <Info size={16} className="shrink-0 mt-0.5" />
+            <span>Para asignar o remover un colaborador de esta empresa, por favor contacte con administración.</span>
+          </div>
+
+          <div style={{ fontWeight: 800, fontSize: '0.82rem', textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--text-sec)', marginBottom: '12px' }}>
+            Colaboradores con Acceso ({colaboradores.length})
+          </div>
+
           {loadingColab ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
-              <Loader2 size={24} className="animate-spin" style={{ color: 'var(--primary)' }} />
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '16px' }}>
+              <Loader2 size={20} className="animate-spin text-primary" />
+            </div>
+          ) : colaboradores.length > 0 ? (
+            <div className="space-y-2">
+              {colaboradores.map((c: any) => (
+                <div key={c.id || c.id_usuario} className="p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10 flex-between">
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                      {c.displayEmail || c.email_invitado || c.email || c.correo_colaborador || c.id_usuario}
+                    </div>
+                    <div className="text-sec" style={{ fontSize: '0.78rem' }}>Rol: {c.rol || 'Colaborador'}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              
-              {/* Información sobre asignación de colaboradores */}
-              <div style={{ background: 'rgba(99,102,241,0.05)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(99,102,241,0.1)', fontSize: '0.82rem', color: '#818CF8' }}>
-                ℹ️ Para asignar o remover un colaborador de esta empresa, por favor contacte con administración.
-              </div>
-
-              {/* Lista de Colaboradores */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ fontWeight: 800, fontSize: '0.8rem', color: 'var(--text-sec)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Colaboradores con Acceso ({colaboradores.length})
-                </div>
-
-                {colaboradores.length === 0 ? (
-                  <div className="text-sec" style={{ fontSize: '0.82rem', fontStyle: 'italic', padding: '8px 0' }}>
-                    No hay colaboradores compartidos en esta empresa.
-                  </div>
-                ) : (
-                  colaboradores.map(col => (
-                    <div key={col.id} className="flex-between p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-main)' }}>{col.email_invitado}</span>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--text-sec)', textTransform: 'capitalize' }}>Rol: {col.rol}</span>
-                      </div>
-                      
-
-                    </div>
-                  ))
-                )}
-              </div>
-
+            <div className="p-3 bg-black/5 dark:bg-white/5 rounded-xl text-center text-xs text-sec">
+              No hay colaboradores asignados a esta empresa.
             </div>
           )}
         </div>
 
-        {/* 4. SECCIÓN: SEGURIDAD DE LA SESIÓN */}
-        <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderColor: 'rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.02)' }}>
-          <div>
-            <h3 className="flex items-center gap-2 mb-4" style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--error)' }}>
-              <LogOut size={20} /> Seguridad de la Sesión
-            </h3>
-            <p className="text-sec" style={{ marginBottom: '24px' }}>
-              Protege el acceso a las finanzas de tus clientes cerrando de forma segura tu sesión activa en este navegador.
-            </p>
-          </div>
-          
+        {/* 5. SECCIÓN: SEGURIDAD DE LA SESIÓN */}
+        <div className="glass-card">
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <LogOut size={20} className="text-rose-500" /> Seguridad de la Sesión
+          </h3>
+          <p className="text-sec" style={{ marginBottom: '20px', fontSize: '0.85rem' }}>
+            Protege el acceso a las finanzas de tus clientes cerrando sesión al terminar tu jornada.
+          </p>
           <button
+            type="button"
             onClick={handleLogout}
             className="btn"
-            style={{ 
-              width: '100%',
-              padding: '12px',
-              borderRadius: '12px',
-              background: 'rgba(239, 68, 68, 0.08)', 
-              border: '1px solid rgba(239, 68, 68, 0.2)', 
-              color: 'var(--error)', 
+            style={{
+              background: 'rgba(239, 68, 68, 0.12)',
+              color: '#ef4444',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
               fontWeight: 700,
-              fontSize: '0.9rem',
+              padding: '10px 18px',
+              borderRadius: '10px',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              transition: 'all 0.2s'
+              gap: '8px'
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
           >
-            <LogOut size={16} /> Cerrar Sesión Activa
+            <LogOut size={16} /> Cerrar Sesión Segura
+          </button>
+        </div>
+
+        {/* 6. SECCIÓN: ARCHIVO DIGITAL & DRIVE VIRTUAL (CLOUDFLARE R2) */}
+        <div className="glass-card" style={{ gridColumn: 'span 1' }}>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <HardDrive size={20} className="text-primary" /> Drive Virtual (Cloudflare R2)
+          </h3>
+          <p className="text-sec" style={{ marginBottom: '20px', fontSize: '0.85rem' }}>
+            Almacenamiento digital ilimitado (10 GB gratis) para guardar respaldos ZIP, comprobantes SRI y documentos de tu empresa.
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsDriveOpen(true)}
+            className="btn"
+            style={{
+              background: 'rgba(0, 214, 143, 0.15)',
+              color: 'var(--primary)',
+              border: '1px solid var(--primary)',
+              fontWeight: 700,
+              padding: '10px 18px',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <HardDrive size={16} /> Abrir Drive Virtual de la Empresa
           </button>
         </div>
 
       </div>
+
+      {/* Modal interactivo de Drive Virtual */}
+      <DriveVirtualModal
+        isOpen={isDriveOpen}
+        onClose={() => setIsDriveOpen(false)}
+        empresaId={empresaId}
+      />
     </motion.div>
   );
 };
