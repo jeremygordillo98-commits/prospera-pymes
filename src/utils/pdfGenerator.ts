@@ -100,10 +100,10 @@ export const generatePDFReport = async (
         const str = `Página ${data.pageNumber}`;
         doc.setFontSize(8);
         doc.setFont('helvetica', 'italic');
-        doc.setTextColor(150, 150, 150);
+        doc.setTextColor(140, 140, 140);
 
         // Footer left
-        doc.text('Generado con la tecnología de Prospera Pymes', 14, doc.internal.pageSize.height - 10);
+        doc.text('Reporte generado gracias al ecosistema de Prospera | prosperafinanzas.com', 14, doc.internal.pageSize.height - 10);
         // Footer right
         doc.text(str, pageWidth - 14, doc.internal.pageSize.height - 10, { align: 'right' });
     };
@@ -369,8 +369,8 @@ export const generateSingleSRIDocumentPDF = async (
         pdf.setPage(i);
         pdf.setFontSize(8);
         pdf.setFont('helvetica', 'italic');
-        pdf.setTextColor(150, 150, 150);
-        pdf.text('Generado con la tecnología de Prospera Pymes', 14, pdf.internal.pageSize.height - 10);
+        pdf.setTextColor(140, 140, 140);
+        pdf.text('Reporte generado gracias al ecosistema de Prospera | prosperafinanzas.com', 14, pdf.internal.pageSize.height - 10);
         pdf.text(`Página ${i} de ${totalPages}`, pageWidth - 14, pdf.internal.pageSize.height - 10, { align: 'right' });
     }
 
@@ -445,8 +445,8 @@ export const generateLibroDiarioPDF = async (
         const str = `Página ${data.pageNumber}`;
         doc.setFontSize(8);
         doc.setFont('helvetica', 'italic');
-        doc.setTextColor(150, 150, 150);
-        doc.text('Generado con la tecnología de Prospera Pymes', 14, doc.internal.pageSize.height - 10);
+        doc.setTextColor(140, 140, 140);
+        doc.text('Reporte generado gracias al ecosistema de Prospera | prosperafinanzas.com', 14, doc.internal.pageSize.height - 10);
         doc.text(str, pageWidth - 14, doc.internal.pageSize.height - 10, { align: 'right' });
     };
 
