@@ -265,30 +265,43 @@ const App = () => {
         .from('empresas_gestionadas')
         .insert({
           id: newId,
-          nombre_empresa: newEmpresaName,
-          ruc_empresa: newEmpresaRuc || `TEMP-${Date.now()}`,
+          nombre_empresa: newEmpresaName.trim(),
+          ruc_empresa: newEmpresaRuc.trim() || `TEMP-${Date.now()}`,
           logo_url: newEmpresaLogo || null,
           id_usuario: session.user.id,
           moneda: 'USD'
         })
-        .select()
-        .single();
+        .select();
 
-      if (!error && data) {
-        setEmpresas([...empresas, data]);
-        setSelectedEmpresa(data);
+      if (!error && data && data.length > 0) {
+        const created = data[0];
+        setEmpresas([...empresas, created]);
+        setSelectedEmpresa(created);
         setShowNewEmpresaModal(false);
         setNewEmpresaName('');
         setNewEmpresaRuc('');
         setNewEmpresaLogo('');
         setNewEmpresaId(crypto.randomUUID());
+        setSuccessModal({
+          title: "¡Empresa Creada!",
+          message: `La empresa "${created.nombre_empresa}" se ha creado y configurado exitosamente.`,
+          type: 'success'
+        });
       } else {
         console.error("Supabase Error:", error);
-        alert(`Error al crear empresa: ${error?.message || 'Revisa tu conexión o las políticas de la base de datos'}`);
+        setSuccessModal({
+          title: "Error al Crear Empresa",
+          message: error?.message || 'No se pudo crear la empresa. Revisa tu conexión o las políticas de la base de datos.',
+          type: 'error'
+        });
       }
     } catch (err: any) {
       console.error("Client Error:", err);
-      alert(`Error inesperado: ${err?.message || 'No se pudo procesar la solicitud'}`);
+      setSuccessModal({
+        title: "Error Inesperado",
+        message: err?.message || 'No se pudo procesar la solicitud.',
+        type: 'error'
+      });
     }
   };
 
@@ -301,23 +314,67 @@ const App = () => {
   const handleSaveEdit = async () => {
     if (!editingEmpresa || !editForm.nombre_empresa.trim()) return;
     setSavingEdit(true);
-    const { data, error } = await supabase
-      .from('empresas_gestionadas')
-      .update({ nombre_empresa: editForm.nombre_empresa, ruc_empresa: editForm.ruc_empresa, logo_url: editForm.logo_url || null })
-      .eq('id', editingEmpresa.id)
-      .select().single();
-    if (!error && data) {
-      setEmpresas(prev => prev.map(e => e.id === data.id ? data : e));
-      if (selectedEmpresa?.id === data.id) setSelectedEmpresa(data);
+    try {
+      const { data, error } = await supabase
+        .from('empresas_gestionadas')
+        .update({
+          nombre_empresa: editForm.nombre_empresa.trim(),
+          ruc_empresa: editForm.ruc_empresa.trim(),
+          logo_url: editForm.logo_url || null
+        })
+        .eq('id', editingEmpresa.id)
+        .select();
+
+      if (error) {
+        console.error("Error al actualizar empresa:", error);
+        setSuccessModal({
+          title: "Error al Guardar",
+          message: `No se pudieron guardar los cambios: ${error.message}`,
+          type: 'error'
+        });
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        setSuccessModal({
+          title: "Sin Permisos de Actualización",
+          message: "No se pudo actualizar la empresa. Asegúrate de tener permisos o ejecuta el script de actualización de políticas RLS en Supabase.",
+          type: 'error'
+        });
+        return;
+      }
+
+      const updated = data[0];
+      setEmpresas(prev => prev.map(e => e.id === updated.id ? updated : e));
+      if (selectedEmpresa?.id === updated.id) {
+        setSelectedEmpresa(updated);
+      }
       setEditingEmpresa(null);
-    } else { alert('Error al guardar: ' + error?.message); }
-    setSavingEdit(false);
+      setSuccessModal({
+        title: "¡Empresa Actualizada!",
+        message: `Los datos y el logo de "${updated.nombre_empresa}" se han guardado exitosamente.`,
+        type: 'success'
+      });
+    } catch (err: any) {
+      console.error("Client Error:", err);
+      setSuccessModal({
+        title: "Error Inesperado",
+        message: err?.message || 'No se pudo procesar la solicitud.',
+        type: 'error'
+      });
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   // ── Solicitar eliminación segura de empresa ───────────────────────────
   const handleRequestDeletion = async (emp: Empresa) => {
     if (!archiveConfirmEmail.trim()) {
-      alert("Por favor ingresa un correo de contacto.");
+      setSuccessModal({
+        title: "Campo Requerido",
+        message: "Por favor ingresa un correo de contacto para el respaldo.",
+        type: 'error'
+      });
       return;
     }
     setSubmittingArchive(true);
