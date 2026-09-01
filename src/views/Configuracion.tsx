@@ -16,12 +16,10 @@ import {
   Loader2,
   Users,
   Info,
-  LogOut,
-  HardDrive
+  LogOut
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DriveVirtualModal } from '../components/DriveVirtualModal';
 
 interface ConfiguracionProps {
   empresaId: string;
@@ -39,9 +37,6 @@ interface ConfigNotif {
 export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps) => {
   const { isDark, toggleTheme } = useTheme();
   const queryClient = useQueryClient();
-
-  // ── Modal de Drive Virtual R2 ─────────────────────────────────────
-  const [isDriveOpen, setIsDriveOpen] = useState(false);
 
   // ── Preferencias visuales (localStorage) ─────────────────────────
   const [decimals, setDecimals] = useState(() => {
@@ -616,43 +611,7 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
           </button>
         </div>
 
-        {/* 6. SECCIÓN: ARCHIVO DIGITAL & DRIVE VIRTUAL (CLOUDFLARE R2) */}
-        <div className="glass-card" style={{ gridColumn: 'span 1' }}>
-          <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <HardDrive size={20} className="text-primary" /> Drive Virtual (Cloudflare R2)
-          </h3>
-          <p className="text-sec" style={{ marginBottom: '20px', fontSize: '0.85rem' }}>
-            Almacenamiento digital ilimitado (10 GB gratis) para guardar respaldos ZIP, comprobantes SRI y documentos de tu empresa.
-          </p>
-          <button
-            type="button"
-            onClick={() => setIsDriveOpen(true)}
-            className="btn"
-            style={{
-              background: 'rgba(0, 214, 143, 0.15)',
-              color: 'var(--primary)',
-              border: '1px solid var(--primary)',
-              fontWeight: 700,
-              padding: '10px 18px',
-              borderRadius: '10px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-          >
-            <HardDrive size={16} /> Abrir Drive Virtual de la Empresa
-          </button>
-        </div>
-
       </div>
-
-      {/* Modal interactivo de Drive Virtual */}
-      <DriveVirtualModal
-        isOpen={isDriveOpen}
-        onClose={() => setIsDriveOpen(false)}
-        empresaId={empresaId}
-      />
     </motion.div>
   );
 };
