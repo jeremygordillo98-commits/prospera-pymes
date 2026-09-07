@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, Loader2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { MessageCircle, X, Send, Loader2, ArrowRight } from 'lucide-react';
 import { supabase } from '../services/supabase';
+import { soundService } from '../utils/soundService';
 
 interface Mensaje {
   id: string;
@@ -11,6 +13,13 @@ interface Mensaje {
   created_at: string;
 }
 
+interface LiveAlert {
+  id: string;
+  title: string;
+  body: string;
+  time: string;
+}
+
 export const SoporteChat = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
@@ -19,6 +28,7 @@ export const SoporteChat = () => {
   const [sending, setSending] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [rlsError, setRlsError] = useState(false);
+  const [liveAlert, setLiveAlert] = useState<LiveAlert | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,14 +46,40 @@ export const SoporteChat = () => {
         const nuevo = payload.new as Mensaje;
         if (nuevo.usuario_id !== userId) return;
         setChatHistory(prev => prev.some(m => m.id === nuevo.id) ? prev : [...prev, nuevo]);
-        if (nuevo.origen === 'admin' && !isOpen) setHasUnread(true);
+        
+        if (nuevo.origen === 'admin') {
+          // 1. Reproducir tono sintetizado de audio y vibración
+          soundService.playNotification('ticket');
+          
+          // 2. Si el chat está cerrado, activar alerta flotante y badge
+          if (!isOpen) {
+            setHasUnread(true);
+            setLiveAlert({
+              id: nuevo.id,
+              title: '📨 Respuesta de Soporte Prospera',
+              body: nuevo.mensaje.length > 90 ? nuevo.mensaje.substring(0, 90) + '...' : nuevo.mensaje,
+              time: new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })
+            });
+          }
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [userId, isOpen]);
 
+  // Auto-descartar alerta flotante tras 8 segundos
   useEffect(() => {
-    if (isOpen) { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); setHasUnread(false); }
+    if (!liveAlert) return;
+    const timer = setTimeout(() => setLiveAlert(null), 8000);
+    return () => clearTimeout(timer);
+  }, [liveAlert]);
+
+  useEffect(() => {
+    if (isOpen) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      setHasUnread(false);
+      setLiveAlert(null);
+    }
   }, [chatHistory, isOpen]);
 
   const fetchHistory = async (uid: string) => {
@@ -67,26 +103,138 @@ export const SoporteChat = () => {
 
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } };
 
+  const handleOpenChatFromAlert = () => {
+    setIsOpen(true);
+    setHasUnread(false);
+    setLiveAlert(null);
+  };
+
   const btnBase: React.CSSProperties = { border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
   return (
     <>
+      {/* BANNER FLOTANTE INTERACTIVO DE SOPORTE (PORTAL) */}
+      {liveAlert && typeof document !== 'undefined' && createPortal(
+        <div 
+          onClick={handleOpenChatFromAlert}
+          style={{
+            position: 'fixed',
+            top: 20,
+            right: 20,
+            zIndex: 99999,
+            maxWidth: 380,
+            width: 'calc(100% - 40px)',
+            background: 'var(--nav-bg)',
+            backdropFilter: 'blur(30px)',
+            WebkitBackdropFilter: 'blur(30px)',
+            border: '1px solid var(--primary)',
+            borderRadius: 20,
+            padding: '14px 16px',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.35), 0 0 20px var(--primary-light)',
+            cursor: 'pointer',
+            animation: 'alertSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <div style={{
+            width: 40,
+            height: 40,
+            borderRadius: 12,
+            background: 'linear-gradient(135deg, var(--primary) 0%, #0EA5E9 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.2rem',
+            flexShrink: 0,
+            boxShadow: '0 4px 12px var(--primary-light)',
+          }}>
+            💬
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--primary)' }}>
+                {liveAlert.title}
+              </span>
+              <span style={{ fontSize: '0.65rem', color: 'var(--text-sec)' }}>
+                {liveAlert.time}
+              </span>
+            </div>
+            <p style={{
+              margin: 0,
+              fontSize: '0.78rem',
+              color: 'var(--text-main)',
+              lineHeight: 1.4,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {liveAlert.body}
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenChatFromAlert();
+              }}
+              style={{
+                background: 'var(--primary)',
+                color: '#000',
+                border: 'none',
+                borderRadius: 10,
+                padding: '6px 10px',
+                fontSize: '0.72rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              Ver <ArrowRight size={12} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setLiveAlert(null);
+              }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-sec)',
+                cursor: 'pointer',
+                padding: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* BOTÓN DE CHAT EN CABECERA */}
       <button 
-        onClick={() => { setIsOpen(!isOpen); setHasUnread(false); }} 
+        onClick={() => { setIsOpen(!isOpen); setHasUnread(false); setLiveAlert(null); }} 
         style={{ 
           ...btnBase, 
           position: 'relative', 
-          background: 'transparent',
-          border: '1px solid var(--border-color)', 
+          background: hasUnread ? 'var(--primary-light)' : 'transparent', 
+          border: hasUnread ? '1px solid var(--primary)' : '1px solid var(--border-color)', 
           borderRadius: 12,
           padding: '8px 10px', 
-          color: 'var(--text-main)',
+          color: hasUnread ? 'var(--primary)' : 'var(--text-main)',
           transition: 'all 0.2s',
           width: 38,
           height: 38,
         }} 
         onMouseEnter={e => e.currentTarget.style.background = 'var(--primary-light)'}
-        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        onMouseLeave={e => e.currentTarget.style.background = hasUnread ? 'var(--primary-light)' : 'transparent'}
         title="Soporte y Ayuda"
       >
         <MessageCircle size={18} />
@@ -105,6 +253,7 @@ export const SoporteChat = () => {
         )}
       </button>
 
+      {/* MODAL DE CHAT */}
       {isOpen && (
         <div style={{ 
           position: 'fixed', 
@@ -175,8 +324,10 @@ export const SoporteChat = () => {
       )}
       <style>{`
         @keyframes chatSlideUp { from { opacity:0; transform:translateY(20px) scale(0.96); } to { opacity:1; transform:translateY(0) scale(1); } }
-        @keyframes chatPulse { 0% { box-shadow:0 0 0 0 rgba(239,68,68,0.5); } 70% { box-shadow:0 0 0 8px rgba(239,68,68,0); } 100% { box-shadow:0 0 0 0 rgba(239,68,68,0); } }
+        @keyframes alertSlideIn { from { opacity:0; transform:translateY(-20px) scale(0.95); } to { opacity:1; transform:translateY(0) scale(1); } }
+        @keyframes chatPulse { 0% { box-shadow:0 0 0 0 rgba(0,214,143,0.7); } 70% { box-shadow:0 0 0 8px rgba(0,214,143,0); } 100% { box-shadow:0 0 0 0 rgba(0,214,143,0); } }
       `}</style>
     </>
   );
 };
+

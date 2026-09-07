@@ -16,10 +16,17 @@ import {
   Loader2,
   Users,
   Info,
-  LogOut
+  LogOut,
+  Calendar,
+  AlertTriangle,
+  FileSpreadsheet,
+  Building2,
+  TrendingUp,
+  ShieldCheck
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { calculateSriDeadline } from '../utils/sriHelpers';
 
 interface ConfiguracionProps {
   empresaId: string;
@@ -32,6 +39,12 @@ interface ConfigNotif {
   alerta_vencimiento: boolean;
   dias_anticipacion: number;
   email_destino: string;
+}
+
+interface EmpresaInfo {
+  id: string;
+  nombre_empresa?: string;
+  ruc_empresa?: string;
 }
 
 export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps) => {
@@ -55,6 +68,29 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
     localStorage.setItem('pref_table_density', density);
     document.documentElement.setAttribute('data-density', density);
   }, [density]);
+
+  // ── Consulta de Información de la Empresa (RUC para SRI) ────────
+  const { data: empresaData } = useQuery<EmpresaInfo | null>({
+    queryKey: ['empresa_info_config', empresaId],
+    queryFn: async () => {
+      if (!empresaId) return null;
+      const { data, error } = await supabase
+        .from('empresas_gestionadas')
+        .select('id, nombre_empresa, ruc_empresa')
+        .eq('id', empresaId)
+        .maybeSingle();
+      if (error) {
+        console.warn('[Configuracion] Error al consultar datos de empresa:', error.message);
+        return null;
+      }
+      return data;
+    },
+    enabled: !!empresaId,
+    staleTime: 1000 * 60 * 10,
+  });
+
+  // Cálculo del semáforo y fecha límite SRI según el 9º dígito del RUC
+  const sriInfo = calculateSriDeadline(empresaData?.ruc_empresa);
 
   // ── Notificaciones (Supabase + LocalStorage Backup) ─────────────
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -292,11 +328,123 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
     <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 max-w-4xl mx-auto mt-6">
       <header>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--primary)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1.5, fontSize: '0.8rem', marginBottom: 8 }}>
-          <Sparkles size={14} /> Preferencias del Sistema
+          <Sparkles size={14} /> Preferencias & Alertas del Sistema
         </div>
-        <h2 className="h1" style={{ fontSize: '2.2rem' }}>Configuración Personalizada</h2>
-        <p className="text-sec">Ajusta tu entorno de trabajo contable y visual para Prospera PyMEs.</p>
+        <h2 className="h1" style={{ fontSize: '2.2rem' }}>Configuración & Calendario Tributario</h2>
+        <p className="text-sec">Ajusta tu entorno de trabajo contable, visual y alertas tributarias SRI para Prospera PyMEs.</p>
       </header>
+
+      {/* ── SECCIÓN DESTACADA: SEMÁFORO Y DIAGNÓSTICO TRIBUTARIO SRI ───────────────── */}
+      <div className="glass-card" style={{ border: '1.5px solid rgba(0, 214, 143, 0.3)', background: 'linear-gradient(135deg, rgba(0, 214, 143, 0.04) 0%, rgba(0, 0, 0, 0.05) 100%)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', marginBottom: '16px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(0, 214, 143, 0.15)', color: 'var(--primary)' }}>
+                <Calendar size={18} />
+              </div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>
+                Diagnóstico y Calendario Tributario SRI Ecuador
+              </h3>
+            </div>
+            <p className="text-sec" style={{ fontSize: '0.86rem', margin: 0 }}>
+              Cálculo automatizado de fechas límite para declaraciones mensuales (Formularios 104 IVA y 103 Retenciones).
+            </p>
+          </div>
+
+          {/* Badge del Semáforo */}
+          {sriInfo.digito !== null ? (
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 14px',
+              borderRadius: '999px',
+              fontWeight: 800,
+              fontSize: '0.85rem',
+              background: sriInfo.esVencido 
+                ? 'rgba(239, 68, 68, 0.15)' 
+                : sriInfo.esUrgente 
+                  ? 'rgba(245, 158, 11, 0.15)' 
+                  : 'rgba(16, 185, 129, 0.15)',
+              color: sriInfo.esVencido 
+                ? '#ef4444' 
+                : sriInfo.esUrgente 
+                  ? '#f59e0b' 
+                  : '#10b981',
+              border: `1px solid ${sriInfo.esVencido ? 'rgba(239, 68, 68, 0.3)' : sriInfo.esUrgente ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+            }}>
+              {sriInfo.esVencido ? (
+                <><AlertTriangle size={15} /> Plazo de este mes cumplido</>
+              ) : sriInfo.esUrgente ? (
+                <><Clock size={15} className="animate-pulse" /> {sriInfo.diasRestantes === 0 ? '¡Vence hoy!' : `¡Vence en ${sriInfo.diasRestantes} días!`}</>
+              ) : (
+                <><ShieldCheck size={15} /> Al día ({sriInfo.diasRestantes} días restantes)</>
+              )}
+            </div>
+          ) : (
+            <div style={{ padding: '6px 12px', borderRadius: '999px', background: 'rgba(255,255,255,0.06)', fontSize: '0.8rem', color: 'var(--text-sec)' }}>
+              RUC no registrado
+            </div>
+          )}
+        </div>
+
+        {/* Métricas del RUC y Fecha Límite */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginTop: '12px' }}>
+          
+          {/* Card 1: RUC y 9º Dígito */}
+          <div className="p-3.5 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
+            <div className="text-sec" style={{ fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+              <Building2 size={14} style={{ color: 'var(--primary)' }} /> RUC de la Empresa
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+              <span style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: 0.5 }}>
+                {empresaData?.ruc_empresa || 'No configurado'}
+              </span>
+              {sriInfo.digito !== null && (
+                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(0, 214, 143, 0.2)', color: 'var(--primary)', fontWeight: 800 }}>
+                  9º Dígito: {sriInfo.digito}
+                </span>
+              )}
+            </div>
+            <p className="text-sec" style={{ fontSize: '0.73rem', marginTop: '4px', margin: 0 }}>
+              {empresaData?.nombre_empresa || 'Empresa activa'}
+            </p>
+          </div>
+
+          {/* Card 2: Día Límite Mensual */}
+          <div className="p-3.5 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
+            <div className="text-sec" style={{ fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+              <Calendar size={14} style={{ color: 'var(--primary)' }} /> Día Límite Oficial SRI
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+              <span style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--primary)' }}>
+                {sriInfo.diaVencimiento ? `Día ${sriInfo.diaVencimiento}` : 'N/D'}
+              </span>
+              <span className="text-sec" style={{ fontSize: '0.8rem' }}>de cada mes</span>
+            </div>
+            <p className="text-sec" style={{ fontSize: '0.73rem', marginTop: '4px', margin: 0 }}>
+              Formulario 104 (IVA) y Formulario 103 (Retenciones).
+            </p>
+          </div>
+
+          {/* Card 3: Estado de Alerta Activa */}
+          <div className="p-3.5 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
+            <div className="text-sec" style={{ fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+              <Bell size={14} style={{ color: 'var(--primary)' }} /> Estado de Notificaciones
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: isOn('alerta_vencimiento') ? '#10b981' : '#64748b' }} />
+              <span style={{ fontWeight: 800, fontSize: '0.95rem' }}>
+                {isOn('alerta_vencimiento') ? `Activa (${localNotif.dias_anticipacion || 3} días antes)` : 'Desactivada'}
+              </span>
+            </div>
+            <p className="text-sec" style={{ fontSize: '0.73rem', marginTop: '4px', margin: 0 }}>
+              {isOn('alerta_vencimiento') ? `Enviando a ${emailDestino || userEmail}` : 'Activa la alerta para recibir correos'}
+            </p>
+          </div>
+
+        </div>
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
         
@@ -392,13 +540,13 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
           </div>
         </div>
 
-        {/* 3. SECCIÓN: NOTIFICACIONES POR EMAIL */}
+        {/* 3. SECCIÓN: CENTRO DE NOTIFICACIONES POR EMAIL & SRI */}
         <div className="glass-card" style={{ gridColumn: 'span 1' }}>
           <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Bell size={20} className="text-primary" /> Notificaciones por Email
+            <Bell size={20} className="text-primary" /> Notificaciones y Reportes Automáticos
           </h3>
           <p className="text-sec" style={{ marginBottom: '20px', fontSize: '0.85rem' }}>
-            Recibe reportes automáticos de tu contabilidad directo en tu correo.
+            Recibe resúmenes ejecutivos, balances tributarios y alertas de vencimiento directo en tu bandeja.
           </p>
 
           {loadingNotif ? (
@@ -411,7 +559,7 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
               {/* Correo destino */}
               <div className="p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
                 <div style={{ fontWeight: 700, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                  <Mail size={14} style={{ color: 'var(--primary)' }} /> Correo de Destino
+                  <Mail size={14} style={{ color: 'var(--primary)' }} /> Correo de Destino Oficial
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <input
@@ -458,43 +606,21 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
                     )}
                   </button>
                 </div>
-                <p className="text-sec" style={{ fontSize: '0.75rem', marginTop: '6px' }}>
-                  Todos los reportes automáticos se enviarán a esta dirección.
+                <p className="text-sec" style={{ fontSize: '0.75rem', marginTop: '6px', margin: 0 }}>
+                  Todos los reportes automáticos y alertas se enviarán a esta dirección.
                 </p>
-              </div>
-
-              {/* Toggle: Reporte Semanal */}
-              <div className="flex-between p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Mail size={18} className="text-sec" />
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Reporte Semanal</div>
-                    <div className="text-sec" style={{ fontSize: '0.78rem' }}>Resumen de ingresos, egresos y saldo — todos los lunes.</div>
-                  </div>
-                </div>
-                <Toggle active={isOn('reporte_semanal')} onClick={() => handleToggle('reporte_semanal')} />
-              </div>
-
-              {/* Toggle: Reporte Mensual IVA */}
-              <div className="flex-between p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Hash size={18} className="text-sec" />
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Reporte Mensual de IVA</div>
-                    <div className="text-sec" style={{ fontSize: '0.78rem' }}>IVA cobrado vs pagado del mes anterior — el día 1 de cada mes.</div>
-                  </div>
-                </div>
-                <Toggle active={isOn('reporte_mensual_iva')} onClick={() => handleToggle('reporte_mensual_iva')} />
               </div>
 
               {/* Toggle: Alerta de Vencimiento SRI */}
               <div className="p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
                 <div className="flex-between" style={{ marginBottom: isOn('alerta_vencimiento') ? '12px' : '0' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <Clock size={18} className="text-sec" />
+                    <Clock size={18} className="text-amber-500" />
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Alerta de Vencimiento SRI</div>
-                      <div className="text-sec" style={{ fontSize: '0.78rem' }}>Recordatorio antes de la fecha de declaración mensual.</div>
+                      <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Alerta de Vencimiento SRI Ecuador</div>
+                      <div className="text-sec" style={{ fontSize: '0.78rem' }}>
+                        Recordatorio antes de la fecha límite según el 9º dígito del RUC.
+                      </div>
                     </div>
                   </div>
                   <Toggle active={isOn('alerta_vencimiento')} onClick={() => handleToggle('alerta_vencimiento')} />
@@ -533,7 +659,30 @@ export const Configuracion = ({ empresaId, userEmail = '' }: ConfiguracionProps)
                     <span className="text-sec" style={{ fontSize: '0.8rem' }}>de anticipación</span>
                   </motion.div>
                 )}
+              </div>
 
+              {/* Toggle: Reporte Mensual IVA */}
+              <div className="flex-between p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <FileSpreadsheet size={18} className="text-sec" />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Reporte Mensual de IVA (F. 104)</div>
+                    <div className="text-sec" style={{ fontSize: '0.78rem' }}>IVA en ventas vs compras del mes anterior — el día 1 de cada mes.</div>
+                  </div>
+                </div>
+                <Toggle active={isOn('reporte_mensual_iva')} onClick={() => handleToggle('reporte_mensual_iva')} />
+              </div>
+
+              {/* Toggle: Reporte Semanal Flujo de Caja */}
+              <div className="flex-between p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/10 dark:border-white/10">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <TrendingUp size={18} className="text-sec" />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Reporte Semanal de Flujo de Caja</div>
+                    <div className="text-sec" style={{ fontSize: '0.78rem' }}>Resumen de ingresos, egresos y saldo operativo — todos los lunes.</div>
+                  </div>
+                </div>
+                <Toggle active={isOn('reporte_semanal')} onClick={() => handleToggle('reporte_semanal')} />
               </div>
 
             </div>
